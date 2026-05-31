@@ -39,6 +39,12 @@ migrations and exit), `netctl-control version`.
 Invalid values fail fast: `netctl-control` reports **all** configuration problems
 at once and exits non-zero. The database password is redacted from logs.
 
+From S2, tenant-owned tables are protected by Row-Level Security. The
+`NETCTL_DATABASE_URL` role must be able to assume the least-privilege `netctl_app`
+role (a superuser always can; otherwise run `GRANT netctl_app TO <login_role>`),
+which `internal/tenancy` assumes per transaction so isolation holds regardless of
+how the control plane authenticated. See [`architecture.md`](architecture.md).
+
 ### HTTP endpoints (S1)
 
 | Method & path      | Purpose                                                  |

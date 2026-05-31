@@ -68,9 +68,25 @@ jobs:
 
   cross-tenant-isolation:
     name: cross-tenant-isolation
-    # Permanent CI gate — CLAUDE.md §7 guardrail 1. S0 ships a passing
-    # placeholder; S2 populates it with the real cross-tenant isolation suite.
+    # Permanent CI gate — CLAUDE.md §7 guardrail 1. From S2 this proves real
+    # tenant isolation (RLS + tenancy choke point) against a Postgres service.
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: netctl
+          POSTGRES_PASSWORD: netctl
+          POSTGRES_DB: netctl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U netctl -d netctl"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NETCTL_DATABASE_URL: postgres://netctl:netctl@localhost:5432/netctl?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

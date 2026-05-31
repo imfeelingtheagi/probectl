@@ -14,7 +14,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// migrationAdvisoryLock serializes concurrent migration runners (multiple
+// control-plane replicas booting at once, or parallel test packages) against a
+// single database, so they cannot race on CREATE TABLE / type creation.
+const migrationAdvisoryLock int64 = 5434142191
 
 // DB is the subset of *pgxpool.Pool the runner needs.
 type DB interface {
@@ -53,11 +59,31 @@ const ledgerDDL = `CREATE TABLE IF NOT EXISTS schema_migrations (
 // Apply runs every migration not yet recorded in schema_migrations, in version
 // order, each in its own transaction. It returns the versions applied during
 // this call — empty when the database is already up to date.
-func (r *Runner) Apply(ctx context.Context, db DB) ([]int64, error) {
+func (r *Runner) Apply(ctx context.Context, pool *pgxpool.Pool) ([]int64, error) {
 	migrations, err := r.load()
 	if err != nil {
 		return nil, err
 	}
+
+	// Hold the work on a single connection so the advisory lock (session-scoped)
+	// stays held for the whole run.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	// Serialize concurrent appliers: one runs the migrations; the rest block here
+	// and then find the schema already up to date. The lock MUST be released
+	// before the connection returns to the pool.
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLock); err != nil {
+		return nil, fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrationAdvisoryLock)
+	}()
+
+	db := DB(conn)
 	if _, err := db.Exec(ctx, ledgerDDL); err != nil {
 		return nil, fmt.Errorf("ensure schema_migrations: %w", err)
 	}
