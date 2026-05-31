@@ -92,7 +92,7 @@ func startTestServer(ctx context.Context, t *testing.T, pool *pgxpool.Pool) test
 	}
 	srv, err := agenttransport.New(
 		writeTemp(t, dir, "server.crt", sc), writeTemp(t, dir, "server.key", sk), caFile,
-		pool, bus.NewMemory(), logging.New(io.Discard, "error", "json"))
+		pool, bus.NewMemory(), nil, logging.New(io.Discard, "error", "json"))
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

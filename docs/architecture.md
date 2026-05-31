@@ -150,3 +150,19 @@ mode and a **prometheus** remote-write mode (Prometheus/VictoriaMetrics). The
 consumer converts each result to `netctl_probe_*` series labeled by
 `tenant_id`/`agent_id`/`canary_type`/`server_address`; tenant scoping at read time
 (S23) enforces isolation at the TSDB, which has no row-level security of its own.
+
+## Network tests & agent-to-agent (S7–S8)
+
+Probes are compiled-in `Canary` plugins (`internal/canary`): `icmp` (loss/latency/
+jitter, S7), and `tcp` (connect latency) + `udp` (echo round-trip) agent-to-server
+tests (S8). All share one latency-stats core and emit through the S6 pipeline.
+
+**Agent-to-agent** (S8) measures between two registered agents, **brokered by the
+control plane** (`internal/a2a`). The broker assigns roles, rendezvouses the
+responder's listen endpoint to the initiator, and hands each agent its task when
+it polls (`PollCoordination`/`ReportEndpoint`); all broker state is tenant-scoped
+(an agent only ever gets its own tasks, and only a session's responder may report
+an endpoint — guardrail 1). The measurement is TWAMP-lite (T1 send, T2/T3
+responder recv/send, T4 recv), giving round-trip plus **forward and reverse
+one-way delay**; one-way delays assume NTP-synced clocks across hosts. Results
+from both agents flow through the same result pipeline into the TSDB.

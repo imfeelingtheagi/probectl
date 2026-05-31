@@ -100,7 +100,7 @@ func TestAgentEndToEnd(t *testing.T) {
 	go func() { _ = pipeline.NewConsumer(mbus, mtsdb, "e2e", log).Run(consumerCtx); close(consumerDone) }()
 	defer func() { stopConsumer(); <-consumerDone }()
 
-	srv, err := agenttransport.New(write("server.crt", sc), write("server.key", sk), caFile, pool, mbus, log)
+	srv, err := agenttransport.New(write("server.crt", sc), write("server.key", sk), caFile, pool, mbus, nil, log)
 	if err != nil {
 		t.Fatal(err)
 	}

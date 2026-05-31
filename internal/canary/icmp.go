@@ -107,8 +107,8 @@ func (c *icmpCanary) Run(ctx context.Context) (Result, error) {
 	rtts, sendOffsets := c.probe(ctx, conn, raw, v6, ipAddr.IP, start)
 	res.Duration = time.Since(start)
 
-	stats := computeICMPStats(rtts, c.count)
-	res.Metrics = stats.metrics()
+	stats := computeLatencyStats(rtts, c.count)
+	res.Metrics = stats.latencyMetrics("rtt")
 	if seqs, offs := dropRecord(rtts, sendOffsets); seqs != "" {
 		res.Attributes["icmp.dropped_seqs"] = seqs
 		res.Attributes["icmp.drop_send_offsets_ms"] = offs

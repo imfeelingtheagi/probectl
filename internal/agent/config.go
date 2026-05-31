@@ -36,6 +36,19 @@ type Config struct {
 	Agent        Meta               `yaml:"agent"`
 	Buffer       BufferConfig       `yaml:"buffer"`
 	Canaries     []CanaryConfig     `yaml:"canaries"`
+	A2A          A2AConfig          `yaml:"a2a"`
+}
+
+// A2AConfig controls participation in brokered agent-to-agent tests. When
+// enabled, the agent polls the control plane for coordination tasks and can act
+// as a responder or initiator.
+type A2AConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// AdvertiseHost is the address peers use to reach this agent's responder.
+	// Empty auto-detects a non-loopback IP; set it explicitly behind NAT.
+	AdvertiseHost string   `yaml:"advertise_host"`
+	PollInterval  Duration `yaml:"poll_interval"`
+	ResponderTTL  Duration `yaml:"responder_ttl"`
 }
 
 // ControlPlaneConfig is the control-plane connection.
@@ -124,6 +137,12 @@ func (c *Config) applyDefaults() {
 		if c.Canaries[i].Interval == 0 {
 			c.Canaries[i].Interval = Duration(30 * time.Second)
 		}
+	}
+	if c.A2A.PollInterval == 0 {
+		c.A2A.PollInterval = Duration(2 * time.Second)
+	}
+	if c.A2A.ResponderTTL == 0 {
+		c.A2A.ResponderTTL = Duration(15 * time.Second)
 	}
 }
 

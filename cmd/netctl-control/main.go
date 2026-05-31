@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/imfeelingtheagi/netctl/internal/a2a"
 	"github.com/imfeelingtheagi/netctl/internal/agenttransport"
 	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/config"
@@ -96,6 +97,10 @@ func run(cmd string) error {
 	}
 	defer tsdbWriter.Close()
 
+	// Brokers agent-to-agent measurement sessions; sessions are started by the
+	// test API in a later sprint.
+	a2aBroker := a2a.NewBroker()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -105,7 +110,7 @@ func run(cmd string) error {
 	g.Go(func() error { return control.New(cfg, log, db).Run(gctx) })
 	g.Go(func() error { return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).Run(gctx) })
 	if cfg.AgentTransportEnabled() {
-		grpcSrv, err := agenttransport.New(cfg.AgentTLSCertFile, cfg.AgentTLSKeyFile, cfg.AgentTLSCAFile, db.Pool(), resultBus, log)
+		grpcSrv, err := agenttransport.New(cfg.AgentTLSCertFile, cfg.AgentTLSKeyFile, cfg.AgentTLSCAFile, db.Pool(), resultBus, a2aBroker, log)
 		if err != nil {
 			return fmt.Errorf("agent transport: %w", err)
 		}

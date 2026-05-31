@@ -19,7 +19,7 @@ tls:
 
 agent:
   # hostname defaults to the OS hostname.
-  capabilities: ["noop", "icmp"]
+  capabilities: ["noop", "icmp", "tcp", "udp", "a2a"]
   heartbeat_interval: 30s
 
 buffer:
@@ -44,3 +44,27 @@ canaries:
       dscp: "0" # 0-63; marks outgoing packets (best-effort)
       # mode: "continuous"  # 1 packet/sec, averaged loss + per-second drop timing
       # privileged: "true"  # prefer raw sockets (needs CAP_NET_RAW)
+
+  # TCP connect latency + reachability.
+  - type: tcp
+    target: "example.com:443"
+    interval: 30s
+    timeout: 3s
+    params:
+      count: "3"
+
+  # UDP echo round-trip (target must echo, e.g. a UDP echo service).
+  - type: udp
+    target: "udp-echo.example.com:7"
+    interval: 30s
+    timeout: 3s
+    params:
+      count: "5"
+
+# Agent-to-agent participation. When enabled the agent polls the control plane
+# for brokered responder/initiator tasks (see docs/configuration.md).
+a2a:
+  enabled: false
+  # advertise_host: "10.0.0.12"  # address peers reach this agent on (NAT: set explicitly)
+  poll_interval: 2s
+  responder_ttl: 15s

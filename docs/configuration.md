@@ -181,6 +181,51 @@ carried as OTel attributes, not TSDB labels, so they don't widen cardinality.
 other; if neither can be opened it returns an internal error (the probe is not
 silently reported as loss).
 
+### TCP & UDP tests (S8)
+
+The `tcp` and `udp` canaries are agent-to-server probes. Configure a `target` of
+`host:port` (or a `host` with `params.port`). Both accept `count` and `dscp`.
+
+The **`tcp`** canary measures **connect latency + reachability** (a connect-based,
+unprivileged equivalent of a TCP-SYN test): it establishes a connection and times
+the handshake, emitting `netctl_probe_connect_{min,avg,max,stddev}_ms`,
+`netctl_probe_jitter_ms`, and `netctl_probe_loss_ratio` (failed connects = loss;
+all-failed = `success=false`).
+
+The **`udp`** canary is an **echo round-trip** probe: it sends token-tagged
+datagrams and matches the echoes, emitting `netctl_probe_rtt_*` + loss. It needs a
+target that echoes (a UDP echo service, or a netctl agent-to-agent responder); a
+non-echoing target reports as 100% loss. `params.payload_bytes` (≥10) sets the
+datagram size.
+
+### Agent-to-agent tests (S8)
+
+An agent-to-agent (A2A) test measures **between two registered agents**, brokered
+by the control plane. The control plane assigns roles (one agent **responds**,
+opening a short-lived listener; the other **initiates**), rendezvouses the
+responder's endpoint to the initiator, and hands each agent its task when it
+polls (`PollCoordination` / `ReportEndpoint`). The measurement is TWAMP-lite: the
+initiator timestamps each probe (T1), the responder stamps receive/send (T2/T3)
+and echoes, and the initiator stamps receive (T4), yielding **round-trip**
+(`netctl_probe_rtt_*`) plus **forward** and **reverse** one-way delay
+(`netctl_probe_forward_avg_ms`, `netctl_probe_reverse_avg_ms`). The responder also
+reports forward-direction delivery (`netctl_probe_packets_received`,
+`netctl_probe_loss_ratio`), so both agents and both directions are observed.
+
+Enable participation in the agent's `a2a` block: `enabled: true`,
+`advertise_host` (the address peers use to reach this agent's responder),
+`poll_interval`, and `responder_ttl`. **Caveats (document for production):**
+
+- **NAT/firewall.** The responder advertises `advertise_host`; behind NAT this
+  must be a reachable address and the responder's ephemeral port must be
+  reachable from the initiator. Auto-detection picks a non-loopback IPv4 — set
+  `advertise_host` explicitly when that is wrong.
+- **Clocks.** Forward/reverse one-way delays assume the two agents' clocks are
+  synchronized (exact within one host; use **NTP** across hosts). Round-trip is
+  clock-independent.
+
+Sessions are brokered in-memory and triggered by the test API in a later sprint.
+
 ## Local dev stack (`deploy/compose/dev.yml`)
 
 Started with `make compose-up`. **Local, non-production** defaults — plaintext

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/imfeelingtheagi/netctl/internal/a2a"
 	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/crypto"
 	agentv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1"
@@ -28,6 +29,7 @@ type service struct {
 	agentv1.UnimplementedAgentServiceServer
 	pool     *pgxpool.Pool
 	bus      bus.Bus
+	broker   *a2a.Broker
 	log      *slog.Logger
 	agents   store.Agents
 	shutdown <-chan struct{}
@@ -165,4 +167,57 @@ func (svc *service) ingest(ctx context.Context, id crypto.SPIFFEID, req *agentv1
 		return err
 	}
 	return svc.bus.Publish(ctx, bus.NetworkResultsTopic, []byte(r.TenantId), value)
+}
+
+// PollCoordination returns the next brokered agent-to-agent task for the calling
+// agent. The tenant and agent are taken from the verified certificate, so an
+// agent can only ever receive its own tasks (CLAUDE.md §7 guardrails 1 and 5).
+func (svc *service) PollCoordination(ctx context.Context, _ *agentv1.PollCoordinationRequest) (*agentv1.PollCoordinationResponse, error) {
+	id, err := identityFromContext(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
+	if svc.broker == nil {
+		return &agentv1.PollCoordinationResponse{HasTask: false}, nil
+	}
+	task, ok := svc.broker.PollFor(id.TenantID, id.AgentID)
+	if !ok {
+		return &agentv1.PollCoordinationResponse{HasTask: false}, nil
+	}
+	return &agentv1.PollCoordinationResponse{HasTask: true, Task: toProtoTask(task)}, nil
+}
+
+// ReportEndpoint records where a responder is listening for a session. The
+// broker verifies the caller is that session's responder in its tenant.
+func (svc *service) ReportEndpoint(ctx context.Context, req *agentv1.ReportEndpointRequest) (*agentv1.ReportEndpointResponse, error) {
+	id, err := identityFromContext(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, err.Error())
+	}
+	if svc.broker == nil {
+		return nil, status.Error(codes.Unavailable, "coordination not enabled")
+	}
+	if err := svc.broker.ReportEndpoint(id.TenantID, id.AgentID, req.GetSessionId(), req.GetHost(), req.GetPort()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	return &agentv1.ReportEndpointResponse{Accepted: true}, nil
+}
+
+func toProtoTask(t a2a.Task) *agentv1.A2ATask {
+	role := agentv1.A2ARole_A2A_ROLE_UNSPECIFIED
+	switch t.Role {
+	case a2a.RoleResponder:
+		role = agentv1.A2ARole_A2A_ROLE_RESPONDER
+	case a2a.RoleInitiator:
+		role = agentv1.A2ARole_A2A_ROLE_INITIATOR
+	}
+	return &agentv1.A2ATask{
+		SessionId:     t.SessionID,
+		Role:          role,
+		Mode:          t.Mode,
+		Count:         t.Count,
+		ResponderHost: t.ResponderHost,
+		ResponderPort: t.ResponderPort,
+		PeerAgentId:   t.PeerAgentID,
+	}
 }

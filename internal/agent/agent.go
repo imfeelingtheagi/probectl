@@ -29,12 +29,13 @@ const (
 // drains the buffer to the control plane — reconnecting with backoff so probing
 // is never blocked by an outage.
 type Agent struct {
-	cfg      *Config
-	log      *slog.Logger
-	buffer   *Buffer
-	host     *Host
-	tenantID string
-	agentID  string
+	cfg         *Config
+	log         *slog.Logger
+	buffer      *Buffer
+	host        *Host
+	coordinator *Coordinator
+	tenantID    string
+	agentID     string
 }
 
 // New builds an agent. Its identity (tenant + id) comes from its client
@@ -59,7 +60,11 @@ func New(cfg *Config, reg *canary.Registry, log *slog.Logger) (*Agent, error) {
 		sched = append(sched, scheduled{canary: c, interval: cc.Interval.Std()})
 	}
 	host := &Host{scheduled: sched, buffer: buffer, tenantID: id.TenantID, agentID: id.AgentID, log: log}
-	return &Agent{cfg: cfg, log: log, buffer: buffer, host: host, tenantID: id.TenantID, agentID: id.AgentID}, nil
+	a := &Agent{cfg: cfg, log: log, buffer: buffer, host: host, tenantID: id.TenantID, agentID: id.AgentID}
+	if cfg.A2A.Enabled {
+		a.coordinator = newCoordinator(cfg, buffer, id.TenantID, id.AgentID, log)
+	}
+	return a, nil
 }
 
 // Run starts probing and forwarding until ctx is canceled.
@@ -69,6 +74,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { a.host.Run(gctx); return nil })
 	g.Go(func() error { return a.forward(gctx) })
+	if a.coordinator != nil {
+		g.Go(func() error { return a.coordinator.Run(gctx) })
+	}
 	return g.Wait()
 }
 

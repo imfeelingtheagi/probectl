@@ -30,6 +30,56 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// A2ARole is an agent's role in one agent-to-agent measurement session.
+type A2ARole int32
+
+const (
+	A2ARole_A2A_ROLE_UNSPECIFIED A2ARole = 0
+	A2ARole_A2A_ROLE_RESPONDER   A2ARole = 1 // opens a listener and echoes probes
+	A2ARole_A2A_ROLE_INITIATOR   A2ARole = 2 // connects to the responder and measures
+)
+
+// Enum value maps for A2ARole.
+var (
+	A2ARole_name = map[int32]string{
+		0: "A2A_ROLE_UNSPECIFIED",
+		1: "A2A_ROLE_RESPONDER",
+		2: "A2A_ROLE_INITIATOR",
+	}
+	A2ARole_value = map[string]int32{
+		"A2A_ROLE_UNSPECIFIED": 0,
+		"A2A_ROLE_RESPONDER":   1,
+		"A2A_ROLE_INITIATOR":   2,
+	}
+)
+
+func (x A2ARole) Enum() *A2ARole {
+	p := new(A2ARole)
+	*p = x
+	return p
+}
+
+func (x A2ARole) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (A2ARole) Descriptor() protoreflect.EnumDescriptor {
+	return file_netctl_agent_v1_agent_proto_enumTypes[0].Descriptor()
+}
+
+func (A2ARole) Type() protoreflect.EnumType {
+	return &file_netctl_agent_v1_agent_proto_enumTypes[0]
+}
+
+func (x A2ARole) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use A2ARole.Descriptor instead.
+func (A2ARole) EnumDescriptor() ([]byte, []int) {
+	return file_netctl_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+}
+
 type RegisterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Hostname      string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
@@ -577,6 +627,292 @@ func (x *StreamResultsResponse) GetAccepted() uint64 {
 	return 0
 }
 
+type PollCoordinationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollCoordinationRequest) Reset() {
+	*x = PollCoordinationRequest{}
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollCoordinationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollCoordinationRequest) ProtoMessage() {}
+
+func (x *PollCoordinationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollCoordinationRequest.ProtoReflect.Descriptor instead.
+func (*PollCoordinationRequest) Descriptor() ([]byte, []int) {
+	return file_netctl_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+}
+
+type PollCoordinationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	HasTask       bool                   `protobuf:"varint,1,opt,name=has_task,json=hasTask,proto3" json:"has_task,omitempty"`
+	Task          *A2ATask               `protobuf:"bytes,2,opt,name=task,proto3" json:"task,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PollCoordinationResponse) Reset() {
+	*x = PollCoordinationResponse{}
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PollCoordinationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PollCoordinationResponse) ProtoMessage() {}
+
+func (x *PollCoordinationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PollCoordinationResponse.ProtoReflect.Descriptor instead.
+func (*PollCoordinationResponse) Descriptor() ([]byte, []int) {
+	return file_netctl_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *PollCoordinationResponse) GetHasTask() bool {
+	if x != nil {
+		return x.HasTask
+	}
+	return false
+}
+
+func (x *PollCoordinationResponse) GetTask() *A2ATask {
+	if x != nil {
+		return x.Task
+	}
+	return nil
+}
+
+// A2ATask is one brokered agent-to-agent assignment for the calling agent.
+type A2ATask struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Role      A2ARole                `protobuf:"varint,2,opt,name=role,proto3,enum=netctl.agent.v1.A2ARole" json:"role,omitempty"`
+	Mode      string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`    // "udp" | "tcp"
+	Count     uint32                 `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"` // probes the initiator sends
+	// Set for the initiator only: where the responder is listening.
+	ResponderHost string `protobuf:"bytes,5,opt,name=responder_host,json=responderHost,proto3" json:"responder_host,omitempty"`
+	ResponderPort uint32 `protobuf:"varint,6,opt,name=responder_port,json=responderPort,proto3" json:"responder_port,omitempty"`
+	PeerAgentId   string `protobuf:"bytes,7,opt,name=peer_agent_id,json=peerAgentId,proto3" json:"peer_agent_id,omitempty"` // the other agent in the session (for labeling)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *A2ATask) Reset() {
+	*x = A2ATask{}
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *A2ATask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*A2ATask) ProtoMessage() {}
+
+func (x *A2ATask) ProtoReflect() protoreflect.Message {
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use A2ATask.ProtoReflect.Descriptor instead.
+func (*A2ATask) Descriptor() ([]byte, []int) {
+	return file_netctl_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *A2ATask) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *A2ATask) GetRole() A2ARole {
+	if x != nil {
+		return x.Role
+	}
+	return A2ARole_A2A_ROLE_UNSPECIFIED
+}
+
+func (x *A2ATask) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *A2ATask) GetCount() uint32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *A2ATask) GetResponderHost() string {
+	if x != nil {
+		return x.ResponderHost
+	}
+	return ""
+}
+
+func (x *A2ATask) GetResponderPort() uint32 {
+	if x != nil {
+		return x.ResponderPort
+	}
+	return 0
+}
+
+func (x *A2ATask) GetPeerAgentId() string {
+	if x != nil {
+		return x.PeerAgentId
+	}
+	return ""
+}
+
+type ReportEndpointRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Port          uint32                 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportEndpointRequest) Reset() {
+	*x = ReportEndpointRequest{}
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportEndpointRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportEndpointRequest) ProtoMessage() {}
+
+func (x *ReportEndpointRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportEndpointRequest.ProtoReflect.Descriptor instead.
+func (*ReportEndpointRequest) Descriptor() ([]byte, []int) {
+	return file_netctl_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ReportEndpointRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ReportEndpointRequest) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *ReportEndpointRequest) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+type ReportEndpointResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportEndpointResponse) Reset() {
+	*x = ReportEndpointResponse{}
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportEndpointResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportEndpointResponse) ProtoMessage() {}
+
+func (x *ReportEndpointResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_netctl_agent_v1_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportEndpointResponse.ProtoReflect.Descriptor instead.
+func (*ReportEndpointResponse) Descriptor() ([]byte, []int) {
+	return file_netctl_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ReportEndpointResponse) GetAccepted() bool {
+	if x != nil {
+		return x.Accepted
+	}
+	return false
+}
+
 var File_netctl_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_netctl_agent_v1_agent_proto_rawDesc = "" +
@@ -621,13 +957,39 @@ const file_netctl_agent_v1_agent_proto_rawDesc = "" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12.\n" +
 	"\x13observed_unix_nanos\x18\x03 \x01(\x03R\x11observedUnixNanos\"3\n" +
 	"\x15StreamResultsResponse\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\x04R\baccepted2\xbf\x03\n" +
+	"\baccepted\x18\x01 \x01(\x04R\baccepted\"\x19\n" +
+	"\x17PollCoordinationRequest\"c\n" +
+	"\x18PollCoordinationResponse\x12\x19\n" +
+	"\bhas_task\x18\x01 \x01(\bR\ahasTask\x12,\n" +
+	"\x04task\x18\x02 \x01(\v2\x18.netctl.agent.v1.A2ATaskR\x04task\"\xf2\x01\n" +
+	"\aA2ATask\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
+	"\x04role\x18\x02 \x01(\x0e2\x18.netctl.agent.v1.A2ARoleR\x04role\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x14\n" +
+	"\x05count\x18\x04 \x01(\rR\x05count\x12%\n" +
+	"\x0eresponder_host\x18\x05 \x01(\tR\rresponderHost\x12%\n" +
+	"\x0eresponder_port\x18\x06 \x01(\rR\rresponderPort\x12\"\n" +
+	"\rpeer_agent_id\x18\a \x01(\tR\vpeerAgentId\"^\n" +
+	"\x15ReportEndpointRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\rR\x04port\"4\n" +
+	"\x16ReportEndpointResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted*S\n" +
+	"\aA2ARole\x12\x18\n" +
+	"\x14A2A_ROLE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12A2A_ROLE_RESPONDER\x10\x01\x12\x16\n" +
+	"\x12A2A_ROLE_INITIATOR\x10\x022\x8b\x05\n" +
 	"\fAgentService\x12O\n" +
 	"\bRegister\x12 .netctl.agent.v1.RegisterRequest\x1a!.netctl.agent.v1.RegisterResponse\x12I\n" +
 	"\x06Attest\x12\x1e.netctl.agent.v1.AttestRequest\x1a\x1f.netctl.agent.v1.AttestResponse\x12R\n" +
 	"\tHeartbeat\x12!.netctl.agent.v1.HeartbeatRequest\x1a\".netctl.agent.v1.HeartbeatResponse\x12]\n" +
 	"\fStreamConfig\x12$.netctl.agent.v1.StreamConfigRequest\x1a%.netctl.agent.v1.StreamConfigResponse0\x01\x12`\n" +
-	"\rStreamResults\x12%.netctl.agent.v1.StreamResultsRequest\x1a&.netctl.agent.v1.StreamResultsResponse(\x01BHZFgithub.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1;agentv1b\x06proto3"
+	"\rStreamResults\x12%.netctl.agent.v1.StreamResultsRequest\x1a&.netctl.agent.v1.StreamResultsResponse(\x01\x12g\n" +
+	"\x10PollCoordination\x12(.netctl.agent.v1.PollCoordinationRequest\x1a).netctl.agent.v1.PollCoordinationResponse\x12a\n" +
+	"\x0eReportEndpoint\x12&.netctl.agent.v1.ReportEndpointRequest\x1a'.netctl.agent.v1.ReportEndpointResponseBHZFgithub.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_netctl_agent_v1_agent_proto_rawDescOnce sync.Once
@@ -641,39 +1003,52 @@ func file_netctl_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_netctl_agent_v1_agent_proto_rawDescData
 }
 
-var file_netctl_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_netctl_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_netctl_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_netctl_agent_v1_agent_proto_goTypes = []any{
-	(*RegisterRequest)(nil),       // 0: netctl.agent.v1.RegisterRequest
-	(*RegisterResponse)(nil),      // 1: netctl.agent.v1.RegisterResponse
-	(*AttestRequest)(nil),         // 2: netctl.agent.v1.AttestRequest
-	(*AttestResponse)(nil),        // 3: netctl.agent.v1.AttestResponse
-	(*HeartbeatRequest)(nil),      // 4: netctl.agent.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil),     // 5: netctl.agent.v1.HeartbeatResponse
-	(*StreamConfigRequest)(nil),   // 6: netctl.agent.v1.StreamConfigRequest
-	(*StreamConfigResponse)(nil),  // 7: netctl.agent.v1.StreamConfigResponse
-	(*StreamResultsRequest)(nil),  // 8: netctl.agent.v1.StreamResultsRequest
-	(*StreamResultsResponse)(nil), // 9: netctl.agent.v1.StreamResultsResponse
-	nil,                           // 10: netctl.agent.v1.RegisterRequest.LabelsEntry
-	nil,                           // 11: netctl.agent.v1.AttestRequest.PlatformEntry
+	(A2ARole)(0),                     // 0: netctl.agent.v1.A2ARole
+	(*RegisterRequest)(nil),          // 1: netctl.agent.v1.RegisterRequest
+	(*RegisterResponse)(nil),         // 2: netctl.agent.v1.RegisterResponse
+	(*AttestRequest)(nil),            // 3: netctl.agent.v1.AttestRequest
+	(*AttestResponse)(nil),           // 4: netctl.agent.v1.AttestResponse
+	(*HeartbeatRequest)(nil),         // 5: netctl.agent.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil),        // 6: netctl.agent.v1.HeartbeatResponse
+	(*StreamConfigRequest)(nil),      // 7: netctl.agent.v1.StreamConfigRequest
+	(*StreamConfigResponse)(nil),     // 8: netctl.agent.v1.StreamConfigResponse
+	(*StreamResultsRequest)(nil),     // 9: netctl.agent.v1.StreamResultsRequest
+	(*StreamResultsResponse)(nil),    // 10: netctl.agent.v1.StreamResultsResponse
+	(*PollCoordinationRequest)(nil),  // 11: netctl.agent.v1.PollCoordinationRequest
+	(*PollCoordinationResponse)(nil), // 12: netctl.agent.v1.PollCoordinationResponse
+	(*A2ATask)(nil),                  // 13: netctl.agent.v1.A2ATask
+	(*ReportEndpointRequest)(nil),    // 14: netctl.agent.v1.ReportEndpointRequest
+	(*ReportEndpointResponse)(nil),   // 15: netctl.agent.v1.ReportEndpointResponse
+	nil,                              // 16: netctl.agent.v1.RegisterRequest.LabelsEntry
+	nil,                              // 17: netctl.agent.v1.AttestRequest.PlatformEntry
 }
 var file_netctl_agent_v1_agent_proto_depIdxs = []int32{
-	10, // 0: netctl.agent.v1.RegisterRequest.labels:type_name -> netctl.agent.v1.RegisterRequest.LabelsEntry
-	11, // 1: netctl.agent.v1.AttestRequest.platform:type_name -> netctl.agent.v1.AttestRequest.PlatformEntry
-	0,  // 2: netctl.agent.v1.AgentService.Register:input_type -> netctl.agent.v1.RegisterRequest
-	2,  // 3: netctl.agent.v1.AgentService.Attest:input_type -> netctl.agent.v1.AttestRequest
-	4,  // 4: netctl.agent.v1.AgentService.Heartbeat:input_type -> netctl.agent.v1.HeartbeatRequest
-	6,  // 5: netctl.agent.v1.AgentService.StreamConfig:input_type -> netctl.agent.v1.StreamConfigRequest
-	8,  // 6: netctl.agent.v1.AgentService.StreamResults:input_type -> netctl.agent.v1.StreamResultsRequest
-	1,  // 7: netctl.agent.v1.AgentService.Register:output_type -> netctl.agent.v1.RegisterResponse
-	3,  // 8: netctl.agent.v1.AgentService.Attest:output_type -> netctl.agent.v1.AttestResponse
-	5,  // 9: netctl.agent.v1.AgentService.Heartbeat:output_type -> netctl.agent.v1.HeartbeatResponse
-	7,  // 10: netctl.agent.v1.AgentService.StreamConfig:output_type -> netctl.agent.v1.StreamConfigResponse
-	9,  // 11: netctl.agent.v1.AgentService.StreamResults:output_type -> netctl.agent.v1.StreamResultsResponse
-	7,  // [7:12] is the sub-list for method output_type
-	2,  // [2:7] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	16, // 0: netctl.agent.v1.RegisterRequest.labels:type_name -> netctl.agent.v1.RegisterRequest.LabelsEntry
+	17, // 1: netctl.agent.v1.AttestRequest.platform:type_name -> netctl.agent.v1.AttestRequest.PlatformEntry
+	13, // 2: netctl.agent.v1.PollCoordinationResponse.task:type_name -> netctl.agent.v1.A2ATask
+	0,  // 3: netctl.agent.v1.A2ATask.role:type_name -> netctl.agent.v1.A2ARole
+	1,  // 4: netctl.agent.v1.AgentService.Register:input_type -> netctl.agent.v1.RegisterRequest
+	3,  // 5: netctl.agent.v1.AgentService.Attest:input_type -> netctl.agent.v1.AttestRequest
+	5,  // 6: netctl.agent.v1.AgentService.Heartbeat:input_type -> netctl.agent.v1.HeartbeatRequest
+	7,  // 7: netctl.agent.v1.AgentService.StreamConfig:input_type -> netctl.agent.v1.StreamConfigRequest
+	9,  // 8: netctl.agent.v1.AgentService.StreamResults:input_type -> netctl.agent.v1.StreamResultsRequest
+	11, // 9: netctl.agent.v1.AgentService.PollCoordination:input_type -> netctl.agent.v1.PollCoordinationRequest
+	14, // 10: netctl.agent.v1.AgentService.ReportEndpoint:input_type -> netctl.agent.v1.ReportEndpointRequest
+	2,  // 11: netctl.agent.v1.AgentService.Register:output_type -> netctl.agent.v1.RegisterResponse
+	4,  // 12: netctl.agent.v1.AgentService.Attest:output_type -> netctl.agent.v1.AttestResponse
+	6,  // 13: netctl.agent.v1.AgentService.Heartbeat:output_type -> netctl.agent.v1.HeartbeatResponse
+	8,  // 14: netctl.agent.v1.AgentService.StreamConfig:output_type -> netctl.agent.v1.StreamConfigResponse
+	10, // 15: netctl.agent.v1.AgentService.StreamResults:output_type -> netctl.agent.v1.StreamResultsResponse
+	12, // 16: netctl.agent.v1.AgentService.PollCoordination:output_type -> netctl.agent.v1.PollCoordinationResponse
+	15, // 17: netctl.agent.v1.AgentService.ReportEndpoint:output_type -> netctl.agent.v1.ReportEndpointResponse
+	11, // [11:18] is the sub-list for method output_type
+	4,  // [4:11] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_netctl_agent_v1_agent_proto_init() }
@@ -686,13 +1061,14 @@ func file_netctl_agent_v1_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_netctl_agent_v1_agent_proto_rawDesc), len(file_netctl_agent_v1_agent_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   12,
+			NumEnums:      1,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_netctl_agent_v1_agent_proto_goTypes,
 		DependencyIndexes: file_netctl_agent_v1_agent_proto_depIdxs,
+		EnumInfos:         file_netctl_agent_v1_agent_proto_enumTypes,
 		MessageInfos:      file_netctl_agent_v1_agent_proto_msgTypes,
 	}.Build()
 	File_netctl_agent_v1_agent_proto = out.File

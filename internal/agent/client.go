@@ -48,5 +48,16 @@ func (c *Client) StreamResults(ctx context.Context) (grpc.ClientStreamingClient[
 	return c.svc.StreamResults(ctx)
 }
 
+// PollCoordination asks the control plane for the next agent-to-agent task.
+func (c *Client) PollCoordination(ctx context.Context) (*agentv1.PollCoordinationResponse, error) {
+	return c.svc.PollCoordination(ctx, &agentv1.PollCoordinationRequest{})
+}
+
+// ReportEndpoint announces a responder's listen endpoint for a session.
+func (c *Client) ReportEndpoint(ctx context.Context, sessionID, host string, port uint32) error {
+	_, err := c.svc.ReportEndpoint(ctx, &agentv1.ReportEndpointRequest{SessionId: sessionID, Host: host, Port: port})
+	return err
+}
+
 // Close closes the connection.
 func (c *Client) Close() error { return c.conn.Close() }

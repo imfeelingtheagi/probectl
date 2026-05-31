@@ -28,11 +28,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_Register_FullMethodName      = "/netctl.agent.v1.AgentService/Register"
-	AgentService_Attest_FullMethodName        = "/netctl.agent.v1.AgentService/Attest"
-	AgentService_Heartbeat_FullMethodName     = "/netctl.agent.v1.AgentService/Heartbeat"
-	AgentService_StreamConfig_FullMethodName  = "/netctl.agent.v1.AgentService/StreamConfig"
-	AgentService_StreamResults_FullMethodName = "/netctl.agent.v1.AgentService/StreamResults"
+	AgentService_Register_FullMethodName         = "/netctl.agent.v1.AgentService/Register"
+	AgentService_Attest_FullMethodName           = "/netctl.agent.v1.AgentService/Attest"
+	AgentService_Heartbeat_FullMethodName        = "/netctl.agent.v1.AgentService/Heartbeat"
+	AgentService_StreamConfig_FullMethodName     = "/netctl.agent.v1.AgentService/StreamConfig"
+	AgentService_StreamResults_FullMethodName    = "/netctl.agent.v1.AgentService/StreamResults"
+	AgentService_PollCoordination_FullMethodName = "/netctl.agent.v1.AgentService/PollCoordination"
+	AgentService_ReportEndpoint_FullMethodName   = "/netctl.agent.v1.AgentService/ReportEndpoint"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -50,6 +52,13 @@ type AgentServiceClient interface {
 	StreamConfig(ctx context.Context, in *StreamConfigRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamConfigResponse], error)
 	// StreamResults streams probe results to the control plane (agent -> server).
 	StreamResults(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[StreamResultsRequest, StreamResultsResponse], error)
+	// PollCoordination returns the next pending agent-to-agent task for the
+	// calling agent (none when empty). The control plane brokers roles (which
+	// agent listens vs initiates) and rendezvous; agents poll for their task.
+	PollCoordination(ctx context.Context, in *PollCoordinationRequest, opts ...grpc.CallOption) (*PollCoordinationResponse, error)
+	// ReportEndpoint lets a responder announce where it is listening for a
+	// session, so the control plane can hand the address to the initiator.
+	ReportEndpoint(ctx context.Context, in *ReportEndpointRequest, opts ...grpc.CallOption) (*ReportEndpointResponse, error)
 }
 
 type agentServiceClient struct {
@@ -122,6 +131,26 @@ func (c *agentServiceClient) StreamResults(ctx context.Context, opts ...grpc.Cal
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_StreamResultsClient = grpc.ClientStreamingClient[StreamResultsRequest, StreamResultsResponse]
 
+func (c *agentServiceClient) PollCoordination(ctx context.Context, in *PollCoordinationRequest, opts ...grpc.CallOption) (*PollCoordinationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PollCoordinationResponse)
+	err := c.cc.Invoke(ctx, AgentService_PollCoordination_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ReportEndpoint(ctx context.Context, in *ReportEndpointRequest, opts ...grpc.CallOption) (*ReportEndpointResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportEndpointResponse)
+	err := c.cc.Invoke(ctx, AgentService_ReportEndpoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -137,6 +166,13 @@ type AgentServiceServer interface {
 	StreamConfig(*StreamConfigRequest, grpc.ServerStreamingServer[StreamConfigResponse]) error
 	// StreamResults streams probe results to the control plane (agent -> server).
 	StreamResults(grpc.ClientStreamingServer[StreamResultsRequest, StreamResultsResponse]) error
+	// PollCoordination returns the next pending agent-to-agent task for the
+	// calling agent (none when empty). The control plane brokers roles (which
+	// agent listens vs initiates) and rendezvous; agents poll for their task.
+	PollCoordination(context.Context, *PollCoordinationRequest) (*PollCoordinationResponse, error)
+	// ReportEndpoint lets a responder announce where it is listening for a
+	// session, so the control plane can hand the address to the initiator.
+	ReportEndpoint(context.Context, *ReportEndpointRequest) (*ReportEndpointResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -161,6 +197,12 @@ func (UnimplementedAgentServiceServer) StreamConfig(*StreamConfigRequest, grpc.S
 }
 func (UnimplementedAgentServiceServer) StreamResults(grpc.ClientStreamingServer[StreamResultsRequest, StreamResultsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamResults not implemented")
+}
+func (UnimplementedAgentServiceServer) PollCoordination(context.Context, *PollCoordinationRequest) (*PollCoordinationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PollCoordination not implemented")
+}
+func (UnimplementedAgentServiceServer) ReportEndpoint(context.Context, *ReportEndpointRequest) (*ReportEndpointResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportEndpoint not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -255,6 +297,42 @@ func _AgentService_StreamResults_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_StreamResultsServer = grpc.ClientStreamingServer[StreamResultsRequest, StreamResultsResponse]
 
+func _AgentService_PollCoordination_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollCoordinationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).PollCoordination(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_PollCoordination_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).PollCoordination(ctx, req.(*PollCoordinationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ReportEndpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportEndpointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ReportEndpoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ReportEndpoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ReportEndpoint(ctx, req.(*ReportEndpointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -273,6 +351,14 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Heartbeat",
 			Handler:    _AgentService_Heartbeat_Handler,
+		},
+		{
+			MethodName: "PollCoordination",
+			Handler:    _AgentService_PollCoordination_Handler,
+		},
+		{
+			MethodName: "ReportEndpoint",
+			Handler:    _AgentService_ReportEndpoint_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

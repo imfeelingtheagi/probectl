@@ -33,7 +33,7 @@ func TestComputeICMPStats(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := computeICMPStats(tt.rtts, tt.sent)
+			s := computeLatencyStats(tt.rtts, tt.sent)
 			if s.Sent != tt.sent || s.Received != tt.wantRecv {
 				t.Fatalf("sent/received = %d/%d, want %d/%d", s.Sent, s.Received, tt.sent, tt.wantRecv)
 			}
@@ -58,14 +58,14 @@ func TestComputeICMPStats(t *testing.T) {
 
 func TestICMPStatsMetrics(t *testing.T) {
 	// With replies, all rtt + loss keys are present.
-	full := computeICMPStats([]time.Duration{ms(10), ms(20)}, 2).metrics()
+	full := computeLatencyStats([]time.Duration{ms(10), ms(20)}, 2).latencyMetrics("rtt")
 	for _, k := range []string{"loss.ratio", "packets.sent", "packets.received", "rtt.min.ms", "rtt.avg.ms", "rtt.max.ms", "rtt.stddev.ms", "jitter.ms"} {
 		if _, ok := full[k]; !ok {
 			t.Errorf("missing metric %q", k)
 		}
 	}
 	// Total loss omits rtt metrics but still reports loss + counts.
-	lost := computeICMPStats([]time.Duration{-1, -1}, 2).metrics()
+	lost := computeLatencyStats([]time.Duration{-1, -1}, 2).latencyMetrics("rtt")
 	if lost["loss.ratio"] != 1 || lost["packets.received"] != 0 {
 		t.Errorf("total-loss metrics = %v", lost)
 	}
