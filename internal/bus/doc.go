@@ -1,6 +1,6 @@
-// Package bus abstracts the message bus (Kafka default; NATS/Redis/direct lightweight modes) (S6).
-//
-// S0 scaffold: this package is an intentionally empty placeholder so the
-// repository skeleton matches CLAUDE.md section 5. It carries no logic yet —
-// the implementing sprint noted above fills it in.
+// Package bus is netctl's result/event transport (S6). Kafka is the default; an
+// in-memory bus backs the lightweight (<5 agent) mode and tests. Payloads are
+// Protobuf; topics follow netctl.<type>.results / netctl.<type>.events and are
+// tenant-tagged via the partition key (pooled mode). It decouples gRPC ingest
+// from storage: ingest publishes, a consumer drains to the TSDB.
 package bus

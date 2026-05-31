@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/crypto"
 	agentv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1"
 )
@@ -25,8 +26,10 @@ type Server struct {
 }
 
 // New builds the agent-transport server with mTLS from the given cert/key/CA
-// files (the TLS policy is owned by internal/crypto).
-func New(certFile, keyFile, caFile string, pool *pgxpool.Pool, log *slog.Logger) (*Server, error) {
+// files (the TLS policy is owned by internal/crypto). Accepted results are
+// published to b (the result bus); a nil bus accepts and counts results without
+// publishing (a minimal server).
+func New(certFile, keyFile, caFile string, pool *pgxpool.Pool, b bus.Bus, log *slog.Logger) (*Server, error) {
 	tlsConfig, err := crypto.ServerMTLSConfig(certFile, keyFile, caFile)
 	if err != nil {
 		return nil, fmt.Errorf("agent transport tls: %w", err)
@@ -34,7 +37,7 @@ func New(certFile, keyFile, caFile string, pool *pgxpool.Pool, log *slog.Logger)
 	// srvCtx is canceled on shutdown so long-lived streaming handlers wind down
 	// and GracefulStop can complete.
 	srvCtx, cancel := context.WithCancel(context.Background())
-	svc := &service{pool: pool, log: log, shutdown: srvCtx.Done()}
+	svc := &service{pool: pool, bus: b, log: log, shutdown: srvCtx.Done()}
 	gs := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
 	agentv1.RegisterAgentServiceServer(gs, svc)
 	return &Server{grpc: gs, log: log, cancel: cancel, svc: svc}, nil

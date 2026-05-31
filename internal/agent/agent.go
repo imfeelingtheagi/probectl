@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/imfeelingtheagi/netctl/internal/canary"
 	"github.com/imfeelingtheagi/netctl/internal/crypto"
 	agentv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1"
+	resultv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/result/v1"
 	"github.com/imfeelingtheagi/netctl/internal/version"
 )
 
@@ -172,16 +174,50 @@ func (a *Agent) drainOnce(ctx context.Context, client *Client) error {
 	return nil
 }
 
+// frameToRequest converts a buffered JSON result envelope into a StreamResults
+// request carrying the canonical OTel-aligned result (proto) as its payload. The
+// disk buffer stays JSON; only the wire payload is the proto schema.
 func frameToRequest(frame []byte) (*agentv1.StreamResultsRequest, error) {
 	var env resultEnvelope
 	if err := json.Unmarshal(frame, &env); err != nil {
 		return nil, err
 	}
+	payload, err := proto.Marshal(envToResult(&env))
+	if err != nil {
+		return nil, err
+	}
 	return &agentv1.StreamResultsRequest{
 		Type:              env.Result.Type,
-		Payload:           frame,
-		ObservedUnixNanos: env.Result.StartedAt.UnixNano(),
+		Payload:           payload,
+		ObservedUnixNanos: unixNano(env.Result.StartedAt),
 	}, nil
+}
+
+// envToResult maps the agent's result envelope onto the canonical result schema.
+// The control plane re-stamps tenant + agent from the mTLS certificate, so the
+// identity here is advisory.
+func envToResult(env *resultEnvelope) *resultv1.Result {
+	r := env.Result
+	return &resultv1.Result{
+		TenantId:          env.TenantID,
+		AgentId:           env.AgentID,
+		CanaryType:        r.Type,
+		ServerAddress:     r.Target,
+		Success:           r.Success,
+		ErrorMessage:      r.Error,
+		StartTimeUnixNano: unixNano(r.StartedAt),
+		DurationNano:      int64(r.Duration),
+		Metrics:           r.Metrics,
+	}
+}
+
+// unixNano returns t in Unix nanoseconds, or 0 for the zero time (whose UnixNano
+// is an unhelpful large negative number).
+func unixNano(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixNano()
 }
 
 // sleep waits for d or until ctx is canceled; it returns false if canceled.

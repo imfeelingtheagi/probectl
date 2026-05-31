@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/imfeelingtheagi/netctl/internal/agenttransport"
+	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/crypto"
 	agentv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1"
 	"github.com/imfeelingtheagi/netctl/internal/logging"
@@ -91,7 +92,7 @@ func startTestServer(ctx context.Context, t *testing.T, pool *pgxpool.Pool) test
 	}
 	srv, err := agenttransport.New(
 		writeTemp(t, dir, "server.crt", sc), writeTemp(t, dir, "server.key", sk), caFile,
-		pool, logging.New(io.Discard, "error", "json"))
+		pool, bus.NewMemory(), logging.New(io.Discard, "error", "json"))
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

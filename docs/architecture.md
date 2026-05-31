@@ -128,4 +128,25 @@ compacted on drain). A **forwarder** registers, heartbeats, and drains the buffe
 to the control plane over mTLS, reconnecting with backoff. Probing runs
 independently of connectivity, so results accumulate during an outage and drain
 on reconnect (at-least-once); every buffered/emitted result is stamped with the
-agent's tenant + id. Result processing (validate, bus, TSDB) is S6.
+agent's tenant + id.
+
+## Result pipeline (S6)
+
+A result travels agent → gRPC `StreamResults` → control-plane ingest
+(`internal/agenttransport`) → result bus (`internal/bus`) → consumer
+(`internal/pipeline`) → time-series writer (`internal/store/tsdb`). The wire
+payload is the canonical OTel-aligned result (`proto/netctl/result/v1`), whose
+attribute names follow OTel resource + network semantic conventions from first
+emission (the discipline S22 later *exposes* as OTLP/OBI rather than retrofits;
+see [`otel-mapping.md`](otel-mapping.md)).
+
+**Tenant integrity at ingest:** the control plane overwrites the result's
+`tenant_id`/`agent_id` with the identity from the verified mTLS certificate before
+publishing, and keys the bus message by tenant — a result can never be attributed
+to another tenant by a malformed or hostile payload (CLAUDE.md §7 guardrails 1
+and 5). The bus has a **memory** mode (in-process, the lightweight <5-agent
+default) and a **kafka** mode behind one interface; the writer has a **memory**
+mode and a **prometheus** remote-write mode (Prometheus/VictoriaMetrics). The
+consumer converts each result to `netctl_probe_*` series labeled by
+`tenant_id`/`agent_id`/`canary_type`/`server_address`; tenant scoping at read time
+(S23) enforces isolation at the TSDB, which has no row-level security of its own.

@@ -11,8 +11,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/imfeelingtheagi/netctl/internal/bus"
+	"github.com/imfeelingtheagi/netctl/internal/crypto"
 	agentv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/agent/v1"
+	resultv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/result/v1"
 	"github.com/imfeelingtheagi/netctl/internal/store"
 	"github.com/imfeelingtheagi/netctl/internal/tenancy"
 )
@@ -23,6 +27,7 @@ const heartbeatIntervalSeconds = 30
 type service struct {
 	agentv1.UnimplementedAgentServiceServer
 	pool     *pgxpool.Pool
+	bus      bus.Bus
 	log      *slog.Logger
 	agents   store.Agents
 	shutdown <-chan struct{}
@@ -107,15 +112,19 @@ func (svc *service) StreamConfig(_ *agentv1.StreamConfigRequest, stream grpc.Ser
 	return nil
 }
 
-// StreamResults accepts a stream of results and acknowledges the count. Result
-// validation, bus publish, and TSDB write are S6.
+// StreamResults accepts a stream of results, publishes each to the result bus,
+// and acknowledges the count. The result's tenant + agent are taken from the
+// verified certificate (never the payload), so a result is always attributed to
+// the sending agent's tenant (CLAUDE.md §7 guardrails 1 and 5).
 func (svc *service) StreamResults(stream grpc.ClientStreamingServer[agentv1.StreamResultsRequest, agentv1.StreamResultsResponse]) error {
-	if _, err := identityFromContext(stream.Context()); err != nil {
+	id, err := identityFromContext(stream.Context())
+	if err != nil {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
+	ctx := stream.Context()
 	var accepted uint64
 	for {
-		_, err := stream.Recv()
+		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			svc.accepted.Add(accepted)
 			return stream.SendAndClose(&agentv1.StreamResultsResponse{Accepted: accepted})
@@ -124,6 +133,36 @@ func (svc *service) StreamResults(stream grpc.ClientStreamingServer[agentv1.Stre
 			svc.accepted.Add(accepted)
 			return err
 		}
+		if err := svc.ingest(ctx, id, req); err != nil {
+			// A bus-publish failure surfaces as a stream error so the agent
+			// retries the (still-buffered) batch: at-least-once delivery.
+			svc.accepted.Add(accepted)
+			svc.log.Error("result ingest failed", "tenant", id.TenantID, "agent", id.AgentID, "error", err.Error())
+			return status.Error(codes.Unavailable, "ingest failed")
+		}
 		accepted++
 	}
+}
+
+// ingest decodes one result, stamps the authoritative tenant + agent identity
+// from the certificate, and publishes it to the result bus keyed by tenant.
+func (svc *service) ingest(ctx context.Context, id crypto.SPIFFEID, req *agentv1.StreamResultsRequest) error {
+	var r resultv1.Result
+	if err := proto.Unmarshal(req.GetPayload(), &r); err != nil {
+		// A malformed payload is a poison message: drop it (counted as accepted
+		// so the agent does not wedge retrying it) rather than fail the stream.
+		svc.log.Error("dropping malformed result payload", "tenant", id.TenantID, "agent", id.AgentID, "error", err.Error())
+		return nil
+	}
+	// Authoritative identity comes from the mTLS certificate, not the payload.
+	r.TenantId = id.TenantID
+	r.AgentId = id.AgentID
+	if svc.bus == nil {
+		return nil // no bus wired (minimal server): accept and count only
+	}
+	value, err := proto.Marshal(&r)
+	if err != nil {
+		return err
+	}
+	return svc.bus.Publish(ctx, bus.NetworkResultsTopic, []byte(r.TenantId), value)
 }

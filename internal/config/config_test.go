@@ -33,6 +33,39 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestResultPipelineConfig(t *testing.T) {
+	// Defaults: in-process bus + TSDB, no external dependencies.
+	cfg, err := Load(envFunc(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BusMode != "memory" || cfg.TSDBMode != "memory" {
+		t.Errorf("pipeline defaults = %q/%q, want memory/memory", cfg.BusMode, cfg.TSDBMode)
+	}
+
+	// Kafka + Prometheus with their required settings (brokers are trimmed).
+	cfg, err = Load(envFunc(map[string]string{
+		"NETCTL_BUS_MODE":    "kafka",
+		"NETCTL_BUS_BROKERS": "b1:9092, b2:9092",
+		"NETCTL_TSDB_MODE":   "prometheus",
+		"NETCTL_TSDB_URL":    "http://prom:9090",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.BusBrokers) != 2 || cfg.BusBrokers[0] != "b1:9092" || cfg.BusBrokers[1] != "b2:9092" {
+		t.Errorf("BusBrokers = %v, want [b1:9092 b2:9092]", cfg.BusBrokers)
+	}
+
+	// kafka without brokers and prometheus without a URL must both fail.
+	if _, err := Load(envFunc(map[string]string{"NETCTL_BUS_MODE": "kafka"})); err == nil || !strings.Contains(err.Error(), "NETCTL_BUS_BROKERS") {
+		t.Errorf("kafka without brokers should fail with a brokers error, got %v", err)
+	}
+	if _, err := Load(envFunc(map[string]string{"NETCTL_TSDB_MODE": "prometheus"})); err == nil || !strings.Contains(err.Error(), "NETCTL_TSDB_URL") {
+		t.Errorf("prometheus without a URL should fail with a URL error, got %v", err)
+	}
+}
+
 func TestLoadOverrides(t *testing.T) {
 	cfg, err := Load(envFunc(map[string]string{
 		"NETCTL_HTTP_ADDR":          ":9000",

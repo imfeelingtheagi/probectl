@@ -21,11 +21,14 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/imfeelingtheagi/netctl/internal/agenttransport"
+	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/config"
 	"github.com/imfeelingtheagi/netctl/internal/control"
 	"github.com/imfeelingtheagi/netctl/internal/logging"
+	"github.com/imfeelingtheagi/netctl/internal/pipeline"
 	"github.com/imfeelingtheagi/netctl/internal/store"
 	"github.com/imfeelingtheagi/netctl/internal/store/migrate"
+	"github.com/imfeelingtheagi/netctl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/netctl/internal/version"
 	"github.com/imfeelingtheagi/netctl/migrations"
 )
@@ -80,15 +83,29 @@ func run(cmd string) error {
 
 	log.Info("starting netctl-control", "version", version.Get().Version, "config", cfg)
 
+	// Result pipeline: a message bus that the control plane consumes and writes
+	// to the TSDB. The bus is shared with the agent transport (the publisher).
+	resultBus, err := bus.New(cfg.BusMode, cfg.BusBrokers)
+	if err != nil {
+		return fmt.Errorf("result bus: %w", err)
+	}
+	defer resultBus.Close()
+	tsdbWriter, err := tsdb.New(cfg.TSDBMode, cfg.TSDBURL)
+	if err != nil {
+		return fmt.Errorf("tsdb: %w", err)
+	}
+	defer tsdbWriter.Close()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Run the HTTP API and (when configured) the agent gRPC transport together;
-	// a signal or a failure in either drains both.
+	// Run the HTTP API, the result-pipeline consumer, and (when configured) the
+	// agent gRPC transport together; a signal or a failure in any drains all.
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return control.New(cfg, log, db).Run(gctx) })
+	g.Go(func() error { return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).Run(gctx) })
 	if cfg.AgentTransportEnabled() {
-		grpcSrv, err := agenttransport.New(cfg.AgentTLSCertFile, cfg.AgentTLSKeyFile, cfg.AgentTLSCAFile, db.Pool(), log)
+		grpcSrv, err := agenttransport.New(cfg.AgentTLSCertFile, cfg.AgentTLSKeyFile, cfg.AgentTLSCAFile, db.Pool(), resultBus, log)
 		if err != nil {
 			return fmt.Errorf("agent transport: %w", err)
 		}

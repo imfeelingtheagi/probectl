@@ -119,12 +119,27 @@ jobs:
           --health-retries 10
     env:
       NETCTL_DATABASE_URL: postgres://netctl:netctl@localhost:5432/netctl?sslmode=disable
+      # Result pipeline (S6): the TSDB remote-write test targets this Prometheus.
+      NETCTL_PROM_URL: http://localhost:9090
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Integration tests (migrations + readiness)
+      - name: Start Prometheus with the remote-write receiver (result-pipeline test)
+        # A service container cannot take the required --web.enable-remote-write-receiver
+        # flag, so run it as a step instead.
+        run: |
+          docker run -d --name prometheus -p 9090:9090 \
+            prom/prometheus:v2.55.1 \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --web.enable-remote-write-receiver
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:9090/-/ready >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "prometheus did not become ready" >&2; docker logs prometheus; exit 1
+      - name: Integration tests (migrations + readiness + result pipeline)
         run: make test-integration
 
   proto:

@@ -43,6 +43,10 @@ migrations and exit), `netctl-control version`.
 | `NETCTL_AGENT_TLS_CERT_FILE`      | (none)                                                            | agent-transport server certificate (PEM)                   |
 | `NETCTL_AGENT_TLS_KEY_FILE`       | (none)                                                            | agent-transport server private key (PEM)                   |
 | `NETCTL_AGENT_TLS_CA_FILE`        | (none)                                                            | CA bundle that signs agent client certificates (PEM)       |
+| `NETCTL_BUS_MODE`                 | `memory`                                                         | result bus: `memory` (lightweight, in-process) \| `kafka`  |
+| `NETCTL_BUS_BROKERS`              | (none)                                                           | comma-separated `host:port` Kafka brokers (required for `kafka`) |
+| `NETCTL_TSDB_MODE`                | `memory`                                                         | time-series writer: `memory` (in-process) \| `prometheus`  |
+| `NETCTL_TSDB_URL`                 | (none)                                                           | Prometheus/VictoriaMetrics base URL for remote-write (required for `prometheus`) |
 
 Invalid values fail fast: `netctl-control` reports **all** configuration problems
 at once and exits non-zero. The database password is redacted from logs.
@@ -125,6 +129,26 @@ configured. `NETCTL_AGENT_GRPC_ADDR`, `NETCTL_AGENT_TLS_{CERT,KEY,CA}_FILE`,
 Results buffer to disk (`buffer.dir`, bounded by `max_records`) while the control
 plane is unreachable and drain on reconnect (at-least-once). Probing runs
 independently of connectivity, so an outage never blocks measurement.
+
+### Result pipeline (S6)
+
+A streamed result flows agent → gRPC `StreamResults` → control-plane ingest →
+result bus (`netctl.network.results`, Protobuf) → consumer → time-series writer.
+The agent sends the canonical OTel-aligned result (`proto/netctl/result/v1`); the
+control plane **re-stamps the tenant and agent id from the verified mTLS
+certificate** before publishing, so a result is always attributed to the sending
+agent's tenant regardless of payload contents (CLAUDE.md §7 guardrails 1 and 5).
+The bus key is the `tenant_id`.
+
+`NETCTL_BUS_MODE` selects the bus: `memory` (default; in-process, for the
+lightweight <5-agent deployment and single-binary runs) or `kafka` (set
+`NETCTL_BUS_BROKERS`). `NETCTL_TSDB_MODE` selects the writer: `memory` (default;
+in-process) or `prometheus` remote-write to `NETCTL_TSDB_URL` (Prometheus with
+`--web.enable-remote-write-receiver`, or VictoriaMetrics; use an `https://` URL
+for TLS in transit). Each probe emits `netctl_probe_success`,
+`netctl_probe_duration_seconds`, and one `netctl_probe_<metric>` per custom
+metric, labeled `tenant_id`, `agent_id`, `canary_type`, and `server_address`. The
+canonical signal→OTel mapping is in [`otel-mapping.md`](otel-mapping.md).
 
 ## Local dev stack (`deploy/compose/dev.yml`)
 

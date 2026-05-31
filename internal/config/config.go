@@ -57,6 +57,15 @@ type Config struct {
 	AgentTLSCertFile string
 	AgentTLSKeyFile  string
 	AgentTLSCAFile   string
+
+	// Result pipeline (S6): message bus + time-series writer. BusMode is memory
+	// (default, lightweight) or kafka; TSDBMode is memory (default) or prometheus
+	// (remote-write to TSDBURL). The control plane consumes the result bus and
+	// writes to the TSDB.
+	BusMode    string
+	BusBrokers []string
+	TSDBMode   string
+	TSDBURL    string
 }
 
 // Load resolves configuration using the supplied getenv function (use
@@ -87,6 +96,10 @@ func Load(getenv func(string) string) (*Config, error) {
 		AgentTLSCertFile:    l.str("NETCTL_AGENT_TLS_CERT_FILE", ""),
 		AgentTLSKeyFile:     l.str("NETCTL_AGENT_TLS_KEY_FILE", ""),
 		AgentTLSCAFile:      l.str("NETCTL_AGENT_TLS_CA_FILE", ""),
+		BusMode:             l.enum("NETCTL_BUS_MODE", "memory", "memory", "kafka"),
+		BusBrokers:          l.list("NETCTL_BUS_BROKERS"),
+		TSDBMode:            l.enum("NETCTL_TSDB_MODE", "memory", "memory", "prometheus"),
+		TSDBURL:             l.str("NETCTL_TSDB_URL", ""),
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
@@ -94,6 +107,12 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if cfg.AgentGRPCAddr != "" && !cfg.AgentTransportEnabled() {
 		l.errf("NETCTL_AGENT_GRPC_ADDR requires mTLS: also set NETCTL_AGENT_TLS_CERT_FILE, NETCTL_AGENT_TLS_KEY_FILE, and NETCTL_AGENT_TLS_CA_FILE")
+	}
+	if cfg.BusMode == "kafka" && len(cfg.BusBrokers) == 0 {
+		l.errf("NETCTL_BUS_MODE=kafka requires NETCTL_BUS_BROKERS (a comma-separated host:port list)")
+	}
+	if cfg.TSDBMode == "prometheus" && cfg.TSDBURL == "" {
+		l.errf("NETCTL_TSDB_MODE=prometheus requires NETCTL_TSDB_URL")
 	}
 
 	if cfg.DatabaseMinConns > cfg.DatabaseMaxConns {
@@ -136,6 +155,8 @@ func (c *Config) LogValue() slog.Value {
 		slog.Bool("hsts_enabled", c.HSTSEnabled),
 		slog.Bool("tls", c.TLSEnabled()),
 		slog.Bool("agent_transport", c.AgentTransportEnabled()),
+		slog.String("bus_mode", c.BusMode),
+		slog.String("tsdb_mode", c.TSDBMode),
 	)
 }
 
@@ -197,6 +218,22 @@ func (l *loader) intRange(key string, def, lo, hi int) int {
 		return def
 	}
 	return n
+}
+
+// list parses a comma-separated value into a trimmed, non-empty slice.
+func (l *loader) list(key string) []string {
+	v := l.getenv(key)
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (l *loader) boolean(key string, def bool) bool {

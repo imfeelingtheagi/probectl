@@ -16,11 +16,14 @@ import (
 
 	"github.com/imfeelingtheagi/netctl/internal/agent"
 	"github.com/imfeelingtheagi/netctl/internal/agenttransport"
+	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/canary"
 	"github.com/imfeelingtheagi/netctl/internal/crypto"
 	"github.com/imfeelingtheagi/netctl/internal/logging"
+	"github.com/imfeelingtheagi/netctl/internal/pipeline"
 	"github.com/imfeelingtheagi/netctl/internal/store"
 	"github.com/imfeelingtheagi/netctl/internal/store/migrate"
+	"github.com/imfeelingtheagi/netctl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/netctl/internal/tenancy"
 	"github.com/imfeelingtheagi/netctl/migrations"
 )
@@ -87,7 +90,17 @@ func TestAgentEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv, err := agenttransport.New(write("server.crt", sc), write("server.key", sk), caFile, pool, log)
+	// Result pipeline: the transport publishes to an in-memory bus that a
+	// pipeline consumer drains into an in-memory TSDB, proving the full S6 path
+	// agent -> gRPC -> bus -> consumer -> TSDB end to end.
+	mbus := bus.NewMemory()
+	mtsdb := tsdb.NewMemory()
+	consumerCtx, stopConsumer := context.WithCancel(ctx)
+	consumerDone := make(chan struct{})
+	go func() { _ = pipeline.NewConsumer(mbus, mtsdb, "e2e", log).Run(consumerCtx); close(consumerDone) }()
+	defer func() { stopConsumer(); <-consumerDone }()
+
+	srv, err := agenttransport.New(write("server.crt", sc), write("server.key", sk), caFile, pool, mbus, log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +157,7 @@ func TestAgentEndToEnd(t *testing.T) {
 		if err == nil && got.Status == "online" && got.Hostname == "e2e-host" {
 			online = true
 		}
-		if online && srv.AcceptedResults() > 0 {
+		if online && srv.AcceptedResults() > 0 && len(mtsdb.Query("netctl_probe_success", map[string]string{"tenant_id": tn.ID})) > 0 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -154,5 +167,14 @@ func TestAgentEndToEnd(t *testing.T) {
 	}
 	if srv.AcceptedResults() == 0 {
 		t.Fatal("no results were forwarded to the control plane")
+	}
+	// The forwarded result must be queryable in the TSDB, tenant-scoped, with the
+	// control plane having stamped the tenant from the agent's certificate.
+	series := mtsdb.Query("netctl_probe_success", map[string]string{"tenant_id": tn.ID})
+	if len(series) == 0 {
+		t.Fatal("no probe-success series reached the TSDB for the agent's tenant")
+	}
+	if series[0].Labels["agent_id"] != agentID || series[0].Labels["canary_type"] != "noop" {
+		t.Errorf("unexpected series labels: %+v", series[0].Labels)
 	}
 }

@@ -1,6 +1,7 @@
-// Package otel implements OTLP ingest/export and OpenTelemetry semantic conventions (S22).
-//
-// S0 scaffold: this package is an intentionally empty placeholder so the
-// repository skeleton matches CLAUDE.md section 5. It carries no logic yet —
-// the implementing sprint noted above fills it in.
+// Package otel holds netctl's OpenTelemetry semantic-convention mapping. S6 seeds
+// the canonical Result -> OTel resource/attribute mapping (ResultAttributes) and
+// the convention names, so every signal is OTel-shaped from its first emission
+// (docs/otel-mapping.md; a CI conformance test enforces it). S22 builds the OTLP
+// receivers/exporters + OBI on top of this — exposing signals as OTLP rather than
+// remapping a divergent model.
 package otel
