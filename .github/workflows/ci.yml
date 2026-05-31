@@ -173,6 +173,32 @@ jobs:
           git diff --exit-code -- internal/gen \
             || { echo "::error::generated code is stale — run 'make proto' and commit"; exit 1; }
 
+  web:
+    name: web
+    # Frontend foundation (S8a): typecheck, lint, the a11y + theme-swap + token
+    # guards, and a production build. The test step IS the CI a11y gate.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test (a11y gate · theme-swap · command palette · no hardcoded tokens)
+        run: npm run test
+      - name: Build
+        run: npm run build
+
   dependency-scan:
     name: dependency-scan
     runs-on: ubuntu-latest

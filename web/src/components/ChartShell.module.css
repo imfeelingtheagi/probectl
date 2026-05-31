@@ -1,0 +1,57 @@
+.shell {
+  margin: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.toolbar {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.plot {
+  width: 100%;
+  position: relative;
+}
+
+.legend {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.spark {
+  width: 100%;
+  height: 100%;
+}
+
+.line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.area {
+  fill: var(--color-accent-soft);
+  stroke: none;
+}

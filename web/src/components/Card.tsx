@@ -1,0 +1,38 @@
+import type { HTMLAttributes, ReactNode } from 'react'
+import styles from './Card.module.css'
+
+export function Card({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <section className={[styles.card, className].filter(Boolean).join(' ')} {...rest}>
+      {children}
+    </section>
+  )
+}
+
+export function CardHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: ReactNode
+  description?: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <header className={styles.header}>
+      <div className={styles.heading}>
+        <h2 className={styles.title}>{title}</h2>
+        {description ? <p className={styles.description}>{description}</p> : null}
+      </div>
+      {actions ? <div className={styles.actions}>{actions}</div> : null}
+    </header>
+  )
+}
+
+export function CardBody({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={[styles.body, className].filter(Boolean).join(' ')} {...rest}>
+      {children}
+    </div>
+  )
+}
