@@ -80,6 +80,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /readyz", apiHandler(s.handleReadyz))
 	mux.Handle("GET /version", apiHandler(s.handleVersion))
 	mux.Handle("GET /openapi.json", apiHandler(s.handleOpenAPI))
+	mux.Handle("GET /.well-known/security.txt", apiHandler(s.handleSecurityTxt))
 
 	// SSO login endpoints (S18) — public: they establish the session that the
 	// rest of the API requires.

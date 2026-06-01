@@ -47,6 +47,8 @@ func (s *Server) apiRoutes() []apiRoute {
 		{http.MethodGet, "/v1/incidents", s.handleListIncidents, permIncidentRead},
 		{http.MethodGet, "/v1/incidents/{id}", s.handleGetIncident, permIncidentRead},
 		{http.MethodPatch, "/v1/incidents/{id}", s.handlePatchIncident, permIncidentWrite},
+		{http.MethodGet, "/v1/audit", s.handleListAudit, permAuditRead},
+		{http.MethodGet, "/v1/audit/verify", s.handleVerifyAudit, permAuditRead},
 		{http.MethodGet, "/v1/me", s.handleMe, ""},
 	}
 }
@@ -142,8 +144,11 @@ func (s *Server) handleCreateTest(w http.ResponseWriter, r *http.Request) error 
 	var created *store.Test
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
 		t, e := store.Tests{}.Create(ctx, sc, in)
+		if e != nil {
+			return e
+		}
 		created = t
-		return e
+		return s.recordAudit(ctx, sc, r, "test.create", t.ID, map[string]any{"name": t.Name, "type": t.Type})
 	}); err != nil {
 		return err
 	}
@@ -179,8 +184,11 @@ func (s *Server) handleUpdateTest(w http.ResponseWriter, r *http.Request) error 
 	var t *store.Test
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
 		x, e := store.Tests{}.Update(ctx, sc, id, in)
+		if e != nil {
+			return e
+		}
 		t = x
-		return e
+		return s.recordAudit(ctx, sc, r, "test.update", id, map[string]any{"name": t.Name})
 	}); err != nil {
 		return err
 	}
@@ -191,7 +199,10 @@ func (s *Server) handleUpdateTest(w http.ResponseWriter, r *http.Request) error 
 func (s *Server) handleDeleteTest(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-		return store.Tests{}.Delete(ctx, sc, id)
+		if e := (store.Tests{}).Delete(ctx, sc, id); e != nil {
+			return e
+		}
+		return s.recordAudit(ctx, sc, r, "test.delete", id, nil)
 	}); err != nil {
 		return err
 	}
@@ -245,8 +256,11 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) error 
 	var a *store.Agent
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
 		x, e := store.Agents{}.Rename(ctx, sc, id, name)
+		if e != nil {
+			return e
+		}
 		a = x
-		return e
+		return s.recordAudit(ctx, sc, r, "agent.update", id, map[string]any{"name": name})
 	}); err != nil {
 		return err
 	}
@@ -257,7 +271,10 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) error 
 func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-		return store.Agents{}.Delete(ctx, sc, id)
+		if e := (store.Agents{}).Delete(ctx, sc, id); e != nil {
+			return e
+		}
+		return s.recordAudit(ctx, sc, r, "agent.delete", id, nil)
 	}); err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -105,7 +106,13 @@ func bindRole(t *testing.T, db *store.DB, userID, slug string) {
 // viewer role, reads are allowed but writes are still denied (403). Permissions
 // are loaded per request, so the role grant takes effect on the live session.
 func TestSSOLoginAndRBAC(t *testing.T) {
-	ident := auth.Identity{Subject: "sub-1", Email: "sso-user@example.com", DisplayName: "SSO User"}
+	// Unique email per run so the test is re-runnable against a persistent DB
+	// (a fresh SSO user must start with no roles).
+	ident := auth.Identity{
+		Subject:     fmt.Sprintf("sub-%d", time.Now().UnixNano()),
+		Email:       fmt.Sprintf("sso-user-%d@example.com", time.Now().UnixNano()),
+		DisplayName: "SSO User",
+	}
 	srv, db := setupSessionAPI(t, ident)
 	h := srv.Handler()
 

@@ -361,6 +361,42 @@
         }
       }
     },
+    "/v1/audit": {
+      "get": {
+        "operationId": "listAudit",
+        "summary": "Read a page of the tenant's tamper-evident audit trail",
+        "tags": ["audit"],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantHeader" },
+          { "name": "after", "in": "query", "required": false, "description": "Return events with seq greater than this cursor.", "schema": { "type": "integer", "format": "int64", "minimum": 0 } },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of audit events plus the next cursor.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuditList" } } }
+          },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/v1/audit/verify": {
+      "get": {
+        "operationId": "verifyAudit",
+        "summary": "Verify the integrity of the tenant's audit chain",
+        "tags": ["audit"],
+        "parameters": [{ "$ref": "#/components/parameters/TenantHeader" }],
+        "responses": {
+          "200": {
+            "description": "The verification result; ok=false with a detail when the chain is broken.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuditVerify" } } }
+          },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "getMe",
@@ -699,6 +735,37 @@
           "display_name": { "type": "string" },
           "mfa_satisfied": { "type": "boolean" },
           "permissions": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "AuditEvent": {
+        "type": "object",
+        "description": "One record in the tenant's hash-chained, tamper-evident audit log.",
+        "required": ["seq", "actor", "action", "hash"],
+        "properties": {
+          "seq": { "type": "integer", "format": "int64" },
+          "actor": { "type": "string", "description": "Who performed the action (email or user id)." },
+          "action": { "type": "string", "description": "e.g. test.create, agent.delete, auth.login." },
+          "target": { "type": "string", "description": "The id of the affected resource." },
+          "data": { "type": "object", "additionalProperties": true },
+          "prev_hash": { "type": "string" },
+          "hash": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuditList": {
+        "type": "object",
+        "required": ["items", "next"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEvent" } },
+          "next": { "type": "integer", "format": "int64", "description": "Cursor to pass as ?after= for the next page (0 when no more)." }
+        }
+      },
+      "AuditVerify": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "detail": { "type": "string", "description": "Present when ok=false: where and how the chain is broken." }
         }
       }
     }

@@ -222,8 +222,11 @@ func (s *Server) handlePatchIncident(w http.ResponseWriter, r *http.Request) err
 	var inc *incident.Incident
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
 		x, e := store.Incidents{}.Resolve(ctx, sc, id)
+		if e != nil {
+			return e
+		}
 		inc = x
-		return e
+		return s.recordAudit(ctx, sc, r, "incident.resolve", id, nil)
 	}); err != nil {
 		return err
 	}

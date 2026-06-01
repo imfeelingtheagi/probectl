@@ -104,6 +104,10 @@ cover-gate: ## Coverage profile (integration tag, service-free) + per-package fl
 	$(GO) tool cover -func=coverage.out | tail -1
 	bash scripts/check_coverage.sh coverage.out
 
+.PHONY: openapi-gate
+openapi-gate: ## OpenAPI completeness gate (S19): valid 3.1 spec + no undocumented routes.
+	GO=$(GO) bash scripts/check_openapi.sh
+
 .PHONY: perf-smoke
 perf-smoke: ## Load/perf smoke (S18a): ingest baseline (no DB) + pooled multi-tenant (needs Postgres).
 	# Run without -race: this measures throughput/latency, and race instrumentation

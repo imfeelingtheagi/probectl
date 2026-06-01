@@ -74,6 +74,11 @@ type Config struct {
 	// into one incident.
 	IncidentWindow time.Duration
 
+	// SecurityContact (S19) is advertised at /.well-known/security.txt (RFC 9116)
+	// as this deployment's vulnerability-disclosure contact (e.g.
+	// "mailto:security@your-org.example"). Operator-configured.
+	SecurityContact string
+
 	// Identity & access (S18). AuthMode: "session" (real OIDC SSO + RBAC) or
 	// "dev" (trusted-header dev principal with all permissions — never in prod).
 	AuthMode         string
@@ -131,6 +136,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		OIDCClientID:        l.str("NETCTL_OIDC_CLIENT_ID", ""),
 		OIDCClientSecret:    l.str("NETCTL_OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:     l.str("NETCTL_OIDC_REDIRECT_URL", ""),
+		SecurityContact:     l.str("NETCTL_SECURITY_CONTACT", ""),
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {

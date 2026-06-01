@@ -84,6 +84,50 @@ jobs:
       - run: pip install -e './analyzer[dev]'
       - run: make test-python
 
+  openapi-gate:
+    name: openapi-gate
+    # S19, F23: no undocumented routes ship at a GA milestone. Validates the spec
+    # is OpenAPI 3.1 and that the registered /v1 routes exactly match the spec.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: OpenAPI completeness gate
+        run: make openapi-gate
+
+  helm-lint:
+    name: helm-lint
+    # S19: validate the shipped Helm chart renders for both single-tenant and
+    # multi-tenant/provider reference values, and the all-in-one compose parses.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+      - name: helm lint (single-tenant + multi-tenant)
+        run: |
+          helm lint deploy/helm/netctl \
+            --set ingress.host=netctl.example.com \
+            --set ingress.tlsSecretName=netctl-tls \
+            --set secrets.envelopeKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          helm lint deploy/helm/netctl -f deploy/helm/netctl/values-multitenant.yaml \
+            --set ingress.host=netctl.msp.example.com \
+            --set ingress.tlsSecretName=netctl-msp-tls \
+            --set secrets.envelopeKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: helm template renders valid manifests
+        run: |
+          helm template netctl deploy/helm/netctl \
+            --set ingress.host=netctl.example.com \
+            --set ingress.tlsSecretName=netctl-tls \
+            --set secrets.envelopeKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= > /tmp/rendered.yaml
+          test -s /tmp/rendered.yaml
+          grep -q "Strict-Transport-Security" /tmp/rendered.yaml   # HSTS present
+      - name: compose config is valid
+        run: docker compose -f deploy/compose/netctl.yml config >/dev/null
+
   cross-tenant-isolation:
     name: cross-tenant-isolation
     # Permanent CI gate — CLAUDE.md §7 guardrail 1. From S2 this proves real

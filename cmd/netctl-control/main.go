@@ -4,6 +4,7 @@
 //
 //	netctl-control [serve]   run the stateless HTTP API server (default)
 //	netctl-control migrate   apply database migrations and exit
+//	netctl-control gen-cert  write a self-signed TLS cert (HTTPS quickstart)
 //	netctl-control version   print build metadata and exit
 //
 // Configuration is read from NETCTL_-prefixed environment variables
@@ -55,10 +56,13 @@ func run(cmd string) error {
 	case "version", "-version", "--version":
 		fmt.Println("netctl-control", version.Get())
 		return nil
+	case "gen-cert":
+		// Self-signed TLS cert for the HTTPS-by-default quickstart; no DB needed.
+		return genCert(os.Args[2:])
 	case "serve", "migrate":
 		// fall through to the configured path below
 	default:
-		return fmt.Errorf("unknown command %q (want: serve | migrate | version)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve | migrate | gen-cert | version)", cmd)
 	}
 
 	cfg, err := config.LoadFromEnv()

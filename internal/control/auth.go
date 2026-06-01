@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/imfeelingtheagi/netctl/internal/apierror"
+	"github.com/imfeelingtheagi/netctl/internal/audit"
 	"github.com/imfeelingtheagi/netctl/internal/auth"
 	"github.com/imfeelingtheagi/netctl/internal/config"
 	"github.com/imfeelingtheagi/netctl/internal/store"
@@ -27,6 +28,7 @@ const (
 	permAlertWrite    = "alert.write"
 	permIncidentRead  = "incident.read"
 	permIncidentWrite = "incident.write"
+	permAuditRead     = "audit.read"
 )
 
 // allPermissionKeys is the full catalog — granted to the dev-mode principal so
@@ -36,6 +38,7 @@ var allPermissionKeys = []string{
 	permAgentRead, permAgentWrite,
 	permAlertRead, permAlertWrite,
 	permIncidentRead, permIncidentWrite,
+	permAuditRead,
 }
 
 // OAuth transient cookies: a short-lived state (CSRF) + the tenant being logged
@@ -104,9 +107,19 @@ func (f *oidcFactory) For(ctx context.Context, tenantID string) (auth.Provider, 
 func (s *Server) SetSSOProviderFactory(f auth.ProviderFactory) { s.providers = f }
 
 // authenticate is the middleware that resolves a request's principal (if any) and
-// injects it into the context. It never rejects — per-route enforcement decides.
+// injects it into the context. Per-route enforcement (401/403) happens later; the
+// one rejection here is a malformed dev tenant override, which is a client error.
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Dev mode accepts an X-Netctl-Tenant override; a present-but-malformed
+		// value is rejected (fail closed) rather than silently falling back to the
+		// default tenant.
+		if s.cfg.AuthMode == "dev" {
+			if h := r.Header.Get("X-Netctl-Tenant"); h != "" && !uuidRe.MatchString(h) {
+				writeError(w, r, apierror.BadRequest("X-Netctl-Tenant must be a tenant UUID"))
+				return
+			}
+		}
 		if p := s.resolvePrincipal(r); p != nil {
 			r = r.WithContext(auth.WithPrincipal(r.Context(), p))
 		}
@@ -242,7 +255,13 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 				u, e = store.Users{}.Create(ctx, sc, ident.Email, ident.DisplayName)
 			}
 		}
+		if e != nil {
+			return e
+		}
 		user = u
+		// Record the authentication as a data-access action, in the same tx
+		// (tamper-evident, RLS-scoped to the tenant the login resolved to).
+		_, e = audit.TenantAppend(ctx, sc, ident.Email, "auth.login", u.ID, map[string]any{"subject": ident.Subject})
 		return e
 	})
 	if err != nil {

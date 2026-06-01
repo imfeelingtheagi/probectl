@@ -103,8 +103,11 @@ func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) error
 	var created *alert.Rule
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
 		x, e := store.AlertRules{}.Create(ctx, sc, rule)
+		if e != nil {
+			return e
+		}
 		created = x
-		return e
+		return s.recordAudit(ctx, sc, r, "alert.create", x.ID, map[string]any{"name": x.Name})
 	}); err != nil {
 		return err
 	}
@@ -142,8 +145,11 @@ func (s *Server) handleUpdateAlert(w http.ResponseWriter, r *http.Request) error
 	var updated *alert.Rule
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
 		x, e := store.AlertRules{}.Update(ctx, sc, id, rule)
+		if e != nil {
+			return e
+		}
 		updated = x
-		return e
+		return s.recordAudit(ctx, sc, r, "alert.update", id, map[string]any{"name": x.Name})
 	}); err != nil {
 		return err
 	}
@@ -155,7 +161,10 @@ func (s *Server) handleUpdateAlert(w http.ResponseWriter, r *http.Request) error
 func (s *Server) handleDeleteAlert(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-		return store.AlertRules{}.Delete(ctx, sc, id)
+		if e := (store.AlertRules{}).Delete(ctx, sc, id); e != nil {
+			return e
+		}
+		return s.recordAudit(ctx, sc, r, "alert.delete", id, nil)
 	}); err != nil {
 		return err
 	}

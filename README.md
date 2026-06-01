@@ -14,9 +14,11 @@ white-labeled tenants). The single-tenant install is just the one-tenant case �
 there is no separate code path. **Tenant is the outermost scope and security
 boundary** on every record, agent, query, metric, event, and object.
 
-> **Status: pre-code → M1 scaffolding (Sprint S0).** This is the repository,
-> tooling, CI, and dev-stack bootstrap. There is no business logic yet — each
-> subsystem is filled in by its sprint. The license is intentionally **`TBD`**.
+> **Status: Phase 1 GA (M6).** The MVP is in place: the five-plane foundation
+> (active/synthetic tests, BGP/routing intelligence, path discovery), alerting,
+> cross-plane incident correlation, OIDC SSO + RBAC, a tamper-evident audit log,
+> and **HTTPS-by-default** compose + Helm deploys. The license is intentionally
+> **`TBD`** (the open-core / reseller boundary is an open decision).
 
 ## Repository layout
 
@@ -34,7 +36,23 @@ docs/           # configuration, development, architecture, runbooks
 test/           # integration harness (separate Go module)
 ```
 
-## Quickstart
+## Quickstart (run it)
+
+Bring up the control plane **over HTTPS** with a bundled Postgres (a self-signed
+cert is generated on first boot):
+
+```sh
+cp deploy/compose/.env.example deploy/compose/.env     # set NETCTL_ENVELOPE_KEY etc.
+docker compose -f deploy/compose/netctl.yml up -d
+docker compose -f deploy/compose/netctl.yml cp control:/certs/ca.crt ./ca.crt
+curl --cacert ./ca.crt https://localhost:8443/readyz
+```
+
+The API is HTTPS-only (no plaintext port). Full guide, real certificates, SSO, and
+the Kubernetes/Helm path: **[`docs/install.md`](docs/install.md)**; day-2
+operation (audit, roles, SSO): **[`docs/admin.md`](docs/admin.md)**.
+
+## Build from source
 
 Prerequisites: **Go 1.26+**, **Docker** (with Buildx) for the dev stack and
 images, and **Python 3.12+** for the analyzer tooling.
@@ -43,15 +61,14 @@ images, and **Python 3.12+** for the analyzer tooling.
 make build          # build all binaries into ./bin
 make test           # unit tests across the workspace
 make lint           # gofmt + go vet + golangci-lint, and ruff + black
-make compose-up     # start Postgres + Kafka + ClickHouse + Prometheus
+make compose-up     # start the dev dependency stack (Postgres/Kafka/ClickHouse/Prometheus)
 make run            # run netctl-control locally
-make compose-down   # tear the dev stack down
 make help           # list every target
 ```
 
-See [`docs/development.md`](docs/development.md) for the full toolchain, `make`
-targets, and CI jobs, and [`docs/configuration.md`](docs/configuration.md) for
-dev-stack service names, ports, and credentials.
+See [`docs/development.md`](docs/development.md) for the toolchain, `make` targets,
+and CI jobs, [`docs/configuration.md`](docs/configuration.md) for every config
+key, and [`SECURITY.md`](SECURITY.md) for vulnerability disclosure.
 
 ## Contributing
 
