@@ -158,6 +158,37 @@ jobs:
       - name: Integration tests (migrations + readiness + result pipeline)
         run: make test-integration
 
+  perf-smoke:
+    name: perf-smoke
+    # S18a perf-foundation: a cheap, repeatable load baseline (a smoke, not a
+    # soak). The ingest baseline needs no services; the pooled multi-tenant smoke
+    # asserts tenant-scoped isolation + bounded query latency against Postgres —
+    # the first place a pooled-cardinality or RLS-cost regression would surface.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: netctl
+          POSTGRES_PASSWORD: netctl
+          POSTGRES_DB: netctl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U netctl -d netctl"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NETCTL_DATABASE_URL: postgres://netctl:netctl@localhost:5432/netctl?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Load/perf smoke (ingest baseline + pooled multi-tenant)
+        run: make perf-smoke
+
   proto:
     name: proto
     runs-on: ubuntu-latest

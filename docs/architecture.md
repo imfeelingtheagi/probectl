@@ -490,3 +490,39 @@ the handler. Effective permissions are loaded **per request** from the user's ro
 bindings (RLS-scoped), so grants/revokes are immediate. New users are provisioned
 with **no roles** (secure default). The AI/MCP query layer (S24) reuses the same
 Principal — tenant first, then RBAC.
+
+## Load/perf harness (S18a)
+
+`internal/perf` is the reusable load/perf harness — a **cheap, repeatable
+baseline** checked in at GA (M6), not a soak. It left-shifts the core pipeline's
+scaling assumptions (and pooled-tenancy cost) so a regression is caught in CI
+rather than at the final scale gate (S48). Two pure drivers exercise the core
+path; the recorded numbers + thresholds live in
+[`perf-baseline.md`](perf-baseline.md).
+
+```mermaid
+flowchart LR
+    subgraph Ingest["DriveIngest (no services)"]
+      P["producers<br/>build + marshal results"] -->|publish, keyed by tenant| BUS["bus (memory)<br/>netctl.network.results"]
+      BUS --> CON["pipeline consumer"]
+      CON --> TS["TSDB (memory)"]
+      TS -->|throughput + publish p95<br/>+ per-tenant correctness| RPT1["IngestReport"]
+    end
+    subgraph Pooled["DrivePooled (Postgres)"]
+      W["K tenants × N rows<br/>(seeded, pooled stores)"] --> Q["concurrent tenant-scoped<br/>queries (mixed load)"]
+      Q -->|RLS: each query sees<br/>EXACTLY its rows| ISO{"count ==<br/>expected?"}
+      ISO -->|p95 latency + isolation_ok| RPT2["PooledReport"]
+    end
+    RPT1 --> BL["Baseline.Check<br/>(floors/ceilings)"]
+    RPT2 --> BL
+```
+
+**Ingest baseline** measures end-to-end throughput + publish latency on the
+lightweight path and asserts every result is ingested with its series tagged by
+the right tenant. **Pooled multi-tenant** runs tenant-scoped queries concurrently
+across many tenants sharing the pooled Postgres stores and asserts isolation
+under load — every query must return exactly its tenant's rows — plus a bounded
+p95 (the first place a pooled-cardinality or RLS-cost problem surfaces, guardrail
+1). `Baseline` holds the generous floors/ceilings the CI `perf-smoke` job
+asserts; the harness is the engine S48 (full L/XL gate) and S-T7 (fairness)
+extend.

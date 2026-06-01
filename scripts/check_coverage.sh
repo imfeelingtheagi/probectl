@@ -41,6 +41,10 @@ awk -v mod="${MODULE}" '
     floor["internal/alert"]          = 75
     floor["internal/incident"]       = 72
     floor["internal/auth"]           = 72
+    # The pooled driver (pooled.go) is exercised by the perf-smoke integration job
+    # (needs Postgres) and skips in this service-free gate, so the floor covers the
+    # no-DB drivers (metrics/ingest/baseline).
+    floor["internal/perf"]           = 60
     # Raw-socket tracer paths need CAP_NET_RAW (skipped in CI); CI coverage is lower
     # than a privileged local run, so this floor reflects the CI-measured value.
     floor["internal/path"]           = 50

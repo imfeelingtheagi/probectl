@@ -95,7 +95,7 @@ COVER_PKGS := ./internal/apierror/... ./internal/otel/... ./internal/version/...
 	./internal/config/... ./internal/a2a/... ./internal/canary/... ./internal/path/... \
 	./internal/bgp/... ./internal/bus/... ./internal/pipeline/... ./internal/crypto/... \
 	./internal/cli/... ./internal/opendata/... ./internal/alert/... ./internal/incident/... \
-	./internal/auth/... \
+	./internal/auth/... ./internal/perf/... \
 	./internal/store/pathstore/... ./internal/store/tsdb/... ./internal/store/migrate/...
 
 .PHONY: cover-gate
@@ -103,6 +103,14 @@ cover-gate: ## Coverage profile (integration tag, service-free) + per-package fl
 	$(GO) test -tags=integration -covermode=atomic -coverprofile=coverage.out -count=1 $(COVER_PKGS)
 	$(GO) tool cover -func=coverage.out | tail -1
 	bash scripts/check_coverage.sh coverage.out
+
+.PHONY: perf-smoke
+perf-smoke: ## Load/perf smoke (S18a): ingest baseline (no DB) + pooled multi-tenant (needs Postgres).
+	# Run without -race: this measures throughput/latency, and race instrumentation
+	# distorts timing. The ingest baseline needs no services; the pooled
+	# multi-tenant smoke uses NETCTL_DATABASE_URL (skips if absent).
+	$(GO) test -count=1 -v -run '^TestIngestBaseline$$' ./internal/perf/
+	$(GO) test -tags=integration -count=1 -v -run '^TestPooledMultiTenant$$' ./internal/perf/
 
 .PHONY: fuzz-smoke
 fuzz-smoke: ## Run each fuzz target briefly to catch crashers (CI smoke).
