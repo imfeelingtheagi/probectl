@@ -60,6 +60,7 @@ func run() error {
 	reg.Register("icmp", canary.NewICMP)
 	reg.Register("tcp", canary.NewTCP)
 	reg.Register("udp", canary.NewUDP)
+	reg.Register("dns", canary.NewDNS)
 
 	a, err := agent.New(cfg, reg, log)
 	if err != nil {

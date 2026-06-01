@@ -198,6 +198,46 @@ target that echoes (a UDP echo service, or a netctl agent-to-agent responder); a
 non-echoing target reports as 100% loss. `params.payload_bytes` (≥10) sets the
 datagram size.
 
+### DNS tests (S12)
+
+The `dns` canary queries DNS and reports **resolution time, the answer, and an
+optional DNSSEC verdict**. The `target` is the **query name**. Parameters:
+
+| Param | Values | Default | Meaning |
+| ----- | ------ | ------- | ------- |
+| `type` | `A`, `AAAA`, `MX`, `TXT`, `NS`, … | `A` | record type to query |
+| `transport` | `udp` \| `tcp` \| `dot` \| `doh` | `udp` | how the query is sent |
+| `server` | `host[:port]` or a DoH URL | per-transport | resolver to query |
+| `mode` | `resolver` \| `trace` | `resolver` | single query vs. delegation walk |
+| `dnssec` | `true` \| `false` | `false` | validate the zone signature |
+
+`server` defaults by transport: the first nameserver in `/etc/resolv.conf` (or
+`1.1.1.1:53`) for `udp`/`tcp`, `1.1.1.1:853` for **DoT**, and
+`https://cloudflare-dns.com/dns-query` for **DoH**. DoT verifies the resolver's
+TLS certificate (TLS 1.2+); DoH posts an RFC 8484 `application/dns-message` query
+over HTTPS.
+
+In **resolver mode** the canary emits `netctl_probe_dns_query_ms` (round-trip) and
+`netctl_probe_dns_answers` (answer count), with `dns.rcode` and a compact
+`dns.answer` summary as attributes. The probe is `success=false` on a non-`NOERROR`
+rcode or an empty answer.
+
+With `dnssec: "true"` the canary requests DNSSEC records (the DO bit) and
+**validates the zone's `RRSIG` over the answer against the zone `DNSKEY`** — it
+does **not** trust the resolver's AD bit. The verdict lands in the `dns.dnssec`
+attribute (`secure`, `insecure` for an unsigned zone, or `bogus`) and
+`netctl_probe_dns_dnssec_secure` (1/0); a **bogus** result (tampered, expired, or
+wrong-key signature) fails the probe. Validation verifies the signature on the
+answer RRset; full chain-to-root anchoring is a later refinement.
+
+In **trace mode** the canary performs an **iterative delegation walk** from the
+root hints, following `NS`/glue referrals down to the authoritative server (UDP,
+capped iterations, with a recursive fallback when a referral ships no glue). It
+emits `netctl_probe_dns_query_ms` (total walk time) and
+`netctl_probe_dns_trace_hops`, with the delegation chain in the `dns.trace`
+attribute. DNS-exfiltration detection and open-data baselines are out of scope here
+(S42 / open-data sprints).
+
 ### Agent-to-agent tests (S8)
 
 An agent-to-agent (A2A) test measures **between two registered agents**, brokered

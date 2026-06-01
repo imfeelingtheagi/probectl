@@ -154,8 +154,9 @@ consumer converts each result to `netctl_probe_*` series labeled by
 ## Network tests & agent-to-agent (S7–S8)
 
 Probes are compiled-in `Canary` plugins (`internal/canary`): `icmp` (loss/latency/
-jitter, S7), and `tcp` (connect latency) + `udp` (echo round-trip) agent-to-server
-tests (S8). All share one latency-stats core and emit through the S6 pipeline.
+jitter, S7), `tcp` (connect latency) + `udp` (echo round-trip) agent-to-server
+tests (S8), and `dns` (resolver/trace + DNSSEC, S12). All share one latency-stats
+core and emit through the S6 pipeline.
 
 **Agent-to-agent** (S8) measures between two registered agents, **brokered by the
 control plane** (`internal/a2a`). The broker assigns roles, rendezvouses the
@@ -166,6 +167,29 @@ an endpoint — guardrail 1). The measurement is TWAMP-lite (T1 send, T2/T3
 responder recv/send, T4 recv), giving round-trip plus **forward and reverse
 one-way delay**; one-way delays assume NTP-synced clocks across hosts. Results
 from both agents flow through the same result pipeline into the TSDB.
+
+## DNS tests (S12)
+
+The `dns` canary (`internal/canary/dns.go`) queries DNS over **UDP, TCP, DoT, or
+DoH** in two modes. In **resolver** mode it sends one query and reports resolution
+time, answer count, rcode, and an answer summary; in **trace** mode it performs an
+**iterative delegation walk** from the root hints (`dnstrace.go`), following
+`NS`/glue referrals to the authoritative server and recording the delegation chain.
+DoT verifies the resolver certificate; DoH is RFC 8484 `application/dns-message`
+over HTTPS (guardrail 12 — outbound TLS validated, response treated as untrusted).
+
+**DNSSEC validation (`dnssec.go`) verifies the zone's signature, not the AD bit.**
+`verifyRRSIG` is a pure check — given the answer RRset, its `RRSIG`s, and the zone
+`DNSKEY`s it returns `secure` (a matching-keytag signature inside its validity
+window that verifies), `insecure` (no RRSIG — the zone is unsigned), or `bogus`
+(signatures present but none verify: tampered, expired, or wrong key). The network
+wrapper fetches the signer zone's `DNSKEY` when it isn't already in the response;
+chain-to-root anchoring is a later refinement. A bogus verdict fails the probe, so
+forged answers are caught rather than trusted. The crypto lives entirely inside
+`miekg/dns`, keeping the FIPS crypto-abstraction guard green (guardrail 3). The
+pure validator is fixture-tested with locally signed RRsets (secure / expired /
+tampered / no-key); in-process DNS servers cover the resolver, DoH, and DNSSEC
+paths hermetically, with skip-safe live DoT + trace tests.
 
 ## Path discovery (S10)
 

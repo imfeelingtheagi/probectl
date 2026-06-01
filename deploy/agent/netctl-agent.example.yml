@@ -19,7 +19,7 @@ tls:
 
 agent:
   # hostname defaults to the OS hostname.
-  capabilities: ["noop", "icmp", "tcp", "udp", "a2a"]
+  capabilities: ["noop", "icmp", "tcp", "udp", "dns", "a2a"]
   heartbeat_interval: 30s
 
 buffer:
@@ -60,6 +60,26 @@ canaries:
     timeout: 3s
     params:
       count: "5"
+
+  # DNS resolver test: resolution time, answer, and (optional) DNSSEC status.
+  # target is the query name. Transports: udp (default) | tcp | dot | doh.
+  - type: dns
+    target: "example.com"
+    interval: 30s
+    timeout: 5s
+    params:
+      type: "A" # record type: A, AAAA, MX, TXT, NS, ...
+      transport: "udp" # udp | tcp | dot | doh
+      # server: "1.1.1.1:53"   # resolver host[:port] or DoH URL; default per transport
+      dnssec: "true" # validate the zone's RRSIG (not just the AD bit)
+
+  # DNS delegation trace: iterative walk root → TLD → authoritative.
+  - type: dns
+    target: "www.example.com"
+    interval: 60s
+    timeout: 5s
+    params:
+      mode: "trace"
 
 # Agent-to-agent participation. When enabled the agent polls the control plane
 # for brokered responder/initiator tasks (see docs/configuration.md).
