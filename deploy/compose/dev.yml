@@ -39,10 +39,17 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Single-node KRaft: the broker half reaches the controller half over
+      # loopback, so the CONTROLLER listener binds a *routable* address
+      # (localhost) rather than 0.0.0.0. Kafka 3.9.0 wrongly routability-checks
+      # the bind address of the non-advertised controller listener at format
+      # time and rejects the 0.0.0.0 meta-address (KAFKA-18281); binding the
+      # controller to localhost sidesteps that validation bug. The broker
+      # listeners below still bind 0.0.0.0 so host + in-network clients reach them.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       # PLAINTEXT (9092) is for clients on the host (localhost:9092);
       # INTERNAL (19092) is for other containers in this network (kafka:19092).
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:19092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://localhost:9093,INTERNAL://0.0.0.0:19092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:19092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
