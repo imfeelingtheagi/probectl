@@ -23,7 +23,9 @@ func TestBPFProgramsAreObserveOnly(t *testing.T) {
 	}
 
 	secRe := regexp.MustCompile(`SEC\("([a-zA-Z0-9_./]+)"\)`)
-	allowed := []string{"tracepoint/", "kprobe/", "kretprobe/", "raw_tracepoint/", "fentry/", "fexit/", "license", ".maps"}
+	// uprobe/uretprobe are observation hooks too (they read args / return values
+	// and the plaintext buffer); they alter nothing.
+	allowed := []string{"tracepoint/", "kprobe/", "kretprobe/", "uprobe/", "uretprobe/", "raw_tracepoint/", "fentry/", "fexit/", "license", ".maps"}
 	forbidden := []string{
 		"bpf_redirect", "bpf_redirect_map", "bpf_clone_redirect", "bpf_redirect_neigh", "bpf_redirect_peer",
 		"bpf_override_return", "bpf_send_signal", "bpf_send_signal_thread", "bpf_sk_assign",

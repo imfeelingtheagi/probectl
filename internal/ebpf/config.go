@@ -25,6 +25,10 @@ type Config struct {
 	// the no-kernel path used by CI, macOS, and unprivileged containers.
 	FixturePath string `yaml:"fixture_path"`
 
+	// L7FixturePath, when set, replays recorded L7 events (the no-kernel path for
+	// L7 visibility, S21). Live L7 capture otherwise requires -tags ebpf.
+	L7FixturePath string `yaml:"l7_fixture_path"`
+
 	// ProcRoot is the procfs root used for enrichment ("" => /proc).
 	ProcRoot string `yaml:"proc_root"`
 
@@ -88,6 +92,9 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	}
 	if v := getenv("NETCTL_EBPF_FIXTURE_PATH"); v != "" {
 		c.FixturePath = v
+	}
+	if v := getenv("NETCTL_EBPF_L7_FIXTURE_PATH"); v != "" {
+		c.L7FixturePath = v
 	}
 	if v := getenv("NETCTL_EBPF_PROC_ROOT"); v != "" {
 		c.ProcRoot = v

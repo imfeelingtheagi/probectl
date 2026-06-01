@@ -53,10 +53,44 @@ message ServiceEdge {
   uint64 packets = 8;
   int64 first_seen_unix_nano = 9;
   int64 last_seen_unix_nano = 10;
+
+  // L7 rollup (S21): protocol + call/error counts + latency sum/max for the edge.
+  string l7_protocol = 11;
+  uint64 l7_calls = 12;
+  uint64 l7_errors = 13;
+  int64 l7_latency_sum_nano = 14;
+  int64 l7_latency_max_nano = 15;
+}
+
+// L7Call is one application-protocol call observed by the eBPF agent (S21),
+// parsed from plaintext — captured before encryption via TLS-library uprobes or
+// directly from sockets. Field names follow OTel http.* / rpc.* / db.*
+// conventions where they exist (see internal/otel).
+message L7Call {
+  string tenant_id = 1;
+  string agent_id = 2;
+
+  // Which service edge this call belongs to.
+  string source = 3;
+  string destination = 4;
+  uint32 destination_port = 5;
+
+  string protocol = 6; // http1 | http2 | grpc | dns | kafka
+  string method = 7;   // HTTP method | gRPC full-method | DNS qtype | Kafka API name
+  string resource = 8; // HTTP path | gRPC service/method | DNS qname | Kafka topic
+  string status = 9;   // HTTP status | grpc-status | DNS rcode | Kafka error code
+  bool error = 10;     // status denotes an error
+  bool encrypted = 11; // captured via TLS uprobe (plaintext-before-encryption)
+
+  int64 start_unix_nano = 12;
+  int64 latency_nano = 13;
+  uint64 request_bytes = 14;
+  uint64 response_bytes = 15;
 }
 
 // FlowBatch is the payload published to netctl.ebpf.flows (tenant-keyed).
 message FlowBatch {
   repeated Flow flows = 1;
   repeated ServiceEdge edges = 2;
+  repeated L7Call l7_calls = 3;
 }

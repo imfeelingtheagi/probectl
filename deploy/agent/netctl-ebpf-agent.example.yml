@@ -22,6 +22,10 @@ bus:
 # Leave empty in production to use the live CO-RE source (requires -tags ebpf).
 # fixture_path: /etc/netctl/flows.json
 
+# Replay recorded L7 events for L7 visibility without a kernel (S21). Live L7
+# capture (TLS uprobes / socket parsing) otherwise requires -tags ebpf.
+# l7_fixture_path: /etc/netctl/l7.json
+
 proc_root: /proc # procfs root for process/cgroup enrichment
 flush_interval: 10s # how often flows + the service map are emitted
 ring_buffer_bytes: 16777216 # 16 MiB kernel ring buffer (live source only)

@@ -567,6 +567,8 @@ The agent is **observe-only**; the CO-RE loader is compiled in only with
 | `NETCTL_EBPF_BUS_MODE`       | `memory`    | `memory` \| `kafka`                                            |
 | `NETCTL_EBPF_BUS_BROKERS`    | (none)      | comma-separated Kafka brokers (kafka mode)                     |
 | `NETCTL_EBPF_FIXTURE_PATH`   | (none)      | replay recorded flows instead of loading eBPF (no-kernel path) |
+| `NETCTL_EBPF_L7_FIXTURE_PATH` | (none)     | replay recorded L7 events (no-kernel L7 path, S21)             |
+| `NETCTL_EBPF_LIBSSL`         | (auto)      | libssl path for TLS-uprobe L7 capture (`-tags ebpf`)           |
 | `NETCTL_EBPF_PROC_ROOT`      | `/proc`     | procfs root for process/cgroup enrichment                      |
 | `NETCTL_EBPF_FLUSH_INTERVAL` | `10s`       | how often flows + the service map are emitted                  |
 | `NETCTL_EBPF_LOG_LEVEL`      | `info`      | `debug` \| `info` \| `warn` \| `error`                         |

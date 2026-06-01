@@ -74,4 +74,11 @@ type ServiceEdge struct {
 	Packets     uint64
 	FirstSeen   time.Time
 	LastSeen    time.Time
+
+	// L7 rollup (S21): the application-protocol view of this edge.
+	L7Protocol   string
+	L7Calls      uint64
+	L7Errors     uint64
+	L7LatencySum time.Duration
+	L7LatencyMax time.Duration
 }

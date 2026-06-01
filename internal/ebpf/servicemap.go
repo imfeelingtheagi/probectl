@@ -70,6 +70,45 @@ func (m *ServiceMap) Observe(f Flow) {
 	}
 }
 
+// ObserveL7 folds one parsed L7 call onto the edge it belongs to (the call's
+// client→server orientation), creating the edge if no flow has been seen for it.
+func (m *ServiceMap) ObserveL7(rec L7Record) {
+	k := edgeKey{
+		tenant:      rec.TenantID,
+		source:      rec.Source.ID(),
+		destination: rec.Destination.ID(),
+		destPort:    rec.Destination.Port,
+		transport:   rec.Transport,
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.edges[k]
+	if e == nil {
+		e = &ServiceEdge{
+			TenantID:    rec.TenantID,
+			Source:      k.source,
+			Destination: k.destination,
+			DestPort:    k.destPort,
+			Transport:   k.transport,
+			FirstSeen:   rec.Call.Start,
+			LastSeen:    rec.Call.Start,
+		}
+		m.edges[k] = e
+	}
+	e.L7Protocol = rec.Call.Protocol
+	e.L7Calls++
+	if rec.Call.Error {
+		e.L7Errors++
+	}
+	e.L7LatencySum += rec.Call.Latency
+	if rec.Call.Latency > e.L7LatencyMax {
+		e.L7LatencyMax = rec.Call.Latency
+	}
+	if end := rec.Call.Start.Add(rec.Call.Latency); end.After(e.LastSeen) {
+		e.LastSeen = end
+	}
+}
+
 // Snapshot returns a stable, sorted copy of the current edges.
 func (m *ServiceMap) Snapshot() []ServiceEdge {
 	m.mu.Lock()

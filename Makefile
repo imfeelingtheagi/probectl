@@ -67,6 +67,7 @@ ebpf-agent: ## Build netctl-ebpf-agent WITH the live CO-RE loader (-tags ebpf; L
 	@mkdir -p $(BIN_DIR)
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/bpf/vmlinux.h
 	cd internal/ebpf && $(GO) run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf
+	cd internal/ebpf && $(GO) run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf
 	CGO_ENABLED=0 $(GO) build -tags ebpf -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/netctl-ebpf-agent ./cmd/netctl-ebpf-agent
 	@echo "built $(BIN_DIR)/netctl-ebpf-agent (eBPF loader enabled)"
 
@@ -105,7 +106,7 @@ COVER_PKGS := ./internal/apierror/... ./internal/otel/... ./internal/version/...
 	./internal/config/... ./internal/a2a/... ./internal/canary/... ./internal/path/... \
 	./internal/bgp/... ./internal/bus/... ./internal/pipeline/... ./internal/crypto/... \
 	./internal/cli/... ./internal/opendata/... ./internal/alert/... ./internal/incident/... \
-	./internal/auth/... ./internal/perf/... ./internal/ebpf/... \
+	./internal/auth/... ./internal/perf/... ./internal/ebpf/... ./internal/ebpf/l7/... \
 	./internal/store/pathstore/... ./internal/store/tsdb/... ./internal/store/migrate/...
 
 .PHONY: cover-gate

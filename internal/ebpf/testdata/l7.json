@@ -1,0 +1,6 @@
+[
+  {"conn_id":1,"tenant_id":"00000000-0000-0000-0000-000000000001","source_address":"10.0.1.5","source_workload":"checkout","destination_address":"10.0.2.9","destination_workload":"orders","destination_port":8443,"transport":"tcp","encrypted":true,"kind":"request","time_offset_ms":0,"text":"GET /orders/42 HTTP/1.1\r\nHost: orders\r\nContent-Length: 0\r\n\r\n"},
+  {"conn_id":1,"kind":"response","time_offset_ms":12,"text":"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"},
+  {"conn_id":1,"tenant_id":"00000000-0000-0000-0000-000000000001","source_address":"10.0.1.5","source_workload":"checkout","destination_address":"10.0.2.9","destination_workload":"orders","destination_port":8443,"transport":"tcp","encrypted":true,"kind":"request","time_offset_ms":20,"text":"POST /orders HTTP/1.1\r\nContent-Length: 0\r\n\r\n"},
+  {"conn_id":1,"kind":"response","time_offset_ms":58,"text":"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"}
+]

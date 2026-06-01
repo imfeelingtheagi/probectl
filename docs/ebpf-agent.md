@@ -109,11 +109,47 @@ never silent (S20 watch-out).
 See [`configuration.md`](configuration.md#ebpf-host-agent-s20) for the full
 `NETCTL_EBPF_*` table.
 
+## L7 visibility (S21)
+
+The agent parses **application-protocol calls** — HTTP/1.1, HTTP/2, gRPC, DNS,
+and Kafka — from plaintext, and rolls **per-call method / resource / status /
+latency** onto each service edge (emitted as an `L7Call` plus the `l7_*` rollup
+on `ServiceEdge`). Plaintext is obtained two ways:
+
+- **Cleartext** traffic: parsed straight from socket reads/writes.
+- **TLS** traffic: captured **before encryption / after decryption** via uprobes
+  on the TLS library's `SSL_write` / `SSL_read` (no CA, no MITM). `SSL_read` is
+  read at the *return* uprobe because the buffer fills on return.
+
+Parsing is pure Go and kernel-independent (`internal/ebpf/l7`), driven by the
+capture layer in production and by an L7 fixture (`NETCTL_EBPF_L7_FIXTURE_PATH`)
+in CI / demos. The OTel mapping (`internal/otel.L7CallAttributes`) emits `http.*`
+/ `rpc.*` / `dns.*` / `messaging.*` attributes per protocol. Calls are attributed
+to the connection's **client→server** edge regardless of which direction
+completed them.
+
+### uprobe / TLS-library coverage
+
+| TLS stack | Symbols | Coverage |
+|---|---|---|
+| OpenSSL | `SSL_write` / `SSL_read` (read at return) | ✅ |
+| BoringSSL | same `SSL_*` API | ✅ if symbols resolvable / ⚠️ if stripped/static |
+| GnuTLS | `gnutls_record_send` / `gnutls_record_recv` | ✅ (attach the same way) |
+| **Go `crypto/tls`** | no libssl — pure Go; `uretprobe` unsafe on Go | ⚠️ **separate strategy** (ret-offset disassembly + goroutine tracking — `ebpf-feasibility.md` §7) |
+| Stripped / static, no symbols | — | ❌ socket-layer cleartext only |
+
+Two limits carried from the S19a spike: **stripped/static binaries** break
+uprobe symbol resolution (fall back to socket cleartext), and **Go-encrypted**
+traffic needs its own capture path, not the OpenSSL one. A connection's full
+5-tuple (and thus the exact edge) is resolved by correlating the SSL/fd to its
+socket — the productionization step for the live L7 source.
+
 ## Scope & follow-ups
 
-In scope for S20: the agent, L3/L4 capture, ring-buffer→userspace, the service
-map, OTel emit, and the kernel matrix. Natural follow-ups (out of S20 scope):
-IPv6 + byte/packet counters in the program; a control-plane consumer that drains
-`netctl.ebpf.flows` into ClickHouse and exposes a tenant-scoped service-map API
-for the pane (feeds S30 topology); and L7/TLS visibility (S21). Detection (S42),
-segmentation validation (S46), and cost attribution (S44) build on this substrate.
+In scope for S20–S21: the agent, L3/L4 capture, the service map, **L7 parsing
+(HTTP/1.1+2, gRPC, DNS, Kafka) with TLS-uprobe plaintext capture**, OTel emit,
+and the kernel/uprobe matrix. Natural follow-ups (out of scope): IPv6 +
+byte/packet counters; the **5-tuple↔SSL correlation** and the **Go-TLS** capture
+path; a control-plane consumer draining `netctl.ebpf.flows` into ClickHouse + a
+tenant-scoped service-map API for the pane (feeds S30 topology). Detection (S42),
+segmentation validation (S46), TLS posture (S27), and cost (S44) build on this.
