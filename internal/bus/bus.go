@@ -18,6 +18,11 @@ const BGPEventsTopic = "netctl.bgp.events"
 // agent (S20), tenant-tagged via the message key. Payload: ebpfv1.FlowBatch.
 const EBPFFlowsTopic = "netctl.ebpf.flows"
 
+// OTLPMetricsTopic carries OTLP metrics ingested by the OTLP receiver (S22),
+// tenant-tagged via the message key. Payload: a marshaled OTLP
+// ExportMetricsServiceRequest.
+const OTLPMetricsTopic = "netctl.otlp.metrics"
+
 // Message is one bus record. Key partitions the record (the tenant id, so a
 // tenant's results stay ordered and co-located — pooled tenant-tagging).
 type Message struct {

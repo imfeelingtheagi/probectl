@@ -40,3 +40,44 @@ The consumer (`internal/tsdb`) turns each Result into time series:
 `canary_type`, `server_address`. `tenant_id` is a label (pooled mode); siloed mode
 uses per-tenant series. High-cardinality per-hop/per-target detail belongs in
 ClickHouse, not as metric labels (CLAUDE.md / S6 watch-out).
+
+## eBPF flow (`netctl.ebpf.v1.Flow`, S20)
+
+| proto field                                | OTel attribute                          |
+| ------------------------------------------ | --------------------------------------- |
+| `tenant_id` / `agent_id`                   | `netctl.tenant.id` / `netctl.agent.id`  |
+| `host`                                     | `host.name`                             |
+| `source_address` / `source_port`          | `source.address` / `source.port`        |
+| `destination_address` / `destination_port` | `destination.address` / `destination.port` |
+| `network_transport` / `network_type`      | `network.transport` / `network.type`    |
+| `direction`                                | `network.io.direction`                  |
+| `process_name` / `container_id`           | `process.executable.name` / `container.id` |
+
+## eBPF L7 call (`netctl.ebpf.v1.L7Call`, S21)
+
+| protocol      | OTel attributes                                                         |
+| ------------- | ---------------------------------------------------------------------- |
+| http1 / http2 | `http.request.method`, `url.path`, `http.response.status_code`         |
+| grpc          | `rpc.system=grpc`, `rpc.method`, `rpc.grpc.status_code`                |
+| dns           | `dns.question.name`, `dns.response.code`                               |
+| kafka         | `messaging.system=kafka`, `messaging.operation.name`, `messaging.destination.name` |
+
+Plus `network.protocol.name` and `netctl.l7.encrypted` (TLS-uprobe capture).
+
+## BGP event (`netctl.bgp.v1.BGPEvent`, S14)
+
+BGP has no OTel standard, so it uses the `netctl.bgp.*` namespace (`event_type`,
+`severity`, `confidence`, `prefix`, `origin_asn`, `peer_asn`, `rpki_status`,
+`collector`); the collector peer uses `network.peer.address`.
+
+## Path / traceroute (S10)
+
+`destination.address` (target IP) + `netctl.path.*` (`target`, `mode`,
+`hop_count`, `destination_reached`).
+
+## Conformance (finalized S22)
+
+`internal/otel.TestAllSignalMappingsConform` asserts EVERY signal mapping —
+result, flow, L7, BGP, path — emits only OTel-standard or `netctl.*` names and
+carries the tenant. The OTLP layer (`internal/otel/otlp`) exposes these as OTLP
+`ResourceMetrics`; see [`otlp.md`](otlp.md).

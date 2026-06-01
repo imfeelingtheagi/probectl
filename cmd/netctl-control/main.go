@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"os"
@@ -28,6 +29,7 @@ import (
 	"github.com/imfeelingtheagi/netctl/internal/config"
 	"github.com/imfeelingtheagi/netctl/internal/control"
 	"github.com/imfeelingtheagi/netctl/internal/logging"
+	"github.com/imfeelingtheagi/netctl/internal/otel/otlp"
 	"github.com/imfeelingtheagi/netctl/internal/pipeline"
 	"github.com/imfeelingtheagi/netctl/internal/store"
 	"github.com/imfeelingtheagi/netctl/internal/store/migrate"
@@ -146,7 +148,37 @@ func run(cmd string) error {
 		}
 		g.Go(func() error { return grpcSrv.Serve(gctx, cfg.AgentGRPCAddr) })
 	}
+
+	// OTLP receiver (S22): TLS-only, authenticated, tenant-scoped ingest of
+	// external OTLP. Ingested metrics are tenant-tagged and published to the bus.
+	if cfg.OTLPEnabled() {
+		tlsCfg, err := loadServerTLS(cfg.OTLPTLSCertFile, cfg.OTLPTLSKeyFile)
+		if err != nil {
+			return fmt.Errorf("otlp tls: %w", err)
+		}
+		sink := otlp.NewBusSink(func(ctx context.Context, tenant string, payload []byte) error {
+			return resultBus.Publish(ctx, bus.OTLPMetricsTopic, []byte(tenant), payload)
+		})
+		otlpSrv, err := otlp.NewServer(
+			otlp.ServerConfig{GRPCAddr: cfg.OTLPGRPCAddr, HTTPAddr: cfg.OTLPHTTPAddr},
+			tlsCfg, otlp.NewTokenAuthenticator(cfg.OTLPTokens), sink, log)
+		if err != nil {
+			return fmt.Errorf("otlp receiver: %w", err)
+		}
+		g.Go(func() error { return otlpSrv.Run(gctx) })
+	}
+
 	return g.Wait()
+}
+
+// loadServerTLS builds a server TLS config from a cert/key pair. crypto/tls is
+// permitted by the FIPS import guard; TLS policy stays centralized.
+func loadServerTLS(certFile, keyFile string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, nil
 }
 
 func runMigrations(ctx context.Context, db *store.DB, log *slog.Logger) error {

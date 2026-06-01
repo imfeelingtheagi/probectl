@@ -30,6 +30,7 @@ awk -v mod="${MODULE}" '
     floor["internal/version"]        = 95
     floor["internal/apierror"]       = 88
     floor["internal/otel"]           = 85
+    floor["internal/otel/otlp"]      = 65
     floor["internal/config"]         = 78
     floor["internal/a2a"]            = 78
     floor["internal/canary"]         = 70

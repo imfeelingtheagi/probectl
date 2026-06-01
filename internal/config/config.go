@@ -92,6 +92,14 @@ type Config struct {
 	// served. memory (default) or clickhouse (a ClickHouse HTTP URL).
 	PathStoreMode string
 	PathStoreURL  string
+
+	// OTLP receiver (S22): TLS-only, authenticated, tenant-scoped ingest of
+	// external OTLP. Enabled when an address + TLS cert/key + tokens are all set.
+	OTLPGRPCAddr    string
+	OTLPHTTPAddr    string
+	OTLPTLSCertFile string
+	OTLPTLSKeyFile  string
+	OTLPTokens      map[string]string // bearer token -> tenant id
 }
 
 // Load resolves configuration using the supplied getenv function (use
@@ -137,6 +145,11 @@ func Load(getenv func(string) string) (*Config, error) {
 		OIDCClientSecret:    l.str("NETCTL_OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:     l.str("NETCTL_OIDC_REDIRECT_URL", ""),
 		SecurityContact:     l.str("NETCTL_SECURITY_CONTACT", ""),
+		OTLPGRPCAddr:        l.str("NETCTL_OTLP_GRPC_ADDR", ""),
+		OTLPHTTPAddr:        l.str("NETCTL_OTLP_HTTP_ADDR", ""),
+		OTLPTLSCertFile:     l.str("NETCTL_OTLP_TLS_CERT_FILE", ""),
+		OTLPTLSKeyFile:      l.str("NETCTL_OTLP_TLS_KEY_FILE", ""),
+		OTLPTokens:          l.tokenMap("NETCTL_OTLP_TOKENS"),
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
@@ -153,6 +166,9 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if cfg.PathStoreMode == "clickhouse" && cfg.PathStoreURL == "" {
 		l.errf("NETCTL_PATHSTORE_MODE=clickhouse requires NETCTL_PATHSTORE_URL")
+	}
+	if (cfg.OTLPGRPCAddr != "" || cfg.OTLPHTTPAddr != "") && !cfg.OTLPEnabled() {
+		l.errf("the OTLP receiver is TLS-only and authenticated: set NETCTL_OTLP_TLS_CERT_FILE, NETCTL_OTLP_TLS_KEY_FILE, and NETCTL_OTLP_TOKENS (token=tenant,...) alongside an address")
 	}
 
 	if cfg.DatabaseMinConns > cfg.DatabaseMaxConns {
@@ -180,6 +196,14 @@ func (c *Config) TLSEnabled() bool { return c.TLSCertFile != "" && c.TLSKeyFile 
 // address and the full mTLS material (cert, key, CA) are configured.
 func (c *Config) AgentTransportEnabled() bool {
 	return c.AgentGRPCAddr != "" && c.AgentTLSCertFile != "" && c.AgentTLSKeyFile != "" && c.AgentTLSCAFile != ""
+}
+
+// OTLPEnabled reports whether the OTLP receiver should run — an address, TLS
+// cert+key, and at least one bearer token are configured. The receiver is
+// TLS-only and authenticated (CLAUDE.md §7 guardrail 12).
+func (c *Config) OTLPEnabled() bool {
+	return (c.OTLPGRPCAddr != "" || c.OTLPHTTPAddr != "") &&
+		c.OTLPTLSCertFile != "" && c.OTLPTLSKeyFile != "" && len(c.OTLPTokens) > 0
 }
 
 // LogValue implements slog.LogValuer so the config can be logged at startup
@@ -272,6 +296,33 @@ func (l *loader) list(key string) []string {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+// tokenMap parses "token1=tenant1,token2=tenant2" into a bearer-token→tenant map.
+func (l *loader) tokenMap(key string) map[string]string {
+	v := l.getenv(key)
+	if v == "" {
+		return nil
+	}
+	out := map[string]string{}
+	for _, pair := range strings.Split(v, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		eq := strings.IndexByte(pair, '=')
+		token, tenant := "", ""
+		if eq > 0 {
+			token = strings.TrimSpace(pair[:eq])
+			tenant = strings.TrimSpace(pair[eq+1:])
+		}
+		if token == "" || tenant == "" {
+			l.errf("%s: %q must be token=tenant", key, pair)
+			continue
+		}
+		out[token] = tenant
 	}
 	return out
 }

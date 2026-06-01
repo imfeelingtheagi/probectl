@@ -102,7 +102,7 @@ cover: ## Run unit tests with a coverage profile.
 # Packages the coverage gate floors: pure-logic / parser / probe code that needs
 # no external services. Stateful DB/transport packages are gated for correctness
 # by the integration + cross-tenant-isolation jobs instead (see check_coverage.sh).
-COVER_PKGS := ./internal/apierror/... ./internal/otel/... ./internal/version/... \
+COVER_PKGS := ./internal/apierror/... ./internal/otel/... ./internal/otel/otlp/... ./internal/version/... \
 	./internal/config/... ./internal/a2a/... ./internal/canary/... ./internal/path/... \
 	./internal/bgp/... ./internal/bus/... ./internal/pipeline/... ./internal/crypto/... \
 	./internal/cli/... ./internal/opendata/... ./internal/alert/... ./internal/incident/... \

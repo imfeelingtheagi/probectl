@@ -578,6 +578,25 @@ Flows + service edges are published to `netctl.ebpf.flows` (`ebpfv1.FlowBatch`,
 tenant-keyed). The live loader needs a BTF Linux kernel (≥5.8) and
 `CAP_BPF`/`CAP_PERFMON`; see [`ebpf-agent.md`](ebpf-agent.md).
 
+### OTLP receiver (S22)
+
+The control plane optionally ingests external OpenTelemetry metrics over OTLP —
+**TLS-only, authenticated, and tenant-scoped** (CLAUDE.md §7 guardrail 12). It is
+off by default and runs on its own listeners (separate from the `/v1` REST API).
+See [`otlp.md`](otlp.md).
+
+| Variable                    | Default | Description                                                  |
+| --------------------------- | ------- | ------------------------------------------------------------ |
+| `NETCTL_OTLP_GRPC_ADDR`     | (none)  | OTLP/gRPC listen address (e.g. `:4317`)                      |
+| `NETCTL_OTLP_HTTP_ADDR`     | (none)  | OTLP/HTTP listen address (e.g. `:4318`; `POST /v1/metrics`)  |
+| `NETCTL_OTLP_TLS_CERT_FILE` | (none)  | PEM server certificate (required to enable)                  |
+| `NETCTL_OTLP_TLS_KEY_FILE`  | (none)  | PEM server private key (required to enable)                  |
+| `NETCTL_OTLP_TOKENS`        | (none)  | bearer-token→tenant map: `token1=tenant1,token2=tenant2`     |
+
+Setting an address without the TLS files **and** at least one token fails config
+validation — the receiver is never anonymous plaintext. Ingested metrics are
+tenant-tagged and published to the `netctl.otlp.metrics` bus topic.
+
 ## Local dev stack (`deploy/compose/dev.yml`)
 
 Started with `make compose-up`. **Local, non-production** defaults — plaintext
