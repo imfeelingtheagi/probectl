@@ -19,17 +19,22 @@ import (
 	"github.com/imfeelingtheagi/netctl/internal/tenancy"
 )
 
-// buildAnalyzer wires the RCA Analyzer (S24) over the S23 query engine. The
-// evidence source is the tenant-scoped incident store — the cross-plane
-// correlation home (S17) — so RCA is grounded in real, RLS-scoped signals. The
-// model defaults to the in-process, air-gapped built-in synthesizer.
-func buildAnalyzer(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) *ai.Analyzer {
+// buildEngine wires the S23 query engine: the cost guard plus the tenant-scoped
+// incident store as the entities source (the cross-plane correlation home, S17).
+// Shared by the RCA analyzer (S24) and the MCP backend (S25).
+func buildEngine(cfg *config.Config, pool *pgxpool.Pool) *ai.Engine {
 	opts := []ai.Option{ai.WithMaxRows(cfg.AIMaxEvidence)}
 	if pool != nil {
 		opts = append(opts, ai.WithEntities(incidentEntitiesSource{pool: pool}))
 	}
-	engine := ai.NewEngine(opts...)
-	return ai.NewAnalyzer(engine, ai.WithModel(buildModel(cfg, log)), ai.WithMaxEvidence(cfg.AIMaxEvidence))
+	return ai.NewEngine(opts...)
+}
+
+// buildAnalyzer wires the RCA Analyzer (S24) over the S23 query engine, so RCA is
+// grounded in real, RLS-scoped signals. The model defaults to the in-process,
+// air-gapped built-in synthesizer.
+func buildAnalyzer(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) *ai.Analyzer {
+	return ai.NewAnalyzer(buildEngine(cfg, pool), ai.WithModel(buildModel(cfg, log)), ai.WithMaxEvidence(cfg.AIMaxEvidence))
 }
 
 // buildModel selects the synthesis backend from config. Default (and fallback on

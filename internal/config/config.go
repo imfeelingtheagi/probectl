@@ -113,6 +113,16 @@ type Config struct {
 	AIModelToken    string
 	AIModelTimeout  time.Duration
 	AIMaxEvidence   int
+
+	// MCP server (S25): the Model Context Protocol HTTP transport (network-
+	// exposed). Enabled when an address + TLS cert/key are all set; it is TLS-only
+	// and bearer-authenticated (guardrail 12). The stdio transport is local
+	// (netctl-control mcp-stdio) and reads its token from NETCTL_MCP_TOKEN.
+	// MCPRatePerMin caps per-tenant tool-call volume.
+	MCPHTTPAddr    string
+	MCPTLSCertFile string
+	MCPTLSKeyFile  string
+	MCPRatePerMin  int
 }
 
 // Load resolves configuration using the supplied getenv function (use
@@ -169,6 +179,10 @@ func Load(getenv func(string) string) (*Config, error) {
 		AIModelToken:        l.str("NETCTL_AI_MODEL_TOKEN", ""),
 		AIModelTimeout:      l.dur("NETCTL_AI_MODEL_TIMEOUT", 60*time.Second),
 		AIMaxEvidence:       l.intRange("NETCTL_AI_MAX_EVIDENCE", 50, 1, 1000),
+		MCPHTTPAddr:         l.str("NETCTL_MCP_HTTP_ADDR", ""),
+		MCPTLSCertFile:      l.str("NETCTL_MCP_TLS_CERT_FILE", ""),
+		MCPTLSKeyFile:       l.str("NETCTL_MCP_TLS_KEY_FILE", ""),
+		MCPRatePerMin:       l.intRange("NETCTL_MCP_RATE_PER_MIN", 120, 0, 100000),
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
@@ -191,6 +205,9 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if cfg.AIModelEnabled() && cfg.AIModelEndpoint == "" {
 		l.errf("NETCTL_AI_MODEL_PROVIDER=%s requires NETCTL_AI_MODEL_ENDPOINT (a remote endpoint must be https; loopback may be http for a local model)", cfg.AIModelProvider)
+	}
+	if cfg.MCPHTTPAddr != "" && !cfg.MCPEnabled() {
+		l.errf("the MCP HTTP transport is TLS-only and authenticated: set NETCTL_MCP_TLS_CERT_FILE and NETCTL_MCP_TLS_KEY_FILE alongside NETCTL_MCP_HTTP_ADDR")
 	}
 
 	if cfg.DatabaseMinConns > cfg.DatabaseMaxConns {
@@ -233,6 +250,13 @@ func (c *Config) OTLPEnabled() bool {
 // air-gapped, no network (CLAUDE.md §7 guardrail 2).
 func (c *Config) AIModelEnabled() bool {
 	return c.AIModelProvider != "" && c.AIModelProvider != "builtin"
+}
+
+// MCPEnabled reports whether the MCP HTTP transport should run — an address and
+// TLS cert+key are configured. The transport is TLS-only and bearer-authenticated
+// (CLAUDE.md §7 guardrail 12); the stdio transport is separate (local).
+func (c *Config) MCPEnabled() bool {
+	return c.MCPHTTPAddr != "" && c.MCPTLSCertFile != "" && c.MCPTLSKeyFile != ""
 }
 
 // LogValue implements slog.LogValuer so the config can be logged at startup

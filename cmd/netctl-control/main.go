@@ -61,17 +61,22 @@ func run(cmd string) error {
 	case "gen-cert":
 		// Self-signed TLS cert for the HTTPS-by-default quickstart; no DB needed.
 		return genCert(os.Args[2:])
-	case "serve", "migrate":
+	case "serve", "migrate", "mcp-stdio", "mcp-token":
 		// fall through to the configured path below
 	default:
-		return fmt.Errorf("unknown command %q (want: serve | migrate | gen-cert | version)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | gen-cert | version)", cmd)
 	}
 
 	cfg, err := config.LoadFromEnv()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	log := logging.New(os.Stdout, cfg.LogLevel, cfg.LogFormat)
+	// mcp-stdio uses stdout for its JSON-RPC channel, so its logs go to stderr.
+	logOut := os.Stdout
+	if cmd == "mcp-stdio" {
+		logOut = os.Stderr
+	}
+	log := logging.New(logOut, cfg.LogLevel, cfg.LogFormat)
 	slog.SetDefault(log)
 
 	db, err := store.Open(context.Background(), cfg.DatabaseURL,
@@ -81,8 +86,13 @@ func run(cmd string) error {
 	}
 	defer db.Close()
 
-	if cmd == "migrate" {
+	switch cmd {
+	case "migrate":
 		return runMigrations(context.Background(), db, log)
+	case "mcp-stdio":
+		return runMCPStdio(cfg, log, db)
+	case "mcp-token":
+		return runMCPToken(log, db, os.Args[2:])
 	}
 
 	if cfg.MigrateOnBoot {
@@ -166,6 +176,18 @@ func run(cmd string) error {
 			return fmt.Errorf("otlp receiver: %w", err)
 		}
 		g.Go(func() error { return otlpSrv.Run(gctx) })
+	}
+
+	// MCP server (S25): the Model Context Protocol HTTP transport — TLS + bearer-
+	// authenticated, tenant- + RBAC-scoped read tools. Off unless configured.
+	if cfg.MCPEnabled() {
+		tlsCfg, err := loadServerTLS(cfg.MCPTLSCertFile, cfg.MCPTLSKeyFile)
+		if err != nil {
+			return fmt.Errorf("mcp tls: %w", err)
+		}
+		mcpSrv := control.NewMCPServer(cfg, log, db.Pool(), pathStore, cfg.MCPRatePerMin)
+		handler := mcpSrv.HTTPHandler(control.NewMCPAuthenticator(db.Pool()))
+		g.Go(func() error { return serveMCPHTTP(gctx, cfg.MCPHTTPAddr, tlsCfg, handler, log) })
 	}
 
 	return g.Wait()

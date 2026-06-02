@@ -211,3 +211,37 @@ func TestAIConfig(t *testing.T) {
 		t.Error("unknown provider should be rejected")
 	}
 }
+
+func TestMCPConfig(t *testing.T) {
+	cfg, err := Load(envFunc(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MCPEnabled() {
+		t.Error("MCP should be disabled by default")
+	}
+	if cfg.MCPRatePerMin != 120 {
+		t.Errorf("MCPRatePerMin default = %d, want 120", cfg.MCPRatePerMin)
+	}
+
+	cfg, err = Load(envFunc(map[string]string{
+		"NETCTL_MCP_HTTP_ADDR":     ":8090",
+		"NETCTL_MCP_TLS_CERT_FILE": "/c.pem",
+		"NETCTL_MCP_TLS_KEY_FILE":  "/k.pem",
+		"NETCTL_MCP_RATE_PER_MIN":  "60",
+	}))
+	if err != nil {
+		t.Fatalf("valid MCP config rejected: %v", err)
+	}
+	if !cfg.MCPEnabled() {
+		t.Error("MCP should be enabled with an address + TLS")
+	}
+	if cfg.MCPRatePerMin != 60 {
+		t.Errorf("MCPRatePerMin = %d, want 60", cfg.MCPRatePerMin)
+	}
+
+	// An address without TLS fails closed (never plaintext — guardrail 12).
+	if _, err := Load(envFunc(map[string]string{"NETCTL_MCP_HTTP_ADDR": ":8090"})); err == nil || !strings.Contains(err.Error(), "MCP") {
+		t.Errorf("MCP address without TLS should fail, got %v", err)
+	}
+}

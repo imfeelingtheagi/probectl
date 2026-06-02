@@ -619,6 +619,23 @@ the backend, every answer is tenant-and-RBAC-scoped by the S23 query layer and
 every claim is citation-checked before it reaches the user — a model can never
 see out-of-scope data or inject an ungrounded claim.
 
+### MCP server (S25)
+
+The MCP server exposes read-only, tenant- + RBAC-scoped tools to AI clients. The
+**HTTP** transport is off by default and is **TLS-only + bearer-authenticated**
+(guardrail 12); the **stdio** transport is local (`netctl-control mcp-stdio`,
+token from `NETCTL_MCP_TOKEN`). See [`mcp.md`](mcp.md).
+
+| Variable                   | Default | Description                                                   |
+| -------------------------- | ------- | ------------------------------------------------------------- |
+| `NETCTL_MCP_HTTP_ADDR`     | (none)  | MCP HTTP listen address (e.g. `:8090`) — enables the transport |
+| `NETCTL_MCP_TLS_CERT_FILE` | (none)  | PEM server certificate (required to enable HTTP)              |
+| `NETCTL_MCP_TLS_KEY_FILE`  | (none)  | PEM server private key (required to enable HTTP)              |
+| `NETCTL_MCP_RATE_PER_MIN`  | `120`   | per-tenant tool-call rate limit (0 disables)                  |
+
+Setting `NETCTL_MCP_HTTP_ADDR` without the TLS files fails config validation — the
+MCP endpoint is never anonymous plaintext.
+
 ## Local dev stack (`deploy/compose/dev.yml`)
 
 Started with `make compose-up`. **Local, non-production** defaults — plaintext
