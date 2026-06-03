@@ -142,6 +142,22 @@ type Config struct {
 	ThreatIntelEnabled bool
 	ThreatIntelRefresh time.Duration
 	ThreatIntelFeeds   []string
+
+	// Change intelligence (S29): inbound, per-provider-signed change webhooks. Each
+	// entry maps a public webhook id (the URL selector) to a tenant + provider +
+	// HMAC/token secret. The tenant is bound to the credential, never the payload,
+	// so a verified delivery can only write its own tenant's changes.
+	// ChangeCorrelationWindow is how far before an incident a change is considered a
+	// candidate cause.
+	ChangeWebhooks          map[string]ChangeWebhook
+	ChangeCorrelationWindow time.Duration
+}
+
+// ChangeWebhook is one configured inbound change-webhook credential (S29).
+type ChangeWebhook struct {
+	TenantID string
+	Provider string // "generic" | "github" | "gitlab"
+	Secret   string
 }
 
 // Load resolves configuration using the supplied getenv function (use
@@ -209,6 +225,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		ThreatIntelEnabled:  l.boolean("NETCTL_THREATINTEL_ENABLED", false),
 		ThreatIntelRefresh:  l.dur("NETCTL_THREATINTEL_REFRESH", 6*time.Hour),
 		ThreatIntelFeeds:    l.list("NETCTL_THREATINTEL_FEEDS"),
+
+		ChangeWebhooks:          l.changeWebhooks("NETCTL_CHANGE_WEBHOOKS"),
+		ChangeCorrelationWindow: l.dur("NETCTL_CHANGE_CORRELATION_WINDOW", 24*time.Hour),
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
@@ -402,6 +421,45 @@ func (l *loader) tokenMap(key string) map[string]string {
 			continue
 		}
 		out[token] = tenant
+	}
+	return out
+}
+
+// knownChangeProviders is the allowlist a change-webhook credential's provider
+// must name. Kept here (rather than importing internal/change) so config stays a
+// low-level package; it is asserted against the change registry in tests.
+var knownChangeProviders = map[string]bool{"generic": true, "github": true, "gitlab": true}
+
+// changeWebhooks parses "id:tenant:provider:secret,..." into a webhook-id→credential
+// map (S29). The secret is the last field (SplitN=4) so it may contain ':' but not
+// ','; generate URL-safe (hex/base64) secrets. The id is a non-secret URL selector;
+// the tenant is bound here, never taken from the payload.
+func (l *loader) changeWebhooks(key string) map[string]ChangeWebhook {
+	v := l.getenv(key)
+	if v == "" {
+		return nil
+	}
+	out := map[string]ChangeWebhook{}
+	for _, entry := range strings.Split(v, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		f := strings.SplitN(entry, ":", 4)
+		if len(f) != 4 {
+			l.errf("%s: %q must be id:tenant:provider:secret", key, entry)
+			continue
+		}
+		id, tenant, provider, secret := strings.TrimSpace(f[0]), strings.TrimSpace(f[1]), strings.ToLower(strings.TrimSpace(f[2])), f[3]
+		if id == "" || tenant == "" || provider == "" || secret == "" {
+			l.errf("%s: %q has an empty field (id:tenant:provider:secret)", key, entry)
+			continue
+		}
+		if !knownChangeProviders[provider] {
+			l.errf("%s: unknown provider %q (want generic|github|gitlab)", key, provider)
+			continue
+		}
+		out[id] = ChangeWebhook{TenantID: tenant, Provider: provider, Secret: secret}
 	}
 	return out
 }

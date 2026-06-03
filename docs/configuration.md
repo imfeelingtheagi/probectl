@@ -669,6 +669,23 @@ signals (a **signal, not an IPS** — never blocks). See
 refresher keeps each source's **last-good** indicators, so a feed outage degrades
 gracefully and never breaks a core path.
 
+### Change intelligence (S29)
+
+Ingest per-provider-signed change webhooks (deploys/config/route/IaC/commits) into
+a change timeline + change-to-incident correlation, feeding the AI RCA. See
+[`change-intel.md`](change-intel.md) for the webhook contract + provider/signature
+table.
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `NETCTL_CHANGE_WEBHOOKS` | (none) | comma-separated `id:tenant:provider:secret` webhook credentials (`provider` ∈ `generic`/`github`/`gitlab`). The secret is the last field, so it may contain `:` but not `,` — use URL-safe (hex/base64) secrets. |
+| `NETCTL_CHANGE_CORRELATION_WINDOW` | `24h` | how far before an incident a change is treated as a candidate cause |
+
+Each inbound delivery is **TLS + signature-verified (HMAC/token, constant-time) +
+tenant-bound to the credential**; an unsigned or forged event is rejected before
+storage, and one tenant cannot inject another's changes. Webhook secrets are
+runtime config — inject them from a secret manager, never commit them.
+
 ## Local dev stack (`deploy/compose/dev.yml`)
 
 Started with `make compose-up`. **Local, non-production** defaults — plaintext

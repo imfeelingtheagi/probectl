@@ -105,6 +105,12 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /auth/callback", apiHandler(s.handleCallback))
 	mux.Handle("POST /auth/logout", apiHandler(s.handleLogout))
 
+	// Change-event ingest (S29) — NOT session-authenticated: it authenticates each
+	// delivery itself by verifying the provider's HMAC/token signature, then binds
+	// the event to the credential's tenant (never the payload). Mounted off /v1 (an
+	// ingest surface, like the OTLP receiver), so it bypasses the session-RBAC chain.
+	mux.Handle("POST /ingest/changes/{provider}/{id}", apiHandler(s.handleChangeWebhook))
+
 	// Versioned resource routes (S9). One table → routing + the
 	// OpenAPI-matches-handlers check + per-route RBAC enforcement (S18): the
 	// tenant boundary is checked first (the principal carries one tenant), then

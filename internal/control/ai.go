@@ -25,7 +25,13 @@ import (
 func buildEngine(cfg *config.Config, pool *pgxpool.Pool) *ai.Engine {
 	opts := []ai.Option{ai.WithMaxRows(cfg.AIMaxEvidence)}
 	if pool != nil {
-		opts = append(opts, ai.WithEntities(incidentEntitiesSource{pool: pool}))
+		opts = append(opts,
+			ai.WithEntities(incidentEntitiesSource{pool: pool}),
+			// Change events are the "what changed?" evidence the planner routes
+			// deploy/config/routing questions to (DomainEvents), so RCA can cite the
+			// likely change (S29).
+			ai.WithEvents(changeEventsSource{pool: pool}),
+		)
 	}
 	return ai.NewEngine(opts...)
 }

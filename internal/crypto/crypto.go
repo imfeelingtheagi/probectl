@@ -130,3 +130,10 @@ func Sign(key, data []byte) []byte { return Default.Sign(key, data) }
 
 // Verify checks an HMAC-SHA256 in constant time.
 func Verify(key, data, mac []byte) bool { return Default.Verify(key, data, mac) }
+
+// ConstantTimeEqual reports whether a and b are equal, comparing in constant time
+// to avoid timing leaks. Used to check a shared secret token (e.g. a GitLab-style
+// webhook token) where the sender presents the secret directly rather than an
+// HMAC. It lives in internal/crypto so callers never import crypto/subtle or
+// crypto/hmac directly (the FIPS import guard).
+func ConstantTimeEqual(a, b []byte) bool { return hmac.Equal(a, b) }

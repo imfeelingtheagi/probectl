@@ -22,6 +22,10 @@
     {
       "name": "agents",
       "description": "Registered agents (created via mTLS registration; managed here)."
+    },
+    {
+      "name": "changes",
+      "description": "Change intelligence: the change timeline + change-to-incident correlation (S29)."
     }
   ],
   "paths": {
@@ -1048,6 +1052,64 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/changes": {
+      "get": {
+        "operationId": "listChanges",
+        "summary": "List change events (the change timeline)",
+        "tags": [
+          "changes"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tenant's change events, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeEventList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/incidents/{id}/changes": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantHeader"
+        },
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "get": {
+        "operationId": "listIncidentChanges",
+        "summary": "List changes correlated to an incident (candidate causes)",
+        "tags": [
+          "incidents"
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent changes correlated to the incident, ranked as candidate causes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCandidateList"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
           }
         }
       }
@@ -2125,6 +2187,83 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/DiscoverProposal"
+            }
+          }
+        }
+      },
+      "ChangeEvent": {
+        "type": "object",
+        "description": "A normalized change event ingested from a signed webhook (S29).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ChangeEventList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeEvent"
+            }
+          }
+        }
+      },
+      "ChangeCandidate": {
+        "type": "object",
+        "description": "A change scored as a candidate cause of an incident.",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/ChangeEvent"
+          },
+          "score": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "ChangeCandidateList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeCandidate"
             }
           }
         }
