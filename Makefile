@@ -56,6 +56,16 @@ build-cross: ## Cross-compile every binary for linux amd64 + arm64 (smoke test).
 	done
 	@echo "cross-compile OK (linux/amd64, linux/arm64)"
 
+.PHONY: endpoint-build
+endpoint-build: ## Cross-OS build smoke for the endpoint/DEM agent (Linux/macOS/Windows × amd64/arm64).
+	@for os in linux darwin windows; do \
+		for arch in amd64 arm64; do \
+			echo ">> netctl-endpoint $$os/$$arch"; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build -o /dev/null ./cmd/netctl-endpoint || exit 1; \
+		done; \
+	done
+	@echo "endpoint cross-OS build OK (linux, darwin, windows × amd64, arm64)"
+
 .PHONY: run
 run: ## Run the control-plane server locally.
 	$(GO) run ./cmd/netctl-control
@@ -106,7 +116,7 @@ COVER_PKGS := ./internal/apierror/... ./internal/otel/... ./internal/otel/otlp/.
 	./internal/config/... ./internal/a2a/... ./internal/canary/... ./internal/path/... \
 	./internal/bgp/... ./internal/bus/... ./internal/pipeline/... ./internal/crypto/... \
 	./internal/cli/... ./internal/opendata/... ./internal/alert/... ./internal/incident/... \
-	./internal/auth/... ./internal/perf/... ./internal/ebpf/... ./internal/ebpf/l7/... ./internal/topology/... ./internal/ai/... ./internal/ai/mcp/... ./internal/ai/author/... ./internal/testspec/... ./internal/threat/... ./internal/change/... ./internal/scim/... ./internal/siem/... ./internal/notify/... ./internal/lifecycle/... ./internal/browser/... ./internal/objectstore/... \
+	./internal/auth/... ./internal/perf/... ./internal/ebpf/... ./internal/ebpf/l7/... ./internal/topology/... ./internal/ai/... ./internal/ai/mcp/... ./internal/ai/author/... ./internal/testspec/... ./internal/threat/... ./internal/change/... ./internal/scim/... ./internal/siem/... ./internal/notify/... ./internal/lifecycle/... ./internal/browser/... ./internal/objectstore/... ./internal/endpoint/... \
 	./internal/store/pathstore/... ./internal/store/tsdb/... ./internal/store/migrate/...
 
 .PHONY: cover-gate

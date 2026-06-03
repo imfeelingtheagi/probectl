@@ -590,6 +590,35 @@ Flows + service edges are published to `netctl.ebpf.flows` (`ebpfv1.FlowBatch`,
 tenant-keyed). The live loader needs a BTF Linux kernel (≥5.8) and
 `CAP_BPF`/`CAP_PERFMON`; see [`ebpf-agent.md`](ebpf-agent.md).
 
+### Endpoint / DEM agent (`netctl-endpoint`, S37)
+
+The endpoint agent runs on a user's device (Linux/macOS/Windows), captures
+last-mile experience, and attributes slowdowns to WiFi/ISP/network. It reads a
+YAML config (default path `NETCTL_ENDPOINT_CONFIG`); `NETCTL_ENDPOINT_*` env vars
+override the file. See [`endpoint-dem.md`](endpoint-dem.md).
+
+| Variable                              | Default        | Meaning                                                          |
+| ------------------------------------- | -------------- | ---------------------------------------------------------------- |
+| `NETCTL_ENDPOINT_CONFIG`              | (none)         | path to the YAML config (`-config` flag overrides)               |
+| `NETCTL_ENDPOINT_TENANT_ID`           | (required)     | tenant every DEM result is stamped with (F50)                    |
+| `NETCTL_ENDPOINT_AGENT_ID`            | OS hostname    | device identifier in the fleet                                   |
+| `NETCTL_ENDPOINT_BUS_MODE`            | `memory`       | `memory` \| `kafka`                                              |
+| `NETCTL_ENDPOINT_BUS_BROKERS`         | (none)         | comma-separated Kafka brokers (kafka mode)                       |
+| `NETCTL_ENDPOINT_INTERVAL`            | `60s`          | how often a sample is collected                                  |
+| `NETCTL_ENDPOINT_TARGETS`             | 1.1.1.1,google | comma-separated targets (first = last-mile trace; all = session) |
+| `NETCTL_ENDPOINT_MAX_HOPS`            | `20`           | last-mile trace hop cap                                          |
+| `NETCTL_ENDPOINT_COLLECT_SSID`        | `true`         | retain the WiFi network name (SSID)                              |
+| `NETCTL_ENDPOINT_COLLECT_BSSID`       | `false`        | retain the AP MAC (BSSID) — geolocatable PII, off by default     |
+| `NETCTL_ENDPOINT_COLLECT_GATEWAY_IP`  | `true`         | retain the (private) default-gateway address                    |
+| `NETCTL_ENDPOINT_COLLECT_PUBLIC_HOPS` | `false`        | retain PUBLIC last-mile hop IPs (reveal ISP/geo), off by default |
+| `NETCTL_ENDPOINT_LOG_LEVEL`           | `info`         | `debug` \| `info` \| `warn` \| `error`                           |
+| `NETCTL_ENDPOINT_LOG_FORMAT`          | `json`         | `json` \| `text`                                                 |
+
+DEM results (WiFi / gateway / last-mile / session signals + the attribution
+verdict) are published to `netctl.endpoint.results` (`resultv1.Result`,
+tenant-keyed), flowing through the same pipeline as every other canary. The agent
+**discloses exactly what it collects at startup** and never phones home.
+
 ### OTLP receiver (S22)
 
 The control plane optionally ingests external OpenTelemetry metrics over OTLP —

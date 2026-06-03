@@ -57,6 +57,11 @@ awk -v mod="${MODULE}" '
     floor["internal/lifecycle"]      = 80
     floor["internal/browser"]        = 75
     floor["internal/objectstore"]    = 78
+    # The per-OS WiFi/traceroute COLLECTORS shell out to system tools and are
+    # build-tag gated, so their exec wrappers do not run in this service-free gate;
+    # the floor covers the tested core (schema/attribution/privacy/parsers/mapping/
+    # emit/config). Cross-OS compilation is gated by the endpoint-cross CI job.
+    floor["internal/endpoint"]       = 80
     # The pooled driver (pooled.go) is exercised by the perf-smoke integration job
     # (needs Postgres) and skips in this service-free gate, so the floor covers the
     # no-DB drivers (metrics/ingest/baseline).

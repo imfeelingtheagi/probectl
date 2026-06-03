@@ -23,6 +23,12 @@ const EBPFFlowsTopic = "netctl.ebpf.flows"
 // ExportMetricsServiceRequest.
 const OTLPMetricsTopic = "netctl.otlp.metrics"
 
+// EndpointResultsTopic carries DEM results from the endpoint agent (S37) — WiFi /
+// gateway / last-mile / session signals and the slowdown attribution — tenant-
+// tagged via the message key. Payload: resultv1.Result (the canonical canary
+// result schema), so it flows through the same pipeline → TSDB path.
+const EndpointResultsTopic = "netctl.endpoint.results"
+
 // Message is one bus record. Key partitions the record (the tenant id, so a
 // tenant's results stay ordered and co-located — pooled tenant-tagging).
 type Message struct {

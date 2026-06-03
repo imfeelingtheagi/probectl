@@ -58,6 +58,8 @@ jobs:
         run: make fuzz-smoke
       - name: Cross-compile (linux amd64 + arm64)
         run: make build-cross
+      - name: Endpoint agent cross-OS build (Linux/macOS/Windows)
+        run: make endpoint-build
 
   coverage:
     name: coverage

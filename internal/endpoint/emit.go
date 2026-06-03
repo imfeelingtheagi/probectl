@@ -1,0 +1,72 @@
+package endpoint
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/imfeelingtheagi/netctl/internal/bus"
+	"github.com/imfeelingtheagi/netctl/internal/canary"
+	resultv1 "github.com/imfeelingtheagi/netctl/internal/gen/netctl/result/v1"
+)
+
+// Emitter publishes a sample's DEM results. The seam lets a test capture results
+// and lets a future transport (the mTLS agent gRPC stream, for roaming devices)
+// drop in without touching the runtime.
+type Emitter interface {
+	Emit(ctx context.Context, s Sample) error
+}
+
+// BusEmitter maps a Sample to canonical canary Results and publishes each to
+// netctl.endpoint.results, tenant-keyed (pooled tenant-tagging), exactly like
+// every other agent's results land on the bus.
+type BusEmitter struct {
+	bus    bus.Bus
+	tenant string
+	agent  string
+}
+
+// NewBusEmitter returns an Emitter publishing to netctl.endpoint.results.
+func NewBusEmitter(b bus.Bus, tenant, agent string) *BusEmitter {
+	return &BusEmitter{bus: b, tenant: tenant, agent: agent}
+}
+
+// Emit publishes one message per DEM result in the sample.
+func (e *BusEmitter) Emit(ctx context.Context, s Sample) error {
+	for _, r := range s.ToResults() {
+		value, err := proto.Marshal(e.toProto(r))
+		if err != nil {
+			return fmt.Errorf("endpoint: marshal result: %w", err)
+		}
+		if err := e.bus.Publish(ctx, bus.EndpointResultsTopic, []byte(e.tenant), value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// toProto maps a canary.Result onto the canonical result schema, stamping the
+// agent's tenant + id (the same mapping the canary agent uses).
+func (e *BusEmitter) toProto(r canary.Result) *resultv1.Result {
+	return &resultv1.Result{
+		TenantId:          e.tenant,
+		AgentId:           e.agent,
+		CanaryType:        r.Type,
+		ServerAddress:     r.Target,
+		Success:           r.Success,
+		ErrorMessage:      r.Error,
+		StartTimeUnixNano: unixNano(r.StartedAt),
+		DurationNano:      int64(r.Duration),
+		Metrics:           r.Metrics,
+		Attributes:        r.Attributes,
+	}
+}
+
+func unixNano(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixNano()
+}
