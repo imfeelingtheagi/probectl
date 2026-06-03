@@ -53,3 +53,12 @@ func (s Sessions) DeleteByHash(ctx context.Context, tokenHash []byte) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, tokenHash)
 	return err
 }
+
+// DeleteAllForUser revokes every active session of a user in a tenant — the
+// immediate-revocation path on SCIM deprovision (S31). It is keyed by
+// (tenant_id, user_id) so a deprovisioned user's next request fails session
+// resolution at once. Returns the number of sessions removed.
+func (s Sessions) DeleteAllForUser(ctx context.Context, tenantID, userID string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE tenant_id = $1 AND user_id = $2`, tenantID, userID)
+	return tag.RowsAffected(), err
+}

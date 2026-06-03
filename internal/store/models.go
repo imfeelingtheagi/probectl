@@ -54,15 +54,42 @@ type Project struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// User is a tenant member (per-tenant identity; SSO lands in S18).
+// User is a tenant member (per-tenant identity; SSO in S18, SCIM lifecycle in
+// S31). ExternalID/UserName are the SCIM identifiers (the IdP's id + userName);
+// Attributes are the ABAC subject attributes (e.g. department).
 type User struct {
-	ID          string    `json:"id"`
-	TenantID    string    `json:"tenant_id"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"display_name"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string            `json:"id"`
+	TenantID    string            `json:"tenant_id"`
+	Email       string            `json:"email"`
+	DisplayName string            `json:"display_name"`
+	Status      string            `json:"status"`
+	ExternalID  string            `json:"external_id,omitempty"`
+	UserName    string            `json:"user_name,omitempty"`
+	Attributes  map[string]string `json:"attributes,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+}
+
+// ScimToken is a per-tenant SCIM bearer-token record (metadata only; the token
+// hash is never returned).
+type ScimToken struct {
+	ID         string     `json:"id"`
+	TenantID   string     `json:"tenant_id"`
+	Name       string     `json:"name"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// RoleBinding assigns a role to a subject within a scope (tenant/org/team/project)
+// — the delegated-admin grant.
+type RoleBinding struct {
+	ID          string `json:"id"`
+	SubjectType string `json:"subject_type"`
+	SubjectID   string `json:"subject_id"`
+	RoleID      string `json:"role_id"`
+	ScopeType   string `json:"scope_type"`
+	ScopeID     string `json:"scope_id,omitempty"`
 }
 
 // Role is a tenant-scoped RBAC role (enforcement lands in S18).

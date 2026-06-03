@@ -32,6 +32,15 @@ func (m MCPTokens) Create(ctx context.Context, tenantID, userID, name string, to
 	return id, nil
 }
 
+// RevokeForUser revokes all of a user's MCP tokens in a tenant — part of the SCIM
+// deprovision (S31), alongside session revocation.
+func (m MCPTokens) RevokeForUser(ctx context.Context, tenantID, userID string) error {
+	_, err := m.pool.Exec(ctx,
+		`UPDATE mcp_tokens SET revoked_at = now()
+		 WHERE tenant_id = $1 AND user_id = $2 AND revoked_at IS NULL`, tenantID, userID)
+	return err
+}
+
 // Authenticate resolves a token hash to its (tenant, user), rejecting revoked
 // tokens, and stamps last_used_at. It is pre-tenant: the token is the tenant
 // selector, and the row holds only tenant_id + user_id (no secret).

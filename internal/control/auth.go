@@ -21,17 +21,19 @@ import (
 // RBAC permission keys (mirror migrations 0003 + 0013). Routes declare the key a
 // caller must hold; the seeded admin/editor/viewer roles grant them.
 const (
-	permTestRead      = "test.read"
-	permTestWrite     = "test.write"
-	permAgentRead     = "agent.read"
-	permAgentWrite    = "agent.write"
-	permAlertRead     = "alert.read"
-	permAlertWrite    = "alert.write"
-	permIncidentRead  = "incident.read"
-	permIncidentWrite = "incident.write"
-	permChangeRead    = "change.read"
-	permAuditRead     = "audit.read"
-	permAIQuery       = "ai.query"
+	permTestRead       = "test.read"
+	permTestWrite      = "test.write"
+	permAgentRead      = "agent.read"
+	permAgentWrite     = "agent.write"
+	permAlertRead      = "alert.read"
+	permAlertWrite     = "alert.write"
+	permIncidentRead   = "incident.read"
+	permIncidentWrite  = "incident.write"
+	permChangeRead     = "change.read"
+	permAuditRead      = "audit.read"
+	permAIQuery        = "ai.query"
+	permDirectoryRead  = "directory.read"
+	permDirectoryWrite = "directory.write"
 )
 
 // allPermissionKeys is the full catalog — granted to the dev-mode principal so
@@ -42,6 +44,7 @@ var allPermissionKeys = []string{
 	permAlertRead, permAlertWrite,
 	permIncidentRead, permIncidentWrite,
 	permChangeRead,
+	permDirectoryRead, permDirectoryWrite,
 	permAuditRead,
 	permAIQuery,
 	ai.PermMetricsRead, ai.PermEventsRead, ai.PermEntitiesRead, ai.PermTopologyRead,
@@ -147,7 +150,8 @@ func (s *Server) resolvePrincipal(r *http.Request) *auth.Principal {
 		for _, k := range allPermissionKeys {
 			perms[k] = true
 		}
-		return &auth.Principal{TenantID: tid.String(), UserID: "dev", Email: "dev@netctl.local", DisplayName: "Dev", Permissions: perms}
+		return &auth.Principal{TenantID: tid.String(), UserID: "dev", Email: "dev@netctl.local",
+			DisplayName: "Dev", Permissions: perms, Attributes: map[string]string{"mfa": "true"}}
 	}
 	if s.authn == nil {
 		return nil
@@ -157,7 +161,34 @@ func (s *Server) resolvePrincipal(r *http.Request) *auth.Principal {
 		s.log.Warn("session resolve failed", "error", err)
 		return nil
 	}
+	s.loadSubjectAttributes(r.Context(), p)
 	return p
+}
+
+// loadSubjectAttributes attaches the principal's ABAC subject attributes (S31):
+// the user's SCIM-provisioned attributes plus the derived "mfa" flag. They are
+// read tenant-scoped (RLS), so a request can only carry its own tenant's data.
+func (s *Server) loadSubjectAttributes(ctx context.Context, p *auth.Principal) {
+	if p == nil || s.pool == nil {
+		return
+	}
+	attrs := map[string]string{"mfa": boolStr(p.MFASatisfied)}
+	_ = s.inTenantID(ctx, p.TenantID, func(ctx context.Context, sc tenancy.Scope) error {
+		if u, err := (store.Users{}).Get(ctx, sc, p.UserID); err == nil {
+			for k, v := range u.Attributes {
+				attrs[k] = v
+			}
+		}
+		return nil
+	})
+	p.Attributes = attrs
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }
 
 // principalTenant returns the caller's tenant ID, or a 401 when unauthenticated.
@@ -181,8 +212,15 @@ func (s *Server) requirePermission(perm string, h apiHandler) apiHandler {
 		if p == nil {
 			return apierror.Unauthorized("authentication required")
 		}
-		if perm != "" && !p.Has(perm) {
-			return apierror.Forbidden("missing permission: " + perm)
+		if perm != "" {
+			if !p.Has(perm) {
+				return apierror.Forbidden("missing permission: " + perm)
+			}
+			// ABAC over RBAC (S31): a tenant attribute policy may DENY a permission an
+			// RBAC role grants (e.g. contractors can't write, step-up MFA required).
+			if s.abacDenies(r.Context(), p, perm, nil) {
+				return apierror.Forbidden("denied by an attribute policy: " + perm)
+			}
 		}
 		return h(w, r)
 	}

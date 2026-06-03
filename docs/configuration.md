@@ -669,6 +669,20 @@ signals (a **signal, not an IPS** — never blocks). See
 refresher keeps each source's **last-good** indicators, so a feed outage degrades
 gracefully and never breaks a core path.
 
+### Enterprise identity: SCIM + ABAC (S31)
+
+SCIM 2.0 provisioning and ABAC have **no environment keys** — the SCIM bearer token
+an IdP presents is minted with the control-plane CLI, and ABAC policies are managed
+over the API. See [`scim-abac.md`](scim-abac.md).
+
+```
+# mint a per-tenant SCIM token for an IdP (shown once)
+netctl-control scim-token --tenant <tenant-uuid> --name okta
+```
+
+The `/scim/v2/*` surface is gated by a valid SCIM token (no token ⇒ `401`), and the
+directory-admin API (`/v1/abac/policies`) requires `directory.read`/`directory.write`.
+
 ### Change intelligence (S29)
 
 Ingest per-provider-signed change webhooks (deploys/config/route/IaC/commits) into

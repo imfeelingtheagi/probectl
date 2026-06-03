@@ -46,6 +46,10 @@ type Server struct {
 	// AI test authoring + auto-discovery (S26). Always set (heuristic by default,
 	// model-backed when configured).
 	authorEngine *author.Engine
+
+	// ABAC policy cache (S31). nil when pool is nil (operational-only tests). The
+	// per-request deny-override check (requirePermission) reads tenant policies here.
+	abac *abacCache
 }
 
 // New builds a Server. pinger backs the readiness probe and pool backs the
@@ -68,6 +72,8 @@ func New(cfg *config.Config, log *slog.Logger, pinger store.Pinger, pool *pgxpoo
 	if pool != nil {
 		s.sessions = auth.NewManager(store.NewSessions(pool), cfg.SessionTTL, cfg.TLSEnabled())
 		s.authn = auth.NewAuthenticator(s.sessions, permLoader{pool: pool})
+		// ABAC policy cache (S31): the per-request deny-override check reads from here.
+		s.abac = newABACCache(pool)
 	}
 
 	// AI assistant (S24): RCA analyzer over the S23 query engine, grounded in the
@@ -110,6 +116,23 @@ func (s *Server) routes() http.Handler {
 	// the event to the credential's tenant (never the payload). Mounted off /v1 (an
 	// ingest surface, like the OTLP receiver), so it bypasses the session-RBAC chain.
 	mux.Handle("POST /ingest/changes/{provider}/{id}", apiHandler(s.handleChangeWebhook))
+
+	// SCIM 2.0 (S31) — an IdP provisioning surface mounted off /v1; each request is
+	// authenticated by a per-tenant SCIM bearer token (pre-tenant, like sessions),
+	// and responses use the SCIM media type + error envelope. Deprovision revokes a
+	// user's sessions/tokens immediately.
+	mux.Handle("GET /scim/v2/ServiceProviderConfig", s.scim(s.scimServiceProviderConfig))
+	mux.Handle("POST /scim/v2/Users", s.scim(s.scimCreateUser))
+	mux.Handle("GET /scim/v2/Users", s.scim(s.scimListUsers))
+	mux.Handle("GET /scim/v2/Users/{id}", s.scim(s.scimGetUser))
+	mux.Handle("PUT /scim/v2/Users/{id}", s.scim(s.scimPutUser))
+	mux.Handle("PATCH /scim/v2/Users/{id}", s.scim(s.scimPatchUser))
+	mux.Handle("DELETE /scim/v2/Users/{id}", s.scim(s.scimDeleteUser))
+	mux.Handle("POST /scim/v2/Groups", s.scim(s.scimCreateGroup))
+	mux.Handle("GET /scim/v2/Groups", s.scim(s.scimListGroups))
+	mux.Handle("GET /scim/v2/Groups/{id}", s.scim(s.scimGetGroup))
+	mux.Handle("PATCH /scim/v2/Groups/{id}", s.scim(s.scimPatchGroup))
+	mux.Handle("DELETE /scim/v2/Groups/{id}", s.scim(s.scimDeleteGroup))
 
 	// Versioned resource routes (S9). One table → routing + the
 	// OpenAPI-matches-handlers check + per-route RBAC enforcement (S18): the

@@ -61,10 +61,10 @@ func run(cmd string) error {
 	case "gen-cert":
 		// Self-signed TLS cert for the HTTPS-by-default quickstart; no DB needed.
 		return genCert(os.Args[2:])
-	case "serve", "migrate", "mcp-stdio", "mcp-token":
+	case "serve", "migrate", "mcp-stdio", "mcp-token", "scim-token":
 		// fall through to the configured path below
 	default:
-		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | gen-cert | version)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | gen-cert | version)", cmd)
 	}
 
 	cfg, err := config.LoadFromEnv()
@@ -93,6 +93,8 @@ func run(cmd string) error {
 		return runMCPStdio(cfg, log, db)
 	case "mcp-token":
 		return runMCPToken(log, db, os.Args[2:])
+	case "scim-token":
+		return runSCIMToken(log, db, os.Args[2:])
 	}
 
 	if cfg.MigrateOnBoot {

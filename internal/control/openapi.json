@@ -26,6 +26,10 @@
     {
       "name": "changes",
       "description": "Change intelligence: the change timeline + change-to-incident correlation (S29)."
+    },
+    {
+      "name": "abac",
+      "description": "Attribute-based access control policies over RBAC (S31)."
     }
   ],
   "paths": {
@@ -1107,6 +1111,94 @@
                 }
               }
             }
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/v1/abac/policies": {
+      "get": {
+        "operationId": "listPolicies",
+        "summary": "List ABAC policies",
+        "tags": [
+          "abac"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tenant's ABAC policies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ABACPolicyList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPolicy",
+        "summary": "Create an ABAC policy",
+        "tags": [
+          "abac"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ABACPolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ABACPolicy"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/v1/abac/policies/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TenantHeader"
+        },
+        {
+          "$ref": "#/components/parameters/IdPath"
+        }
+      ],
+      "delete": {
+        "operationId": "deletePolicy",
+        "summary": "Delete an ABAC policy",
+        "tags": [
+          "abac"
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
           },
           "404": {
             "$ref": "#/components/responses/ErrorResponse"
@@ -2264,6 +2356,61 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChangeCandidate"
+            }
+          }
+        }
+      },
+      "ABACPolicy": {
+        "type": "object",
+        "description": "An ABAC policy evaluated after RBAC (deny-override).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "permission": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "resource": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "effect",
+          "permission"
+        ]
+      },
+      "ABACPolicyList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ABACPolicy"
             }
           }
         }

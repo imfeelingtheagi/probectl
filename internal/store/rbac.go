@@ -30,6 +30,30 @@ func (Roles) Create(ctx context.Context, s tenancy.Scope, slug, name, descriptio
 	return &r, nil
 }
 
+// Get returns a role by id (a SCIM Group maps to a role).
+func (Roles) Get(ctx context.Context, s tenancy.Scope, id string) (*Role, error) {
+	var r Role
+	if err := scanRole(s.Q.QueryRow(ctx, `SELECT `+roleCols+` FROM roles WHERE id = $1`, id), &r); err != nil {
+		return nil, notFound("role", err)
+	}
+	return &r, nil
+}
+
+// GetBySlug returns a role by slug within the tenant.
+func (Roles) GetBySlug(ctx context.Context, s tenancy.Scope, slug string) (*Role, error) {
+	var r Role
+	if err := scanRole(s.Q.QueryRow(ctx, `SELECT `+roleCols+` FROM roles WHERE slug = $1`, slug), &r); err != nil {
+		return nil, notFound("role", err)
+	}
+	return &r, nil
+}
+
+// Delete removes a non-system role (its bindings cascade via the FK).
+func (Roles) Delete(ctx context.Context, s tenancy.Scope, id string) error {
+	_, err := s.Q.Exec(ctx, `DELETE FROM roles WHERE id = $1 AND is_system = false`, id)
+	return err
+}
+
 // List returns the tenant's roles.
 func (Roles) List(ctx context.Context, s tenancy.Scope) ([]Role, error) {
 	rows, err := s.Q.Query(ctx, `SELECT `+roleCols+` FROM roles ORDER BY created_at`)
@@ -96,4 +120,45 @@ func (RoleBindings) CountForSubject(ctx context.Context, s tenancy.Scope, subjec
 		`SELECT count(*) FROM role_bindings WHERE subject_type = $1 AND subject_id = $2`,
 		subjectType, subjectID).Scan(&n)
 	return n, err
+}
+
+// Bind idempotently binds a subject to a role at tenant scope — the SCIM
+// group-membership "add member" operation.
+func (RoleBindings) Bind(ctx context.Context, s tenancy.Scope, subjectType, subjectID, roleID string) error {
+	_, err := s.Q.Exec(ctx,
+		`INSERT INTO role_bindings (tenant_id, subject_type, subject_id, role_id, scope_type)
+		 VALUES ($1, $2, $3, $4, 'tenant')
+		 ON CONFLICT (tenant_id, subject_type, subject_id, role_id, scope_type, scope_id) DO NOTHING`,
+		s.Tenant.String(), subjectType, subjectID, roleID)
+	return err
+}
+
+// Unbind removes a subject's tenant-scoped binding to a role — the SCIM "remove
+// member" operation.
+func (RoleBindings) Unbind(ctx context.Context, s tenancy.Scope, subjectType, subjectID, roleID string) error {
+	_, err := s.Q.Exec(ctx,
+		`DELETE FROM role_bindings
+		 WHERE subject_type = $1 AND subject_id = $2 AND role_id = $3 AND scope_type = 'tenant'`,
+		subjectType, subjectID, roleID)
+	return err
+}
+
+// MembersOfRole returns the user ids bound to a role — a SCIM Group's members.
+func (RoleBindings) MembersOfRole(ctx context.Context, s tenancy.Scope, roleID string) ([]string, error) {
+	rows, err := s.Q.Query(ctx,
+		`SELECT subject_id::text FROM role_bindings
+		 WHERE role_id = $1 AND subject_type = 'user' ORDER BY created_at`, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

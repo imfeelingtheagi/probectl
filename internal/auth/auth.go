@@ -34,7 +34,8 @@ type Session struct {
 }
 
 // Principal is the authenticated caller resolved for a request: its tenant, user,
-// and effective permission set within that tenant.
+// the effective permission set (RBAC), and the subject attributes that ABAC
+// policies evaluate (e.g. department, mfa) — the two layers of the S31 model.
 type Principal struct {
 	TenantID     string
 	UserID       string
@@ -42,11 +43,22 @@ type Principal struct {
 	DisplayName  string
 	MFASatisfied bool
 	Permissions  map[string]bool
+	// Attributes are the subject's ABAC attributes (from the user's SCIM-provisioned
+	// attributes plus derived ones like "mfa"). nil when ABAC is not in use.
+	Attributes map[string]string
 }
 
 // Has reports whether the principal holds permission key.
 func (p *Principal) Has(key string) bool {
 	return p != nil && p.Permissions[key]
+}
+
+// Attr returns a subject attribute value (empty if absent).
+func (p *Principal) Attr(key string) string {
+	if p == nil {
+		return ""
+	}
+	return p.Attributes[key]
 }
 
 // SessionStore persists sessions, keyed by the hash of the opaque token.

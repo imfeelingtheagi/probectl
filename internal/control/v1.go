@@ -56,6 +56,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{http.MethodPost, "/v1/ai/feedback", s.handleAIFeedback, permAIQuery},
 		{http.MethodPost, "/v1/ai/author", s.handleAIAuthor, permTestWrite},
 		{http.MethodPost, "/v1/ai/discover", s.handleAIDiscover, permTestWrite},
+		{http.MethodGet, "/v1/abac/policies", s.handleListPolicies, permDirectoryRead},
+		{http.MethodPost, "/v1/abac/policies", s.handleCreatePolicy, permDirectoryWrite},
+		{http.MethodDelete, "/v1/abac/policies/{id}", s.handleDeletePolicy, permDirectoryWrite},
 		{http.MethodGet, "/v1/me", s.handleMe, ""},
 	}
 }
