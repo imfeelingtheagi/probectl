@@ -1,0 +1,11 @@
+# Flux source for the netctl chart (S35). Point url at the repo holding the chart.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: netctl
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/your-org/netctl.git
+  ref:
+    branch: main

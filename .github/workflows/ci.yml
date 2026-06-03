@@ -111,36 +111,38 @@ jobs:
       - name: Migration expand/contract gate
         run: make migration-gate
 
-  helm-lint:
-    name: helm-lint
-    # S19: validate the shipped Helm chart renders for both single-tenant and
-    # multi-tenant/provider reference values, and the all-in-one compose parses.
+  helm-gate:
+    name: helm-gate
+    # S19 + S35, F29: the shipped Helm chart lints for every reference profile and
+    # upholds the secure-by-default hardening invariants (non-root/read-only pod,
+    # NetworkPolicy/PDB/HPA, /readyz drain probe, HSTS, no default credentials).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
         with:
           version: v3.16.2
-      - name: helm lint (single-tenant + multi-tenant)
+      - name: helm lint + hardening gate (small/medium/large/multitenant)
+        run: make helm-gate
+      - name: GitOps manifests valid (ArgoCD + Flux)
         run: |
-          helm lint deploy/helm/netctl \
-            --set ingress.host=netctl.example.com \
-            --set ingress.tlsSecretName=netctl-tls \
-            --set secrets.envelopeKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-          helm lint deploy/helm/netctl -f deploy/helm/netctl/values-multitenant.yaml \
-            --set ingress.host=netctl.msp.example.com \
-            --set ingress.tlsSecretName=netctl-msp-tls \
-            --set secrets.envelopeKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-      - name: helm template renders valid manifests
-        run: |
-          helm template netctl deploy/helm/netctl \
-            --set ingress.host=netctl.example.com \
-            --set ingress.tlsSecretName=netctl-tls \
-            --set secrets.envelopeKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= > /tmp/rendered.yaml
-          test -s /tmp/rendered.yaml
-          grep -q "Strict-Transport-Security" /tmp/rendered.yaml   # HSTS present
+          python3 -m pip install --quiet pyyaml
+          make gitops-gate
       - name: compose config is valid
         run: docker compose -f deploy/compose/netctl.yml config >/dev/null
+
+  terraform-gate:
+    name: terraform-gate
+    # S35, F29: the netctl Terraform module is fmt-clean and validates (fmt +
+    # `terraform validate` of the example root that consumes it).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: terraform fmt + validate
+        run: make terraform-gate
 
   cross-tenant-isolation:
     name: cross-tenant-isolation

@@ -1,0 +1,39 @@
+# Flux HelmRelease for netctl (S35). Reconciles the chart from the GitRepository.
+# Secrets are referenced via secrets.existingSecret (manage the Secret with Sealed
+# Secrets / External Secrets Operator), never inlined here.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: netctl
+  namespace: netctl
+spec:
+  interval: 10m
+  releaseName: netctl
+  chart:
+    spec:
+      chart: deploy/helm/netctl
+      sourceRef:
+        kind: GitRepository
+        name: netctl
+        namespace: flux-system
+      interval: 5m
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  # Merge the sizing profile + your overrides. The values below are the minimum;
+  # to use a full size preset, copy values-medium.yaml here or reference it via
+  # valuesFrom a ConfigMap.
+  values:
+    replicaCount: 3
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+    ingress:
+      host: netctl.example.com
+      tlsSecretName: netctl-tls
+    secrets:
+      existingSecret: netctl-secrets

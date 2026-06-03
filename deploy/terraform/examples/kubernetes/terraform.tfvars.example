@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and fill in. NEVER commit real secrets — source them
+# from your secret manager / CI variables / a *.auto.tfvars that is gitignored.
+
+kubeconfig         = "~/.kube/config"
+size               = "medium"
+ingress_host       = "netctl.example.com"
+ingress_tls_secret = "netctl-tls"
+
+# Point at your managed Postgres.
+database_url = "postgres://netctl:CHANGEME@db.internal:5432/netctl?sslmode=require"
+
+# openssl rand -base64 32
+envelope_key = "REPLACE_WITH_BASE64_32_BYTE_KEK"

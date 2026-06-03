@@ -42,8 +42,22 @@ of deployment shape; the multi-tenant values only size the runtime and spread
 replicas. Per-tenant white-label and the provider console arrive with the S-T
 track.
 
-## Values
+## Reference values (S35)
 
-See [`netctl/values.yaml`](netctl/values.yaml) (single-tenant defaults) and
-[`netctl/values-multitenant.yaml`](netctl/values-multitenant.yaml). `helm lint`
-and `helm template` run in CI. Full guide: [`docs/install.md`](../../docs/install.md).
+Pick a sizing profile and layer your overrides on top:
+
+| Profile | File | Shape |
+| ------- | ---- | ----- |
+| single-tenant default | [`netctl/values.yaml`](netctl/values.yaml) | 1 replica |
+| small | [`netctl/values-small.yaml`](netctl/values-small.yaml) | lab / pilot |
+| medium | [`netctl/values-medium.yaml`](netctl/values-medium.yaml) | 3 replicas + PDB + spread |
+| large | [`netctl/values-large.yaml`](netctl/values-large.yaml) | HPA 4–12 + PDB + NetworkPolicy |
+| provider (MSP) | [`netctl/values-multitenant.yaml`](netctl/values-multitenant.yaml) | 3 replicas + anti-affinity + PDB |
+
+`values.schema.json` types every key (Helm validates it). Security defaults
+(non-root pinned uid, read-only root FS, drop-ALL caps, NetworkPolicy/PDB/HPA,
+`/readyz` drain probe, HSTS, no default credentials) are enforced by the CI
+hardening gate — `make helm-gate` (`helm lint` + `scripts/check_helm_hardening.sh`).
+Terraform + GitOps wrap this same chart; see
+[`docs/iac-gitops.md`](../../docs/iac-gitops.md). Full guide:
+[`docs/install.md`](../../docs/install.md).

@@ -76,12 +76,21 @@ resources:
     cpu: "1"
     memory: 512Mi
 
-# Hardened pod/container security context (non-root, read-only root FS).
+# Hardened pod/container security context (non-root, read-only root FS). The
+# image is distroless `nonroot` (uid/gid 65532), so we pin the numeric ids too —
+# pod admission (restricted PSS) and many policy engines require an explicit
+# runAsUser, not just runAsNonRoot.
 podSecurityContext:
   runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
   seccompProfile:
     type: RuntimeDefault
 securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   capabilities:
@@ -90,7 +99,47 @@ securityContext:
 serviceAccount:
   create: true
   name: ""
+  # The control plane needs no Kubernetes API access — don't mount the token.
+  automountServiceAccountToken: false
 
+# PodDisruptionBudget keeps a quorum available during voluntary disruptions (node
+# drains, the S34 rolling upgrade). Enable it whenever replicaCount > 1 — the M/L
+# reference values do.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1   # set one OR the other, not both
+
+# HorizontalPodAutoscaler. When enabled the Deployment's replicas field is omitted
+# so the HPA owns scaling.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 80
+
+# NetworkPolicy: default-deny ingress + egress, with explicit allows. This is a
+# security surface — leave the defaults restrictive and open only what you need.
+networkPolicy:
+  enabled: false
+  # Sources allowed to reach the API on the container port. EMPTY ⇒ allow from any
+  # pod in the cluster (still default-deny all other traffic); in production set
+  # your ingress-controller's namespace/pod selector here.
+  ingressFrom: []
+    # - namespaceSelector:
+    #     matchLabels:
+    #       kubernetes.io/metadata.name: ingress-nginx
+  # Egress beyond DNS (which is always allowed): the Postgres/bus/IdP/SIEM/feeds
+  # this deployment must reach. EMPTY ⇒ allow all egress (DNS + everything).
+  egressTo: []
+    # - to:
+    #     - ipBlock: { cidr: 10.0.0.0/8 }
+    #   ports:
+    #     - { protocol: TCP, port: 5432 }
+
+# Spread + scheduling. M/L reference values set anti-affinity / spread for HA.
+topologySpreadConstraints: []
 nodeSelector: {}
 tolerations: []
 affinity: {}

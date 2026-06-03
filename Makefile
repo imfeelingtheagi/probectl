@@ -123,6 +123,19 @@ openapi-gate: ## OpenAPI completeness gate (S19): valid 3.1 spec + no undocument
 migration-gate: ## Migration expand/contract gate (S34): reject destructive/blocking schema changes.
 	$(GO) test -run 'TestMigrationsExpandContractCompat|TestCheckSQL|TestCheckSQLDollarQuoteNotSplit' ./internal/store/migrate/...
 
+.PHONY: helm-gate
+helm-gate: ## Helm chart lint + secure-by-default hardening assertions (S35). Needs helm.
+	bash scripts/check_helm_hardening.sh
+
+.PHONY: gitops-gate
+gitops-gate: ## GitOps (ArgoCD/Flux) manifest structural validation (S35). Needs python3 + PyYAML.
+	bash scripts/check_gitops_manifests.sh
+
+.PHONY: terraform-gate
+terraform-gate: ## Terraform fmt + validate the netctl module (S35). Needs terraform.
+	terraform -chdir=deploy/terraform fmt -recursive -check
+	cd deploy/terraform/examples/kubernetes && terraform init -backend=false -input=false >/dev/null && terraform validate
+
 .PHONY: perf-smoke
 perf-smoke: ## Load/perf smoke (S18a): ingest baseline (no DB) + pooled multi-tenant (needs Postgres).
 	# Run without -race: this measures throughput/latency, and race instrumentation
