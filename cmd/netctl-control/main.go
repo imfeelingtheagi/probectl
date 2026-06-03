@@ -28,6 +28,7 @@ import (
 	"github.com/imfeelingtheagi/netctl/internal/bus"
 	"github.com/imfeelingtheagi/netctl/internal/config"
 	"github.com/imfeelingtheagi/netctl/internal/control"
+	"github.com/imfeelingtheagi/netctl/internal/incident"
 	"github.com/imfeelingtheagi/netctl/internal/logging"
 	"github.com/imfeelingtheagi/netctl/internal/otel/otlp"
 	"github.com/imfeelingtheagi/netctl/internal/pipeline"
@@ -134,12 +135,28 @@ func run(cmd string) error {
 	// Run the HTTP API, the result-pipeline consumer, and (when configured) the
 	// agent gRPC transport together; a signal or a failure in any drains all.
 	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return control.New(cfg, log, db, db.Pool(), pathStore, nil).Run(gctx) })
+
+	// On-call/ITSM integration (S33): mirror incidents into PagerDuty/Opsgenie/
+	// Slack/Teams/ServiceNow/Jira and sync status back. OFF unless connectors are
+	// configured (an outbound connection to the operator's tooling). The dispatcher
+	// drives both the incident-opened observer (page + open a ticket) and the
+	// server's inbound status-sync webhook + resolve handler. nil when disabled.
+	dispatcher, notifyOn := control.BuildDispatcher(cfg, db.Pool(), log)
+
+	g.Go(func() error {
+		return control.New(cfg, log, db, db.Pool(), pathStore, nil).WithDispatcher(dispatcher).Run(gctx)
+	})
 	g.Go(func() error { return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).Run(gctx) })
 
 	// Incident correlation (S17): related signals across planes group into one
-	// incident. Alerts feed it via a sink; BGP events via a bus consumer.
-	correlator := control.BuildCorrelator(db.Pool(), cfg.IncidentWindow, log)
+	// incident. Alerts feed it via a sink; BGP events via a bus consumer. When
+	// on-call/ITSM is configured, an opened incident also pages + opens a ticket.
+	var corrOpts []incident.Option
+	if notifyOn {
+		corrOpts = append(corrOpts, incident.WithObserver(control.NotifyObserver(dispatcher, log)))
+		log.Info("on-call/itsm integration enabled", "connectors", len(cfg.NotifyConnectors))
+	}
+	correlator := control.BuildCorrelator(db.Pool(), cfg.IncidentWindow, log, corrOpts...)
 	g.Go(func() error {
 		return control.NewBGPIncidentConsumer(resultBus, correlator, log).Run(gctx)
 	})

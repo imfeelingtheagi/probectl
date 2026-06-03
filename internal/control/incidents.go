@@ -62,9 +62,11 @@ func (p pgIncidentStore) AppendSignal(ctx context.Context, tenant, incidentID st
 	return updated, err
 }
 
-// BuildCorrelator constructs the Postgres-backed incident correlator.
-func BuildCorrelator(pool *pgxpool.Pool, window time.Duration, log *slog.Logger) *incident.Correlator {
-	return incident.NewCorrelator(pgIncidentStore{pool: pool}, window, log)
+// BuildCorrelator constructs the Postgres-backed incident correlator. Optional
+// incident.Options (e.g. incident.WithObserver for S33 on-call/ITSM dispatch) are
+// passed through.
+func BuildCorrelator(pool *pgxpool.Pool, window time.Duration, log *slog.Logger, opts ...incident.Option) *incident.Correlator {
+	return incident.NewCorrelator(pgIncidentStore{pool: pool}, window, log, opts...)
 }
 
 // --- signal mappers (plane-native event → generic Signal) ---
@@ -229,6 +231,12 @@ func (s *Server) handlePatchIncident(w http.ResponseWriter, r *http.Request) err
 		return s.recordAudit(ctx, sc, r, "incident.resolve", id, nil)
 	}); err != nil {
 		return err
+	}
+	// Sync the resolution to on-call/ITSM connectors (S33). Source "api" matches no
+	// connector, so every linked system is resolved (the inbound path uses the
+	// provider name as the source to avoid echoing back to its origin).
+	if inc != nil && s.dispatcher != nil {
+		s.dispatcher.Resolved(r.Context(), *inc, "api")
 	}
 	writeJSON(w, http.StatusOK, inc)
 	return nil

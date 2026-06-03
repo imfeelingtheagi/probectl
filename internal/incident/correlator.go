@@ -24,22 +24,50 @@ type Store interface {
 	AppendSignal(ctx context.Context, tenant, incidentID string, sig Signal) (*Incident, error)
 }
 
+// Observer is notified of an incident lifecycle transition during Ingest: opened
+// is true when the signal opened a NEW incident, false when it was correlated
+// into an existing one. It runs synchronously after the store commits, so it sees
+// a persisted incident; it must not block for long (S33 wires incident → on-call
+// /ITSM here). A nil observer is a no-op.
+type Observer func(ctx context.Context, inc *Incident, opened bool)
+
+// Option configures a Correlator.
+type Option func(*Correlator)
+
+// WithObserver registers a lifecycle observer (S33: page on-call + open a ticket
+// when an incident opens).
+func WithObserver(o Observer) Option {
+	return func(c *Correlator) { c.observer = o }
+}
+
 // Correlator groups incoming signals into incidents.
 type Correlator struct {
-	store  Store
-	window time.Duration
-	log    *slog.Logger
+	store    Store
+	window   time.Duration
+	log      *slog.Logger
+	observer Observer
 }
 
 // NewCorrelator builds a correlator over store with the given time window.
-func NewCorrelator(store Store, window time.Duration, log *slog.Logger) *Correlator {
+func NewCorrelator(store Store, window time.Duration, log *slog.Logger, opts ...Option) *Correlator {
 	if window <= 0 {
 		window = DefaultWindow
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Correlator{store: store, window: window, log: log}
+	c := &Correlator{store: store, window: window, log: log}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// notify invokes the observer (if any), guarding against a nil incident.
+func (c *Correlator) notify(ctx context.Context, inc *Incident, opened bool) {
+	if c.observer != nil && inc != nil {
+		c.observer(ctx, inc, opened)
+	}
 }
 
 // Ingest correlates a signal into an existing open incident or opens a new one.
@@ -67,6 +95,7 @@ func (c *Correlator) Ingest(ctx context.Context, sig Signal) (*Incident, error) 
 			}
 			c.log.Info("signal correlated to incident",
 				"incident_id", inc.ID, "plane", sig.Plane, "kind", sig.Kind, "tenant_id", sig.TenantID)
+			c.notify(ctx, updated, false)
 			return updated, nil
 		}
 	}
@@ -81,6 +110,7 @@ func (c *Correlator) Ingest(ctx context.Context, sig Signal) (*Incident, error) 
 	}
 	c.log.Info("opened incident",
 		"incident_id", created.ID, "plane", sig.Plane, "kind", sig.Kind, "tenant_id", sig.TenantID)
+	c.notify(ctx, updated, true)
 	return updated, nil
 }
 

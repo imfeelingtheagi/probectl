@@ -167,12 +167,41 @@ type Config struct {
 	// candidate cause.
 	ChangeWebhooks          map[string]ChangeWebhook
 	ChangeCorrelationWindow time.Duration
+
+	// On-call + ITSM integration (S33): outbound connectors that mirror incidents
+	// into PagerDuty/Opsgenie/Slack/Teams/ServiceNow/Jira (per-tenant routing), and
+	// inbound webhook credentials that let ITSM/on-call sync status back. OFF unless
+	// configured (an outbound connection to the operator's tooling). The connector
+	// endpoint contains ':' (a URL), so connectors are pipe-delimited; inbound
+	// credentials carry no endpoint, so they mirror the change-webhook colon form.
+	NotifyConnectors []NotifyConnector
+	NotifyInbound    map[string]NotifyInbound
 }
 
 // ChangeWebhook is one configured inbound change-webhook credential (S29).
 type ChangeWebhook struct {
 	TenantID string
 	Provider string // "generic" | "github" | "gitlab"
+	Secret   string
+}
+
+// NotifyConnector is one configured outbound on-call/ITSM connector (S33). Secret
+// is the provider credential (PagerDuty routing key, Opsgenie API key, ServiceNow
+// "user:password", Jira "email:token"; unused for chat). Endpoint is the provider
+// API/webhook URL.
+type NotifyConnector struct {
+	TenantID string
+	Provider string // pagerduty|opsgenie|slack|teams|servicenow|jira
+	Endpoint string
+	Secret   string
+}
+
+// NotifyInbound is one configured inbound status-sync webhook credential (S33):
+// an ITSM/on-call system posts a resolve/ack to /ingest/itsm/{provider}/{id},
+// authenticated by Secret (HMAC or token) and bound to the tenant here.
+type NotifyInbound struct {
+	TenantID string
+	Provider string
 	Secret   string
 }
 
@@ -253,6 +282,9 @@ func Load(getenv func(string) string) (*Config, error) {
 
 		ChangeWebhooks:          l.changeWebhooks("NETCTL_CHANGE_WEBHOOKS"),
 		ChangeCorrelationWindow: l.dur("NETCTL_CHANGE_CORRELATION_WINDOW", 24*time.Hour),
+
+		NotifyConnectors: l.notifyConnectors("NETCTL_NOTIFY_CONNECTORS"),
+		NotifyInbound:    l.notifyInbound("NETCTL_NOTIFY_INBOUND"),
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
@@ -485,6 +517,79 @@ func (l *loader) changeWebhooks(key string) map[string]ChangeWebhook {
 			continue
 		}
 		out[id] = ChangeWebhook{TenantID: tenant, Provider: provider, Secret: secret}
+	}
+	return out
+}
+
+// knownNotifyProviders is the supported on-call/ITSM connector set (S33).
+var knownNotifyProviders = map[string]bool{
+	"pagerduty": true, "opsgenie": true, "slack": true,
+	"teams": true, "servicenow": true, "jira": true,
+}
+
+// notifyConnectors parses "tenant|provider|endpoint|secret,..." into outbound
+// connectors (S33). Fields are pipe-delimited because the endpoint is a URL (it
+// contains ':'); entries are comma-separated. The secret is the last field and may
+// contain '|' but not ',' — use URL-safe tokens.
+func (l *loader) notifyConnectors(key string) []NotifyConnector {
+	v := l.getenv(key)
+	if v == "" {
+		return nil
+	}
+	var out []NotifyConnector
+	for _, entry := range strings.Split(v, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		f := strings.SplitN(entry, "|", 4)
+		if len(f) != 4 {
+			l.errf("%s: %q must be tenant|provider|endpoint|secret", key, entry)
+			continue
+		}
+		tenant, provider, endpoint, secret := strings.TrimSpace(f[0]), strings.ToLower(strings.TrimSpace(f[1])), strings.TrimSpace(f[2]), f[3]
+		if tenant == "" || provider == "" || endpoint == "" {
+			l.errf("%s: %q has an empty field (tenant|provider|endpoint|secret)", key, entry)
+			continue
+		}
+		if !knownNotifyProviders[provider] {
+			l.errf("%s: unknown provider %q", key, provider)
+			continue
+		}
+		out = append(out, NotifyConnector{TenantID: tenant, Provider: provider, Endpoint: endpoint, Secret: secret})
+	}
+	return out
+}
+
+// notifyInbound parses "id:tenant:provider:secret,..." into inbound status-sync
+// credentials (S33). No endpoint (the URL is netctl's own), so it mirrors the
+// change-webhook colon form: the secret is last and may contain ':' but not ','.
+func (l *loader) notifyInbound(key string) map[string]NotifyInbound {
+	v := l.getenv(key)
+	if v == "" {
+		return nil
+	}
+	out := map[string]NotifyInbound{}
+	for _, entry := range strings.Split(v, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		f := strings.SplitN(entry, ":", 4)
+		if len(f) != 4 {
+			l.errf("%s: %q must be id:tenant:provider:secret", key, entry)
+			continue
+		}
+		id, tenant, provider, secret := strings.TrimSpace(f[0]), strings.TrimSpace(f[1]), strings.ToLower(strings.TrimSpace(f[2])), f[3]
+		if id == "" || tenant == "" || provider == "" || secret == "" {
+			l.errf("%s: %q has an empty field (id:tenant:provider:secret)", key, entry)
+			continue
+		}
+		if !knownNotifyProviders[provider] {
+			l.errf("%s: unknown provider %q", key, provider)
+			continue
+		}
+		out[id] = NotifyInbound{TenantID: tenant, Provider: provider, Secret: secret}
 	}
 	return out
 }

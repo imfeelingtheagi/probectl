@@ -723,6 +723,32 @@ forwarding resumes from a **durable per-tenant cursor**, and delivery **retries
 without dropping** under a SIEM outage. Exported audit events are **PII/secret
 redacted** (built-in denylist + `NETCTL_SIEM_REDACT_KEYS`).
 
+### On-call + ITSM integration (S33)
+
+Mirror incidents into operational tooling: page on-call (PagerDuty/Opsgenie), post
+to chat (Slack/Teams), and open + **bidirectionally sync** tickets (ServiceNow/Jira).
+netctl is the forwarder, not the system of record — it never auto-blocks anything.
+See [`oncall-itsm.md`](oncall-itsm.md) for the connector matrix, mapping, and the
+inbound webhook contract.
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `NETCTL_NOTIFY_CONNECTORS` | (none) | outbound connectors, comma-separated, each `tenant\|provider\|endpoint\|secret` (pipe-delimited because the endpoint is a URL). `provider` ∈ `pagerduty`/`opsgenie`/`slack`/`teams`/`servicenow`/`jira`. `secret` is the provider credential (PagerDuty routing key, Opsgenie API key, ServiceNow `user:password`, Jira `email:token`; unused for chat). |
+| `NETCTL_NOTIFY_INBOUND` | (none) | inbound status-sync credentials, comma-separated, each `id:tenant:provider:secret` (the `id` is the URL selector for `POST /ingest/itsm/{provider}/{id}`; `secret` verifies the delivery). |
+
+**Off by default** (each connector is an outbound connection to the operator's
+tooling). Paging + ticket creation are **idempotent** (an incident opens at most
+once per connector — a retry/restart never double-pages), status sync is
+**bidirectional** with **loop protection** (an inbound resolve from one system is
+never echoed back to it), and routing is **per-tenant** (a connector only fires for
+its own tenant). Endpoint specifics: a Slack/Teams endpoint is the incoming-webhook
+URL; a Jira endpoint carries the project (and optional resolve transition) as query
+params, e.g. `…/rest/api/2/issue?project=OPS&resolve_transition=31`; a ServiceNow
+endpoint is the `…/api/now/table/incident` URL. Inbound deliveries must include
+`X-Netctl-Signature: sha256=<hmac>` or `X-Netctl-Token: <secret>` over TLS; an
+unsigned or forged delivery is rejected (`401`). Secrets are runtime config —
+inject them from a secret manager, never commit them.
+
 ## Local dev stack (`deploy/compose/dev.yml`)
 
 Started with `make compose-up`. **Local, non-production** defaults — plaintext

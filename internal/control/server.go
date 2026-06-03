@@ -14,6 +14,7 @@ import (
 	"github.com/imfeelingtheagi/netctl/internal/auth"
 	"github.com/imfeelingtheagi/netctl/internal/config"
 	"github.com/imfeelingtheagi/netctl/internal/crypto"
+	"github.com/imfeelingtheagi/netctl/internal/notify"
 	"github.com/imfeelingtheagi/netctl/internal/path"
 	"github.com/imfeelingtheagi/netctl/internal/store"
 	"github.com/imfeelingtheagi/netctl/internal/store/pathstore"
@@ -50,6 +51,19 @@ type Server struct {
 	// ABAC policy cache (S31). nil when pool is nil (operational-only tests). The
 	// per-request deny-override check (requirePermission) reads tenant policies here.
 	abac *abacCache
+
+	// On-call/ITSM dispatcher (S33). nil unless connectors are configured; set via
+	// WithDispatcher so the inbound status-sync webhook + the resolve handler can
+	// sync the operator's tooling.
+	dispatcher *notify.Dispatcher
+}
+
+// WithDispatcher attaches the on-call/ITSM dispatcher (S33) so the inbound
+// status-sync webhook and the incident-resolve handler can mirror the operator's
+// tooling. nil is a no-op (the feature stays off). Returns the server for chaining.
+func (s *Server) WithDispatcher(d *notify.Dispatcher) *Server {
+	s.dispatcher = d
+	return s
 }
 
 // New builds a Server. pinger backs the readiness probe and pool backs the
@@ -116,6 +130,11 @@ func (s *Server) routes() http.Handler {
 	// the event to the credential's tenant (never the payload). Mounted off /v1 (an
 	// ingest surface, like the OTLP receiver), so it bypasses the session-RBAC chain.
 	mux.Handle("POST /ingest/changes/{provider}/{id}", apiHandler(s.handleChangeWebhook))
+
+	// ITSM/on-call status-sync ingest (S33) — same model as the change webhook: it
+	// verifies the connector's HMAC/token signature, binds to the credential's
+	// tenant, and resolves the linked incident (then loop-protected cross-sync).
+	mux.Handle("POST /ingest/itsm/{provider}/{id}", apiHandler(s.handleITSMWebhook))
 
 	// SCIM 2.0 (S31) — an IdP provisioning surface mounted off /v1; each request is
 	// authenticated by a per-tenant SCIM bearer token (pre-tenant, like sessions),
