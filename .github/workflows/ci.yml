@@ -84,6 +84,26 @@ jobs:
       - run: pip install -e './analyzer[dev]'
       - run: make test-python
 
+  browser-worker:
+    name: browser-worker
+    # S36, F15: the Playwright browser-synthetic worker. Runs INSIDE the official
+    # Playwright image (Chromium + deps preinstalled), so the smoke test exercises a
+    # real scripted login against a local app — success timings/waterfall/DOM and a
+    # failure screenshot. The Go side (internal/browser) is covered by the unit job.
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.49.1-noble
+    defaults:
+      run:
+        working-directory: browser-worker
+    steps:
+      - uses: actions/checkout@v4
+      - name: install deps
+        run: npm install --no-audit --no-fund
+      - name: syntax check
+        run: npm run check
+      - name: real-browser smoke (scripted login vs a local app)
+        run: npm test
+
   openapi-gate:
     name: openapi-gate
     # S19, F23: no undocumented routes ship at a GA milestone. Validates the spec

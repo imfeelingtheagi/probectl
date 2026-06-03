@@ -55,6 +55,8 @@ awk -v mod="${MODULE}" '
     floor["internal/siem"]           = 80
     floor["internal/notify"]         = 72
     floor["internal/lifecycle"]      = 80
+    floor["internal/browser"]        = 75
+    floor["internal/objectstore"]    = 78
     # The pooled driver (pooled.go) is exercised by the perf-smoke integration job
     # (needs Postgres) and skips in this service-free gate, so the floor covers the
     # no-DB drivers (metrics/ingest/baseline).
