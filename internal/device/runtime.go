@@ -31,7 +31,7 @@ type Runtime struct {
 	stats      Stats
 
 	// dialSNMP/gnmiDialOpts are test seams (canned SNMP conns, bufconn gNMI).
-	dialSNMP func(DeviceConfig, Credential) (snmpConn, error)
+	dialSNMP func(Target, Credential) (snmpConn, error)
 }
 
 // New validates cfg and builds the runtime. creds defaults to the env source
@@ -123,7 +123,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 
 // pollLoop polls one SNMP device on its interval: dial -> poll -> emit ->
 // correlate, redialing on every cycle (devices reboot; sessions go stale).
-func (r *Runtime) pollLoop(ctx context.Context, dev DeviceConfig, cred Credential) {
+func (r *Runtime) pollLoop(ctx context.Context, dev Target, cred Credential) {
 	ticker := time.NewTicker(dev.Interval)
 	defer ticker.Stop()
 	for {
@@ -137,7 +137,7 @@ func (r *Runtime) pollLoop(ctx context.Context, dev DeviceConfig, cred Credentia
 }
 
 // pollOnce performs one dial+poll cycle.
-func (r *Runtime) pollOnce(ctx context.Context, dev DeviceConfig, cred Credential) {
+func (r *Runtime) pollOnce(ctx context.Context, dev Target, cred Credential) {
 	r.stats.Polls.Add(1)
 	conn, err := r.dialSNMP(dev, cred)
 	if err != nil {

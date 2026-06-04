@@ -74,7 +74,7 @@ func (c gosnmpConn) Close() error                                   { return c.g
 // algorithms, like a TLS handshake's crypto — the internal/crypto seam
 // (guardrail 3) governs probectl's own cryptography, and the FIPS posture for
 // SNMPv3 is documented in docs/device-telemetry.md).
-func dialSNMP(dev DeviceConfig, cred Credential) (snmpConn, error) {
+func dialSNMP(dev Target, cred Credential) (snmpConn, error) {
 	g := &gosnmp.GoSNMP{
 		Target:  dev.Address,
 		Port:    dev.Port,
@@ -141,7 +141,7 @@ func dialSNMP(dev DeviceConfig, cred Credential) (snmpConn, error) {
 // pollSNMP performs one poll: system group, IF-MIB tables, address table,
 // HOST-RESOURCES CPU/memory, optional sensors. Every table degrades
 // independently — a vendor that lacks a MIB simply yields fewer metrics.
-func pollSNMP(conn snmpConn, dev DeviceConfig, tenant, agent string, now time.Time) ([]Metric, Inventory, error) {
+func pollSNMP(conn snmpConn, dev Target, tenant, agent string, now time.Time) ([]Metric, Inventory, error) {
 	inv := Inventory{Device: dev.Address, Interfaces: map[uint32]Interface{}}
 	base := Metric{TenantID: tenant, AgentID: agent, Device: dev.Address, Source: SourceSNMP, At: now}
 	var out []Metric

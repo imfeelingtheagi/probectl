@@ -115,7 +115,7 @@ func TestGNMICollectorAgainstMockTarget(t *testing.T) {
 	defer srv.Stop()
 
 	em := &captureEmitter{}
-	dev := DeviceConfig{
+	dev := Target{
 		Address: "192.0.2.50", Port: 9339, Transport: TransportGNMI, Credential: "lab",
 		GNMI: GNMIConfig{
 			Paths:          []string{"/interfaces/interface/state/counters", "/interfaces/interface/state/oper-status"},

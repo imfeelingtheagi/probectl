@@ -39,7 +39,7 @@ var ocLeafMetrics = map[string]struct {
 // default), subscribe SAMPLE on the configured paths, normalize notifications,
 // and reconnect with backoff until the context ends.
 type gnmiCollector struct {
-	dev    DeviceConfig
+	dev    Target
 	cred   Credential
 	tenant string
 	agent  string

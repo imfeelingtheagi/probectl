@@ -92,8 +92,8 @@ func TestCorrelatorUpdateReplaces(t *testing.T) {
 }
 
 // stubConnDialer returns a canned conn for runtime tests.
-func stubConnDialer(conn snmpConn, err error) func(DeviceConfig, Credential) (snmpConn, error) {
-	return func(DeviceConfig, Credential) (snmpConn, error) { return conn, err }
+func stubConnDialer(conn snmpConn, err error) func(Target, Credential) (snmpConn, error) {
+	return func(Target, Credential) (snmpConn, error) { return conn, err }
 }
 
 type mapCreds map[string]Credential
@@ -109,7 +109,7 @@ func (m mapCreds) Resolve(name string) (Credential, error) {
 // TestRuntimePollOnce drives one SNMP cycle end to end: dial seam -> poll ->
 // emit -> correlator update, plus the error counters.
 func TestRuntimePollOnce(t *testing.T) {
-	cfg := &Config{TenantID: "t-a", AgentID: "agent-1", Devices: []DeviceConfig{{
+	cfg := &Config{TenantID: "t-a", AgentID: "agent-1", Devices: []Target{{
 		Address: "192.0.2.1", Transport: TransportSNMPv2c, Credential: "ro",
 	}}}
 	em := &captureEmitter{}
@@ -146,7 +146,7 @@ func TestRuntimePollOnce(t *testing.T) {
 // TestRuntimeUnknownCredentialFailsClosed: a typo'd credential name aborts Run
 // before any polling starts.
 func TestRuntimeUnknownCredentialFailsClosed(t *testing.T) {
-	cfg := &Config{TenantID: "t", Devices: []DeviceConfig{{
+	cfg := &Config{TenantID: "t", Devices: []Target{{
 		Address: "192.0.2.1", Transport: TransportSNMPv2c, Credential: "typo",
 	}}}
 	rt, err := New(cfg, &captureEmitter{}, mapCreds{}, nil)
@@ -204,7 +204,7 @@ func TestBusEmitterTenantTaggedBatch(t *testing.T) {
 
 // TestConfigValidate covers transport defaults + the failure modes.
 func TestConfigValidate(t *testing.T) {
-	cfg := &Config{TenantID: "t", Devices: []DeviceConfig{
+	cfg := &Config{TenantID: "t", Devices: []Target{
 		{Address: "a", Transport: TransportSNMPv2c, Credential: "c"},
 		{Address: "b", Transport: TransportGNMI, Credential: "c"},
 	}}
@@ -219,11 +219,11 @@ func TestConfigValidate(t *testing.T) {
 	}
 
 	for name, bad := range map[string]*Config{
-		"no tenant":     {Devices: []DeviceConfig{{Address: "a", Transport: TransportSNMPv2c, Credential: "c"}}},
+		"no tenant":     {Devices: []Target{{Address: "a", Transport: TransportSNMPv2c, Credential: "c"}}},
 		"no devices":    {TenantID: "t"},
-		"no address":    {TenantID: "t", Devices: []DeviceConfig{{Transport: TransportSNMPv2c, Credential: "c"}}},
-		"bad transport": {TenantID: "t", Devices: []DeviceConfig{{Address: "a", Transport: "telnet", Credential: "c"}}},
-		"no credential": {TenantID: "t", Devices: []DeviceConfig{{Address: "a", Transport: TransportSNMPv2c}}},
+		"no address":    {TenantID: "t", Devices: []Target{{Transport: TransportSNMPv2c, Credential: "c"}}},
+		"bad transport": {TenantID: "t", Devices: []Target{{Address: "a", Transport: "telnet", Credential: "c"}}},
+		"no credential": {TenantID: "t", Devices: []Target{{Address: "a", Transport: TransportSNMPv2c}}},
 	} {
 		if err := bad.Validate(); err == nil {
 			t.Errorf("%s: expected validation error", name)

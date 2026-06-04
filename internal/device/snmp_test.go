@@ -133,7 +133,7 @@ func find(t *testing.T, ms []Metric, name, ifName string) Metric {
 // inventory used for correlation.
 func TestPollSNMPHealthyDevice(t *testing.T) {
 	conn := &ipWalkConn{fakeConn: healthyConn(), ipRows: map[string]uint32{"10.0.0.1": 1}}
-	dev := DeviceConfig{Address: "192.0.2.1", Transport: TransportSNMPv2c, Sensors: true}
+	dev := Target{Address: "192.0.2.1", Transport: TransportSNMPv2c, Sensors: true}
 
 	ms, inv, err := pollSNMP(conn, dev, "t-a", "agent-1", pollTime)
 	if err != nil {
@@ -203,7 +203,7 @@ func TestPollSNMPGracefulDegradation(t *testing.T) {
 			oidIfOperStatus: {7: pdu(1)},
 		},
 	}
-	ms, inv, err := pollSNMP(conn, DeviceConfig{Address: "192.0.2.9", Transport: TransportSNMPv2c}, "t-a", "a", pollTime)
+	ms, inv, err := pollSNMP(conn, Target{Address: "192.0.2.9", Transport: TransportSNMPv2c}, "t-a", "a", pollTime)
 	if err != nil {
 		t.Fatalf("poll must degrade, not fail: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestPollSNMPGracefulDegradation(t *testing.T) {
 // auth check), and the runtime counts it.
 func TestPollSNMPUnreachable(t *testing.T) {
 	conn := &fakeConn{getErr: errors.New("timeout")}
-	if _, _, err := pollSNMP(conn, DeviceConfig{Address: "x"}, "t", "a", pollTime); err == nil {
+	if _, _, err := pollSNMP(conn, Target{Address: "x"}, "t", "a", pollTime); err == nil {
 		t.Fatal("expected error for unreachable device")
 	}
 }
@@ -232,17 +232,17 @@ func TestPollSNMPUnreachable(t *testing.T) {
 // TestDialSNMPValidation: credential/transport mismatches fail before any
 // packet leaves (fail closed, guardrail 12).
 func TestDialSNMPValidation(t *testing.T) {
-	if _, err := dialSNMP(DeviceConfig{Address: "192.0.2.1", Transport: TransportSNMPv2c}, Credential{}); err == nil {
+	if _, err := dialSNMP(Target{Address: "192.0.2.1", Transport: TransportSNMPv2c}, Credential{}); err == nil {
 		t.Error("v2c without community must fail")
 	}
-	if _, err := dialSNMP(DeviceConfig{Address: "192.0.2.1", Transport: TransportSNMPv3}, Credential{}); err == nil {
+	if _, err := dialSNMP(Target{Address: "192.0.2.1", Transport: TransportSNMPv3}, Credential{}); err == nil {
 		t.Error("v3 without username must fail")
 	}
-	if _, err := dialSNMP(DeviceConfig{Address: "192.0.2.1", Transport: TransportSNMPv3},
+	if _, err := dialSNMP(Target{Address: "192.0.2.1", Transport: TransportSNMPv3},
 		Credential{Username: "u", AuthPass: "p", AuthProto: "rot13"}); err == nil {
 		t.Error("unknown auth proto must fail")
 	}
-	if _, err := dialSNMP(DeviceConfig{Address: "192.0.2.1", Transport: TransportGNMI}, Credential{}); err == nil {
+	if _, err := dialSNMP(Target{Address: "192.0.2.1", Transport: TransportGNMI}, Credential{}); err == nil {
 		t.Error("gnmi transport must be rejected by the SNMP dialer")
 	}
 }
@@ -250,7 +250,7 @@ func TestDialSNMPValidation(t *testing.T) {
 // TestCredentialRedaction: secrets never appear via %v/%s/%#v (guardrail 6).
 func TestCredentialRedaction(t *testing.T) {
 	c := Credential{Community: "sup3rsecret", AuthPass: "hunter2", PrivPass: "hunter3", Password: "pw"}
-	for _, s := range []string{fmt.Sprintf("%v", c), fmt.Sprintf("%s", c), fmt.Sprintf("%#v", c)} {
+	for _, s := range []string{fmt.Sprintf("%v", c), c.String(), fmt.Sprintf("%#v", c)} {
 		if strings.Contains(s, "hunter") || strings.Contains(s, "sup3rsecret") || strings.Contains(s, "pw") {
 			t.Fatalf("credential leaked: %s", s)
 		}
@@ -292,7 +292,7 @@ func TestSNMPIntegration(t *testing.T) {
 		t.Skip("PROBECTL_TEST_SNMP_TARGET not set")
 	}
 	community := getenvDefault("PROBECTL_TEST_SNMP_COMMUNITY", "public")
-	dev := DeviceConfig{Address: target, Port: 161, Transport: TransportSNMPv2c, Interval: time.Minute, Credential: "it"}
+	dev := Target{Address: target, Port: 161, Transport: TransportSNMPv2c, Interval: time.Minute, Credential: "it"}
 	conn, err := dialSNMP(dev, Credential{Community: community})
 	if err != nil {
 		t.Fatalf("dial: %v", err)

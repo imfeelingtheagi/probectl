@@ -33,8 +33,8 @@ type GNMIConfig struct {
 	Plaintext bool `yaml:"plaintext"`
 }
 
-// DeviceConfig is one polled/subscribed device.
-type DeviceConfig struct {
+// Target is one polled/subscribed device (the per-device config entry).
+type Target struct {
 	Address   string `yaml:"address"`
 	Port      uint16 `yaml:"port"`      // default: 161 (snmp) / 9339 (gnmi)
 	Transport string `yaml:"transport"` // snmpv2c | snmpv3 | gnmi
@@ -62,7 +62,7 @@ type Config struct {
 
 	Bus BusConfig `yaml:"bus"`
 
-	Devices []DeviceConfig `yaml:"devices"`
+	Devices []Target `yaml:"devices"`
 }
 
 // Default returns the built-in defaults (memory bus, hostname agent id).
@@ -116,7 +116,7 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	// Single-device quick start: PROBECTL_DEVICE_TARGET=<address>, with
 	// transport/credential/interval companions.
 	if target := getenv("PROBECTL_DEVICE_TARGET"); target != "" {
-		dev := DeviceConfig{
+		dev := Target{
 			Address:    target,
 			Transport:  strings.ToLower(getenv("PROBECTL_DEVICE_TRANSPORT")),
 			Credential: getenv("PROBECTL_DEVICE_CREDENTIAL"),
