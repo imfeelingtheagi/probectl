@@ -597,51 +597,68 @@ func (x *FlowBatch) GetL7Calls() []*L7Call {
 var File_probectl_ebpf_v1_ebpf_proto protoreflect.FileDescriptor
 
 const file_probectl_ebpf_v1_ebpf_proto_rawDesc = "" +
-	"\n\x1bprobectl/ebpf/v1/ebpf.proto\x12\x10probectl.ebpf.v1\"\xd1\x04\n" +
-	"\x04Flow\x12\x1b\n\ttenant_id\x18\x01 \x01(\tR\x08tenantId\x12\x19\n" +
-	"\x08agent_id\x18\x02 \x01(\tR\x07agentId\x12\x12\n\x04host\x18\x03 " +
-	"\x01(\tR\x04host\x121\n\x15observed_at_unix_nano\x18\x04 \x01(\x03R" +
-	"\x12observedAtUnixNano\x12%\n\x0esource_address\x18\x05 \x01(\tR\rsour" +
-	"ceAddress\x12\x1f\n\x0bsource_port\x18\x06 \x01(\rR\nsourcePort\x12/\n" +
-	"\x13destination_address\x18\x07 \x01(\tR\x12destinationAddress\x12)\n" +
-	"\x10destination_port\x18\x08 \x01(\rR\x0fdestinationPort\x12+\n\x11net" +
-	"work_transport\x18\t \x01(\tR\x10networkTransport\x12!\n\x0cnetwork_ty" +
-	"pe\x18\n \x01(\tR\x0bnetworkType\x12\x10\n\x03pid\x18\x0b \x01(\rR\x03" +
-	"pid\x12!\n\x0cprocess_name\x18\x0c \x01(\tR\x0bprocessName\x12!\n\x0cc" +
-	"ontainer_id\x18\r \x01(\tR\x0bcontainerId\x12\x1a\n\x08workload\x18" +
-	"\x0e \x01(\tR\x08workload\x12\x14\n\x05bytes\x18\x0f \x01(\x04R\x05byt" +
-	"es\x12\x18\n\x07packets\x18\x10 \x01(\x04R\x07packets\x12\x1c\n\tdirec" +
-	"tion\x18\x11 \x01(\tR\tdirection\x12\x14\n\x05state\x18\x12 \x01(\tR" +
-	"\x05state\"\xa5\x04\n\x0bServiceEdge\x12\x1b\n\ttenant_id\x18\x01 \x01" +
-	"(\tR\x08tenantId\x12\x16\n\x06source\x18\x02 \x01(\tR\x06source\x12 \n" +
-	"\x0bdestination\x18\x03 \x01(\tR\x0bdestination\x12)\n\x10destination_" +
-	"port\x18\x04 \x01(\rR\x0fdestinationPort\x12+\n\x11network_transport" +
-	"\x18\x05 \x01(\tR\x10networkTransport\x12 \n\x0bconnections\x18\x06 " +
-	"\x01(\x04R\x0bconnections\x12\x14\n\x05bytes\x18\x07 \x01(\x04R\x05byt" +
-	"es\x12\x18\n\x07packets\x18\x08 \x01(\x04R\x07packets\x12/\n\x14first_" +
-	"seen_unix_nano\x18\t \x01(\x03R\x11firstSeenUnixNano\x12-\n\x13last_se" +
-	"en_unix_nano\x18\n \x01(\x03R\x10lastSeenUnixNano\x12\x1f\n\x0bl7_prot" +
-	"ocol\x18\x0b \x01(\tR\nl7Protocol\x12\x19\n\x08l7_calls\x18\x0c \x01(" +
-	"\x04R\x07l7Calls\x12\x1b\n\tl7_errors\x18\r \x01(\x04R\x08l7Errors\x12" +
-	"-\n\x13l7_latency_sum_nano\x18\x0e \x01(\x03R\x10l7LatencySumNano\x12-" +
-	"\n\x13l7_latency_max_nano\x18\x0f \x01(\x03R\x10l7LatencyMaxNano\"\xd8" +
-	"\x03\n\x06L7Call\x12\x1b\n\ttenant_id\x18\x01 \x01(\tR\x08tenantId\x12" +
-	"\x19\n\x08agent_id\x18\x02 \x01(\tR\x07agentId\x12\x16\n\x06source\x18" +
-	"\x03 \x01(\tR\x06source\x12 \n\x0bdestination\x18\x04 \x01(\tR\x0bdest" +
-	"ination\x12)\n\x10destination_port\x18\x05 \x01(\rR\x0fdestinationPort" +
-	"\x12\x1a\n\x08protocol\x18\x06 \x01(\tR\x08protocol\x12\x16\n\x06metho" +
-	"d\x18\x07 \x01(\tR\x06method\x12\x1a\n\x08resource\x18\x08 \x01(\tR" +
-	"\x08resource\x12\x16\n\x06status\x18\t \x01(\tR\x06status\x12\x14\n" +
-	"\x05error\x18\n \x01(\x08R\x05error\x12\x1c\n\tencrypted\x18\x0b \x01(" +
-	"\x08R\tencrypted\x12&\n\x0fstart_unix_nano\x18\x0c \x01(\x03R\rstartUn" +
-	"ixNano\x12!\n\x0clatency_nano\x18\r \x01(\x03R\x0blatencyNano\x12#\n\r" +
-	"request_bytes\x18\x0e \x01(\x04R\x0crequestBytes\x12%\n\x0eresponse_by" +
-	"tes\x18\x0f \x01(\x04R\rresponseBytes\"\xa3\x01\n\tFlowBatch\x12,\n" +
-	"\x05flows\x18\x01 \x03(\x0b2\x16.probectl.ebpf.v1.FlowR\x05flows\x123" +
-	"\n\x05edges\x18\x02 \x03(\x0b2\x1d.probectl.ebpf.v1.ServiceEdgeR\x05ed" +
-	"ges\x123\n\x08l7_calls\x18\x03 \x03(\x0b2\x18.probectl.ebpf.v1.L7CallR" +
-	"\x07l7CallsBJZHgithub.com/imfeelingtheagi/probectl/internal/gen/probec" +
-	"tl/ebpf/v1;ebpfv1b\x06proto3"
+	"\n" +
+	"\x1bprobectl/ebpf/v1/ebpf.proto\x12\x10probectl.ebpf.v1\"\xd1\x04\n" +
+	"\x04Flow\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x12\n" +
+	"\x04host\x18\x03 \x01(\tR\x04host\x121\n" +
+	"\x15observed_at_unix_nano\x18\x04 \x01(\x03R\x12observedAtUnixNano\x12%\n" +
+	"\x0esource_address\x18\x05 \x01(\tR\rsourceAddress\x12\x1f\n" +
+	"\vsource_port\x18\x06 \x01(\rR\n" +
+	"sourcePort\x12/\n" +
+	"\x13destination_address\x18\a \x01(\tR\x12destinationAddress\x12)\n" +
+	"\x10destination_port\x18\b \x01(\rR\x0fdestinationPort\x12+\n" +
+	"\x11network_transport\x18\t \x01(\tR\x10networkTransport\x12!\n" +
+	"\fnetwork_type\x18\n" +
+	" \x01(\tR\vnetworkType\x12\x10\n" +
+	"\x03pid\x18\v \x01(\rR\x03pid\x12!\n" +
+	"\fprocess_name\x18\f \x01(\tR\vprocessName\x12!\n" +
+	"\fcontainer_id\x18\r \x01(\tR\vcontainerId\x12\x1a\n" +
+	"\bworkload\x18\x0e \x01(\tR\bworkload\x12\x14\n" +
+	"\x05bytes\x18\x0f \x01(\x04R\x05bytes\x12\x18\n" +
+	"\apackets\x18\x10 \x01(\x04R\apackets\x12\x1c\n" +
+	"\tdirection\x18\x11 \x01(\tR\tdirection\x12\x14\n" +
+	"\x05state\x18\x12 \x01(\tR\x05state\"\xa5\x04\n" +
+	"\vServiceEdge\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12 \n" +
+	"\vdestination\x18\x03 \x01(\tR\vdestination\x12)\n" +
+	"\x10destination_port\x18\x04 \x01(\rR\x0fdestinationPort\x12+\n" +
+	"\x11network_transport\x18\x05 \x01(\tR\x10networkTransport\x12 \n" +
+	"\vconnections\x18\x06 \x01(\x04R\vconnections\x12\x14\n" +
+	"\x05bytes\x18\a \x01(\x04R\x05bytes\x12\x18\n" +
+	"\apackets\x18\b \x01(\x04R\apackets\x12/\n" +
+	"\x14first_seen_unix_nano\x18\t \x01(\x03R\x11firstSeenUnixNano\x12-\n" +
+	"\x13last_seen_unix_nano\x18\n" +
+	" \x01(\x03R\x10lastSeenUnixNano\x12\x1f\n" +
+	"\vl7_protocol\x18\v \x01(\tR\n" +
+	"l7Protocol\x12\x19\n" +
+	"\bl7_calls\x18\f \x01(\x04R\al7Calls\x12\x1b\n" +
+	"\tl7_errors\x18\r \x01(\x04R\bl7Errors\x12-\n" +
+	"\x13l7_latency_sum_nano\x18\x0e \x01(\x03R\x10l7LatencySumNano\x12-\n" +
+	"\x13l7_latency_max_nano\x18\x0f \x01(\x03R\x10l7LatencyMaxNano\"\xd8\x03\n" +
+	"\x06L7Call\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\x12 \n" +
+	"\vdestination\x18\x04 \x01(\tR\vdestination\x12)\n" +
+	"\x10destination_port\x18\x05 \x01(\rR\x0fdestinationPort\x12\x1a\n" +
+	"\bprotocol\x18\x06 \x01(\tR\bprotocol\x12\x16\n" +
+	"\x06method\x18\a \x01(\tR\x06method\x12\x1a\n" +
+	"\bresource\x18\b \x01(\tR\bresource\x12\x16\n" +
+	"\x06status\x18\t \x01(\tR\x06status\x12\x14\n" +
+	"\x05error\x18\n" +
+	" \x01(\bR\x05error\x12\x1c\n" +
+	"\tencrypted\x18\v \x01(\bR\tencrypted\x12&\n" +
+	"\x0fstart_unix_nano\x18\f \x01(\x03R\rstartUnixNano\x12!\n" +
+	"\flatency_nano\x18\r \x01(\x03R\vlatencyNano\x12#\n" +
+	"\rrequest_bytes\x18\x0e \x01(\x04R\frequestBytes\x12%\n" +
+	"\x0eresponse_bytes\x18\x0f \x01(\x04R\rresponseBytes\"\xa3\x01\n" +
+	"\tFlowBatch\x12,\n" +
+	"\x05flows\x18\x01 \x03(\v2\x16.probectl.ebpf.v1.FlowR\x05flows\x123\n" +
+	"\x05edges\x18\x02 \x03(\v2\x1d.probectl.ebpf.v1.ServiceEdgeR\x05edges\x123\n" +
+	"\bl7_calls\x18\x03 \x03(\v2\x18.probectl.ebpf.v1.L7CallR\al7CallsBJZHgithub.com/imfeelingtheagi/probectl/internal/gen/probectl/ebpf/v1;ebpfv1b\x06proto3"
 
 var (
 	file_probectl_ebpf_v1_ebpf_proto_rawDescOnce sync.Once

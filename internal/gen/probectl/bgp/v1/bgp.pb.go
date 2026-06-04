@@ -418,33 +418,50 @@ func (x *BGPEventBatch) GetEvents() []*BGPEvent {
 var File_probectl_bgp_v1_bgp_proto protoreflect.FileDescriptor
 
 const file_probectl_bgp_v1_bgp_proto_rawDesc = "" +
-	"\n\x19probectl/bgp/v1/bgp.proto\x12\x0fprobectl.bgp.v1\"\xef\x04\n\x08" +
-	"BGPEvent\x12\x1b\n\ttenant_id\x18\x01 \x01(\tR\x08tenantId\x129\n\neve" +
-	"nt_type\x18\x02 \x01(\x0e2\x1a.probectl.bgp.v1.EventTypeR\teventType" +
-	"\x125\n\x08severity\x18\x03 \x01(\x0e2\x19.probectl.bgp.v1.SeverityR" +
-	"\x08severity\x12\x1e\n\nconfidence\x18\x04 \x01(\x01R\nconfidence\x12" +
-	"\x16\n\x06prefix\x18\x05 \x01(\tR\x06prefix\x12$\n\x0enew_origin_asn" +
-	"\x18\x06 \x01(\rR\x0cnewOriginAsn\x12$\n\x0eold_origin_asn\x18\x07 " +
-	"\x01(\rR\x0coldOriginAsn\x12\x1e\n\x0bnew_as_path\x18\x08 \x03(\rR\tne" +
-	"wAsPath\x12\x1e\n\x0bold_as_path\x18\t \x03(\rR\toldAsPath\x12)\n\x10e" +
-	"xpected_origins\x18\n \x03(\rR\x0fexpectedOrigins\x12<\n\x0brpki_statu" +
-	"s\x18\x0b \x01(\x0e2\x1b.probectl.bgp.v1.RpkiStatusR\nrpkiStatus\x12" +
-	"\x1c\n\tcollector\x18\x0c \x01(\tR\tcollector\x12\x19\n\x08peer_asn" +
-	"\x18\r \x01(\rR\x07peerAsn\x12!\n\x0cpeer_address\x18\x0e \x01(\tR\x0b" +
-	"peerAddress\x12\x18\n\x07message\x18\x0f \x01(\tR\x07message\x121\n" +
-	"\x15detected_at_unix_nano\x18\x10 \x01(\x03R\x12detectedAtUnixNano\"B" +
-	"\n\rBGPEventBatch\x121\n\x06events\x18\x01 \x03(\x0b2\x19.probectl.bgp" +
-	".v1.BGPEventR\x06events*\xa0\x01\n\tEventType\x12\x1a\n\x16EVENT_TYPE_" +
-	"UNSPECIFIED\x10\x00\x12\x1c\n\x18EVENT_TYPE_ORIGIN_CHANGE\x10\x01\x12" +
-	"\x1e\n\x1aEVENT_TYPE_POSSIBLE_HIJACK\x10\x02\x12\x1c\n\x18EVENT_TYPE_P" +
-	"OSSIBLE_LEAK\x10\x03\x12\x1b\n\x17EVENT_TYPE_RPKI_INVALID\x10\x04*\x8d" +
-	"\x01\n\nRpkiStatus\x12\x1b\n\x17RPKI_STATUS_UNSPECIFIED\x10\x00\x12" +
-	"\x15\n\x11RPKI_STATUS_VALID\x10\x01\x12\x17\n\x13RPKI_STATUS_INVALID" +
-	"\x10\x02\x12\x19\n\x15RPKI_STATUS_NOT_FOUND\x10\x03\x12\x17\n\x13RPKI_" +
-	"STATUS_UNKNOWN\x10\x04*d\n\x08Severity\x12\x18\n\x14SEVERITY_UNSPECIFI" +
-	"ED\x10\x00\x12\x11\n\rSEVERITY_INFO\x10\x01\x12\x14\n\x10SEVERITY_WARN" +
-	"ING\x10\x02\x12\x15\n\x11SEVERITY_CRITICAL\x10\x03BHZFgithub.com/imfee" +
-	"lingtheagi/probectl/internal/gen/probectl/bgp/v1;bgpv1b\x06proto3"
+	"\n" +
+	"\x19probectl/bgp/v1/bgp.proto\x12\x0fprobectl.bgp.v1\"\xef\x04\n" +
+	"\bBGPEvent\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x129\n" +
+	"\n" +
+	"event_type\x18\x02 \x01(\x0e2\x1a.probectl.bgp.v1.EventTypeR\teventType\x125\n" +
+	"\bseverity\x18\x03 \x01(\x0e2\x19.probectl.bgp.v1.SeverityR\bseverity\x12\x1e\n" +
+	"\n" +
+	"confidence\x18\x04 \x01(\x01R\n" +
+	"confidence\x12\x16\n" +
+	"\x06prefix\x18\x05 \x01(\tR\x06prefix\x12$\n" +
+	"\x0enew_origin_asn\x18\x06 \x01(\rR\fnewOriginAsn\x12$\n" +
+	"\x0eold_origin_asn\x18\a \x01(\rR\foldOriginAsn\x12\x1e\n" +
+	"\vnew_as_path\x18\b \x03(\rR\tnewAsPath\x12\x1e\n" +
+	"\vold_as_path\x18\t \x03(\rR\toldAsPath\x12)\n" +
+	"\x10expected_origins\x18\n" +
+	" \x03(\rR\x0fexpectedOrigins\x12<\n" +
+	"\vrpki_status\x18\v \x01(\x0e2\x1b.probectl.bgp.v1.RpkiStatusR\n" +
+	"rpkiStatus\x12\x1c\n" +
+	"\tcollector\x18\f \x01(\tR\tcollector\x12\x19\n" +
+	"\bpeer_asn\x18\r \x01(\rR\apeerAsn\x12!\n" +
+	"\fpeer_address\x18\x0e \x01(\tR\vpeerAddress\x12\x18\n" +
+	"\amessage\x18\x0f \x01(\tR\amessage\x121\n" +
+	"\x15detected_at_unix_nano\x18\x10 \x01(\x03R\x12detectedAtUnixNano\"B\n" +
+	"\rBGPEventBatch\x121\n" +
+	"\x06events\x18\x01 \x03(\v2\x19.probectl.bgp.v1.BGPEventR\x06events*\xa0\x01\n" +
+	"\tEventType\x12\x1a\n" +
+	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18EVENT_TYPE_ORIGIN_CHANGE\x10\x01\x12\x1e\n" +
+	"\x1aEVENT_TYPE_POSSIBLE_HIJACK\x10\x02\x12\x1c\n" +
+	"\x18EVENT_TYPE_POSSIBLE_LEAK\x10\x03\x12\x1b\n" +
+	"\x17EVENT_TYPE_RPKI_INVALID\x10\x04*\x8d\x01\n" +
+	"\n" +
+	"RpkiStatus\x12\x1b\n" +
+	"\x17RPKI_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11RPKI_STATUS_VALID\x10\x01\x12\x17\n" +
+	"\x13RPKI_STATUS_INVALID\x10\x02\x12\x19\n" +
+	"\x15RPKI_STATUS_NOT_FOUND\x10\x03\x12\x17\n" +
+	"\x13RPKI_STATUS_UNKNOWN\x10\x04*d\n" +
+	"\bSeverity\x12\x18\n" +
+	"\x14SEVERITY_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rSEVERITY_INFO\x10\x01\x12\x14\n" +
+	"\x10SEVERITY_WARNING\x10\x02\x12\x15\n" +
+	"\x11SEVERITY_CRITICAL\x10\x03BHZFgithub.com/imfeelingtheagi/probectl/internal/gen/probectl/bgp/v1;bgpv1b\x06proto3"
 
 var (
 	file_probectl_bgp_v1_bgp_proto_rawDescOnce sync.Once

@@ -224,26 +224,35 @@ func (x *ResultBatch) GetResults() []*Result {
 var File_probectl_result_v1_result_proto protoreflect.FileDescriptor
 
 const file_probectl_result_v1_result_proto_rawDesc = "" +
-	"\n\x1fprobectl/result/v1/result.proto\x12\x12probectl.result.v1\"\xa9" +
-	"\x05\n\x06Result\x12\x1b\n\ttenant_id\x18\x01 \x01(\tR\x08tenantId\x12" +
-	"\x19\n\x08agent_id\x18\x02 \x01(\tR\x07agentId\x12\x1f\n\x0bcanary_typ" +
-	"e\x18\x03 \x01(\tR\ncanaryType\x12%\n\x0eserver_address\x18\x04 \x01(" +
-	"\tR\rserverAddress\x12\x1f\n\x0bserver_port\x18\x05 \x01(\rR\nserverPo" +
-	"rt\x12+\n\x11network_transport\x18\x06 \x01(\tR\x10networkTransport" +
-	"\x122\n\x15network_protocol_name\x18\x07 \x01(\tR\x13networkProtocolNa" +
-	"me\x12\x18\n\x07success\x18\x08 \x01(\x08R\x07success\x12#\n\rerror_me" +
-	"ssage\x18\t \x01(\tR\x0cerrorMessage\x12/\n\x14start_time_unix_nano" +
-	"\x18\n \x01(\x03R\x11startTimeUnixNano\x12#\n\rduration_nano\x18\x0b " +
-	"\x01(\x03R\x0cdurationNano\x12A\n\x07metrics\x18\x0c \x03(\x0b2'.probe" +
-	"ctl.result.v1.Result.MetricsEntryR\x07metrics\x12J\n\nattributes\x18\r" +
-	" \x03(\x0b2*.probectl.result.v1.Result.AttributesEntryR\nattributes" +
-	"\x1a:\n\x0cMetricsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12" +
-	"\x14\n\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\x1a=\n\x0fAttrib" +
-	"utesEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value" +
-	"\x18\x02 \x01(\tR\x05value:\x028\x01\"C\n\x0bResultBatch\x124\n\x07res" +
-	"ults\x18\x01 \x03(\x0b2\x1a.probectl.result.v1.ResultR\x07resultsBNZLg" +
-	"ithub.com/imfeelingtheagi/probectl/internal/gen/probectl/result/v1;res" +
-	"ultv1b\x06proto3"
+	"\n" +
+	"\x1fprobectl/result/v1/result.proto\x12\x12probectl.result.v1\"\xa9\x05\n" +
+	"\x06Result\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x1f\n" +
+	"\vcanary_type\x18\x03 \x01(\tR\n" +
+	"canaryType\x12%\n" +
+	"\x0eserver_address\x18\x04 \x01(\tR\rserverAddress\x12\x1f\n" +
+	"\vserver_port\x18\x05 \x01(\rR\n" +
+	"serverPort\x12+\n" +
+	"\x11network_transport\x18\x06 \x01(\tR\x10networkTransport\x122\n" +
+	"\x15network_protocol_name\x18\a \x01(\tR\x13networkProtocolName\x12\x18\n" +
+	"\asuccess\x18\b \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\t \x01(\tR\ferrorMessage\x12/\n" +
+	"\x14start_time_unix_nano\x18\n" +
+	" \x01(\x03R\x11startTimeUnixNano\x12#\n" +
+	"\rduration_nano\x18\v \x01(\x03R\fdurationNano\x12A\n" +
+	"\ametrics\x18\f \x03(\v2'.probectl.result.v1.Result.MetricsEntryR\ametrics\x12J\n" +
+	"\n" +
+	"attributes\x18\r \x03(\v2*.probectl.result.v1.Result.AttributesEntryR\n" +
+	"attributes\x1a:\n" +
+	"\fMetricsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"C\n" +
+	"\vResultBatch\x124\n" +
+	"\aresults\x18\x01 \x03(\v2\x1a.probectl.result.v1.ResultR\aresultsBNZLgithub.com/imfeelingtheagi/probectl/internal/gen/probectl/result/v1;resultv1b\x06proto3"
 
 var (
 	file_probectl_result_v1_result_proto_rawDescOnce sync.Once

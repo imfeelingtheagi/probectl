@@ -916,61 +916,80 @@ func (x *ReportEndpointResponse) GetAccepted() bool {
 var File_probectl_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_probectl_agent_v1_agent_proto_rawDesc = "" +
-	"\n\x1dprobectl/agent/v1/agent.proto\x12\x11probectl.agent.v1\"\xf9\x01" +
-	"\n\x0fRegisterRequest\x12\x1a\n\x08hostname\x18\x01 \x01(\tR\x08hostna" +
-	"me\x12#\n\ragent_version\x18\x02 \x01(\tR\x0cagentVersion\x12\"\n\x0cc" +
-	"apabilities\x18\x03 \x03(\tR\x0ccapabilities\x12F\n\x06labels\x18\x04 " +
-	"\x03(\x0b2..probectl.agent.v1.RegisterRequest.LabelsEntryR\x06labels" +
-	"\x1a9\n\x0bLabelsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12" +
-	"\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xab\x01\n\x10Reg" +
-	"isterResponse\x12\x19\n\x08agent_id\x18\x01 \x01(\tR\x07agentId\x12" +
-	"\x1b\n\ttenant_id\x18\x02 \x01(\tR\x08tenantId\x12!\n\x0cconfig_epoch" +
-	"\x18\x03 \x01(\x04R\x0bconfigEpoch\x12<\n\x1aheartbeat_interval_second" +
-	"s\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\"\xae\x01\n\rAttestRequ" +
-	"est\x12\x14\n\x05nonce\x18\x01 \x01(\x0cR\x05nonce\x12J\n\x08platform" +
-	"\x18\x02 \x03(\x0b2..probectl.agent.v1.AttestRequest.PlatformEntryR" +
-	"\x08platform\x1a;\n\rPlatformEntry\x12\x10\n\x03key\x18\x01 \x01(\tR" +
-	"\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\":\n" +
-	"\x0eAttestResponse\x12\x0e\n\x02ok\x18\x01 \x01(\x08R\x02ok\x12\x18\n" +
-	"\x07message\x18\x02 \x01(\tR\x07message\"P\n\x10HeartbeatRequest\x12" +
-	"\x19\n\x08agent_id\x18\x01 \x01(\tR\x07agentId\x12!\n\x0cconfig_epoch" +
-	"\x18\x02 \x01(\x04R\x0bconfigEpoch\"t\n\x11HeartbeatResponse\x12!\n" +
-	"\x0cconfig_stale\x18\x01 \x01(\x08R\x0bconfigStale\x12<\n\x1aheartbeat" +
-	"_interval_seconds\x18\x02 \x01(\rR\x18heartbeatIntervalSeconds\"6\n" +
-	"\x13StreamConfigRequest\x12\x1f\n\x0bknown_epoch\x18\x01 \x01(\x04R\nk" +
-	"nownEpoch\"F\n\x14StreamConfigResponse\x12\x14\n\x05epoch\x18\x01 \x01" +
-	"(\x04R\x05epoch\x12\x18\n\x07payload\x18\x02 \x01(\x0cR\x07payload\"t" +
-	"\n\x14StreamResultsRequest\x12\x12\n\x04type\x18\x01 \x01(\tR\x04type" +
-	"\x12\x18\n\x07payload\x18\x02 \x01(\x0cR\x07payload\x12.\n\x13observed" +
-	"_unix_nanos\x18\x03 \x01(\x03R\x11observedUnixNanos\"3\n\x15StreamResu" +
-	"ltsResponse\x12\x1a\n\x08accepted\x18\x01 \x01(\x04R\x08accepted\"\x19" +
-	"\n\x17PollCoordinationRequest\"e\n\x18PollCoordinationResponse\x12\x19" +
-	"\n\x08has_task\x18\x01 \x01(\x08R\x07hasTask\x12.\n\x04task\x18\x02 " +
-	"\x01(\x0b2\x1a.probectl.agent.v1.A2ATaskR\x04task\"\xf4\x01\n\x07A2ATa" +
-	"sk\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12.\n\x04role" +
-	"\x18\x02 \x01(\x0e2\x1a.probectl.agent.v1.A2ARoleR\x04role\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x14\n\x05count\x18\x04 \x01(\rR" +
-	"\x05count\x12%\n\x0eresponder_host\x18\x05 \x01(\tR\rresponderHost\x12" +
-	"%\n\x0eresponder_port\x18\x06 \x01(\rR\rresponderPort\x12\"\n\rpeer_ag" +
-	"ent_id\x18\x07 \x01(\tR\x0bpeerAgentId\"^\n\x15ReportEndpointRequest" +
-	"\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n\x04host" +
-	"\x18\x02 \x01(\tR\x04host\x12\x12\n\x04port\x18\x03 \x01(\rR\x04port\"" +
-	"4\n\x16ReportEndpointResponse\x12\x1a\n\x08accepted\x18\x01 \x01(\x08R" +
-	"\x08accepted*S\n\x07A2ARole\x12\x18\n\x14A2A_ROLE_UNSPECIFIED\x10\x00" +
-	"\x12\x16\n\x12A2A_ROLE_RESPONDER\x10\x01\x12\x16\n\x12A2A_ROLE_INITIAT" +
-	"OR\x10\x022\xa7\x05\n\x0cAgentService\x12S\n\x08Register\x12\".probect" +
-	"l.agent.v1.RegisterRequest\x1a#.probectl.agent.v1.RegisterResponse\x12" +
-	"M\n\x06Attest\x12 .probectl.agent.v1.AttestRequest\x1a!.probectl.agent" +
-	".v1.AttestResponse\x12V\n\tHeartbeat\x12#.probectl.agent.v1.HeartbeatR" +
-	"equest\x1a$.probectl.agent.v1.HeartbeatResponse\x12a\n\x0cStreamConfig" +
-	"\x12&.probectl.agent.v1.StreamConfigRequest\x1a'.probectl.agent.v1.Str" +
-	"eamConfigResponse0\x01\x12d\n\rStreamResults\x12'.probectl.agent.v1.St" +
-	"reamResultsRequest\x1a(.probectl.agent.v1.StreamResultsResponse(\x01" +
-	"\x12k\n\x10PollCoordination\x12*.probectl.agent.v1.PollCoordinationReq" +
-	"uest\x1a+.probectl.agent.v1.PollCoordinationResponse\x12e\n\x0eReportE" +
-	"ndpoint\x12(.probectl.agent.v1.ReportEndpointRequest\x1a).probectl.age" +
-	"nt.v1.ReportEndpointResponseBLZJgithub.com/imfeelingtheagi/probectl/in" +
-	"ternal/gen/probectl/agent/v1;agentv1b\x06proto3"
+	"\n" +
+	"\x1dprobectl/agent/v1/agent.proto\x12\x11probectl.agent.v1\"\xf9\x01\n" +
+	"\x0fRegisterRequest\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12#\n" +
+	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\x12\"\n" +
+	"\fcapabilities\x18\x03 \x03(\tR\fcapabilities\x12F\n" +
+	"\x06labels\x18\x04 \x03(\v2..probectl.agent.v1.RegisterRequest.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xab\x01\n" +
+	"\x10RegisterResponse\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12!\n" +
+	"\fconfig_epoch\x18\x03 \x01(\x04R\vconfigEpoch\x12<\n" +
+	"\x1aheartbeat_interval_seconds\x18\x04 \x01(\rR\x18heartbeatIntervalSeconds\"\xae\x01\n" +
+	"\rAttestRequest\x12\x14\n" +
+	"\x05nonce\x18\x01 \x01(\fR\x05nonce\x12J\n" +
+	"\bplatform\x18\x02 \x03(\v2..probectl.agent.v1.AttestRequest.PlatformEntryR\bplatform\x1a;\n" +
+	"\rPlatformEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\":\n" +
+	"\x0eAttestResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"P\n" +
+	"\x10HeartbeatRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12!\n" +
+	"\fconfig_epoch\x18\x02 \x01(\x04R\vconfigEpoch\"t\n" +
+	"\x11HeartbeatResponse\x12!\n" +
+	"\fconfig_stale\x18\x01 \x01(\bR\vconfigStale\x12<\n" +
+	"\x1aheartbeat_interval_seconds\x18\x02 \x01(\rR\x18heartbeatIntervalSeconds\"6\n" +
+	"\x13StreamConfigRequest\x12\x1f\n" +
+	"\vknown_epoch\x18\x01 \x01(\x04R\n" +
+	"knownEpoch\"F\n" +
+	"\x14StreamConfigResponse\x12\x14\n" +
+	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x18\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\"t\n" +
+	"\x14StreamResultsRequest\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\x12.\n" +
+	"\x13observed_unix_nanos\x18\x03 \x01(\x03R\x11observedUnixNanos\"3\n" +
+	"\x15StreamResultsResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\x04R\baccepted\"\x19\n" +
+	"\x17PollCoordinationRequest\"e\n" +
+	"\x18PollCoordinationResponse\x12\x19\n" +
+	"\bhas_task\x18\x01 \x01(\bR\ahasTask\x12.\n" +
+	"\x04task\x18\x02 \x01(\v2\x1a.probectl.agent.v1.A2ATaskR\x04task\"\xf4\x01\n" +
+	"\aA2ATask\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12.\n" +
+	"\x04role\x18\x02 \x01(\x0e2\x1a.probectl.agent.v1.A2ARoleR\x04role\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\x12\x14\n" +
+	"\x05count\x18\x04 \x01(\rR\x05count\x12%\n" +
+	"\x0eresponder_host\x18\x05 \x01(\tR\rresponderHost\x12%\n" +
+	"\x0eresponder_port\x18\x06 \x01(\rR\rresponderPort\x12\"\n" +
+	"\rpeer_agent_id\x18\a \x01(\tR\vpeerAgentId\"^\n" +
+	"\x15ReportEndpointRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\rR\x04port\"4\n" +
+	"\x16ReportEndpointResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted*S\n" +
+	"\aA2ARole\x12\x18\n" +
+	"\x14A2A_ROLE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12A2A_ROLE_RESPONDER\x10\x01\x12\x16\n" +
+	"\x12A2A_ROLE_INITIATOR\x10\x022\xa7\x05\n" +
+	"\fAgentService\x12S\n" +
+	"\bRegister\x12\".probectl.agent.v1.RegisterRequest\x1a#.probectl.agent.v1.RegisterResponse\x12M\n" +
+	"\x06Attest\x12 .probectl.agent.v1.AttestRequest\x1a!.probectl.agent.v1.AttestResponse\x12V\n" +
+	"\tHeartbeat\x12#.probectl.agent.v1.HeartbeatRequest\x1a$.probectl.agent.v1.HeartbeatResponse\x12a\n" +
+	"\fStreamConfig\x12&.probectl.agent.v1.StreamConfigRequest\x1a'.probectl.agent.v1.StreamConfigResponse0\x01\x12d\n" +
+	"\rStreamResults\x12'.probectl.agent.v1.StreamResultsRequest\x1a(.probectl.agent.v1.StreamResultsResponse(\x01\x12k\n" +
+	"\x10PollCoordination\x12*.probectl.agent.v1.PollCoordinationRequest\x1a+.probectl.agent.v1.PollCoordinationResponse\x12e\n" +
+	"\x0eReportEndpoint\x12(.probectl.agent.v1.ReportEndpointRequest\x1a).probectl.agent.v1.ReportEndpointResponseBLZJgithub.com/imfeelingtheagi/probectl/internal/gen/probectl/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_probectl_agent_v1_agent_proto_rawDescOnce sync.Once
