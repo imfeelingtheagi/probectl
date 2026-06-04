@@ -25,6 +25,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
+	"github.com/imfeelingtheagi/probectl/internal/topology"
 )
 
 // Discoverer runs a path discovery. The default is path.Run; tests inject a fake.
@@ -102,6 +103,10 @@ type Server struct {
 	// Secret-backend health (S41): the secrets resolver's operational
 	// snapshot. Set via WithSecrets; nil reports resolver_running=false.
 	secretsHealth SecretsHealthSource
+
+	// Topology graph + what-if (S43): the dependency-graph store. Set via
+	// WithTopology; nil reports topology_running=false.
+	topo topology.Store
 
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).

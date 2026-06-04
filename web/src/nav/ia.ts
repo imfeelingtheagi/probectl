@@ -16,6 +16,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { to: '/targets', label: 'Targets & Tests', icon: 'targets' },
   { to: '/path', label: 'Path & Topology', icon: 'path' },
+  { to: '/topology', label: 'Topology', icon: 'path' },
   { to: '/incidents', label: 'Incidents', icon: 'incidents' },
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
   { to: '/endpoints', label: 'Endpoints', icon: 'endpoints' },

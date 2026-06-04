@@ -1,0 +1,204 @@
+package control
+
+// Topology + what-if API (S43, F40-full). GET /v1/topology serves the
+// tenant's dependency graph (live, or AS IT WAS at ?at= — the versioned-graph
+// contract); POST /v1/topology/whatif simulates a node/link failure and
+// returns the predicted impact with its coverage/honesty block. The graph is
+// fed by a consumer over the streams the control plane already receives
+// (eBPF service edges, BGP events, device telemetry) plus path discoveries at
+// save time. Tenant first, always: every read resolves the caller's tenant
+// before touching the store (guardrail 1).
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/imfeelingtheagi/probectl/internal/apierror"
+	"github.com/imfeelingtheagi/probectl/internal/bus"
+	bgpv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/bgp/v1"
+	devicev1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/device/v1"
+	ebpfv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/ebpf/v1"
+	"github.com/imfeelingtheagi/probectl/internal/topology"
+)
+
+// WithTopology attaches the topology store backing /v1/topology and the
+// what-if API. nil is a no-op (the endpoints report topology_running=false).
+func (s *Server) WithTopology(st topology.Store) *Server {
+	if st != nil {
+		s.topo = st
+	}
+	return s
+}
+
+// handleTopology serves GET /v1/topology[?at=RFC3339] — the caller's tenant's
+// graph in the layout-agnostic viz shape, with the coverage block.
+func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) error {
+	tid, err := s.principalTenant(r)
+	if err != nil {
+		return err
+	}
+	if s.topo == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"topology_running": false,
+			"nodes":            []topology.VizNode{}, "edges": []topology.VizEdge{},
+		})
+		return nil
+	}
+	// No ?at → the LIVE graph (everything currently known); ?at → the graph
+	// as it was at that instant (the versioned-graph contract).
+	at, err := atParam(r, time.Time{})
+	if err != nil {
+		return err
+	}
+	var snap topology.Snapshot
+	if at.IsZero() {
+		snap = s.topo.Latest(tid)
+	} else {
+		snap = s.topo.SnapshotAt(tid, at)
+	}
+	viz := topology.ToViz(snap)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"topology_running": true,
+		"at":               snap.At.UTC(),
+		"nodes":            viz.Nodes,
+		"edges":            viz.Edges,
+		"coverage":         topology.SnapshotCoverage(snap),
+	})
+	return nil
+}
+
+// whatIfRequest is the simulation request: the node or edge id to fail.
+type whatIfRequest struct {
+	Target string `json:"target"`
+	At     string `json:"at,omitempty"` // RFC3339; empty = now
+}
+
+// handleWhatIf serves POST /v1/topology/whatif — predicted impact of failing
+// one element. Read-only: it simulates on a copy and never mutates the graph
+// (observe-only; acting on predictions is S-EE5, human-gated).
+func (s *Server) handleWhatIf(w http.ResponseWriter, r *http.Request) error {
+	tid, err := s.principalTenant(r)
+	if err != nil {
+		return err
+	}
+	if s.topo == nil {
+		return apierror.Unavailable("topology is not wired on this deployment")
+	}
+	var req whatIfRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		return apierror.BadRequest("invalid what-if request body").Wrap(err)
+	}
+	if req.Target == "" {
+		return apierror.BadRequest("target (node or edge id) is required")
+	}
+	var at time.Time // zero = simulate over the live graph
+	if req.At != "" {
+		parsed, err := time.Parse(time.RFC3339, req.At)
+		if err != nil {
+			return apierror.BadRequest("at must be RFC3339")
+		}
+		at = parsed
+	}
+	imp, err := topology.Simulate(s.topo, tid, req.Target, at, nil)
+	if err != nil {
+		return apierror.NotFound(err.Error())
+	}
+	writeJSON(w, http.StatusOK, imp)
+	return nil
+}
+
+// atParam parses ?at=RFC3339 with a default.
+func atParam(r *http.Request, def time.Time) (time.Time, error) {
+	raw := r.URL.Query().Get("at")
+	if raw == "" {
+		return def, nil
+	}
+	at, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, apierror.BadRequest("at must be RFC3339")
+	}
+	return at, nil
+}
+
+// TopologyConsumer folds the streams the control plane already receives into
+// the dependency graph: eBPF service edges (S20/S21), BGP routing events
+// (S14), and device telemetry (S39). Path discoveries fold in at save time
+// (see handleDiscoverPath). Unscoped records are dropped (guardrail 1).
+type TopologyConsumer struct {
+	store topology.Store
+	bus   bus.Bus
+	log   *slog.Logger
+}
+
+// NewTopologyConsumer builds the consumer over a non-nil store.
+func NewTopologyConsumer(b bus.Bus, st topology.Store, log *slog.Logger) *TopologyConsumer {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &TopologyConsumer{store: st, bus: b, log: log}
+}
+
+// Run subscribes (independent consumer groups) until ctx is canceled.
+func (tc *TopologyConsumer) Run(ctx context.Context) error {
+	errc := make(chan error, 3)
+	go func() { errc <- tc.bus.Subscribe(ctx, bus.EBPFFlowsTopic, "topology-ebpf", tc.handleEBPF) }()
+	go func() { errc <- tc.bus.Subscribe(ctx, bus.BGPEventsTopic, "topology-bgp", tc.handleBGP) }()
+	go func() { errc <- tc.bus.Subscribe(ctx, bus.DeviceMetricsTopic, "topology-device", tc.handleDevice) }()
+	return <-errc
+}
+
+func (tc *TopologyConsumer) handleEBPF(_ context.Context, msg bus.Message) error {
+	var batch ebpfv1.FlowBatch
+	if err := proto.Unmarshal(msg.Value, &batch); err != nil {
+		tc.log.Warn("topology: skipping malformed ebpf batch", "error", err)
+		return nil
+	}
+	now := time.Now()
+	for _, e := range batch.GetEdges() {
+		if e.GetTenantId() == "" {
+			continue
+		}
+		tc.store.ObserveServiceEdge(e.GetTenantId(), topology.FromServiceEdge(e), now)
+	}
+	return nil
+}
+
+func (tc *TopologyConsumer) handleBGP(_ context.Context, msg bus.Message) error {
+	var ev bgpv1.BGPEvent
+	if err := proto.Unmarshal(msg.Value, &ev); err != nil {
+		tc.log.Warn("topology: skipping malformed bgp event", "error", err)
+		return nil
+	}
+	if ev.GetTenantId() == "" {
+		return nil
+	}
+	tc.store.ObserveRouting(ev.GetTenantId(), topology.FromBGPEvent(&ev), time.Now())
+	return nil
+}
+
+func (tc *TopologyConsumer) handleDevice(_ context.Context, msg bus.Message) error {
+	var batch devicev1.DeviceMetricBatch
+	if err := proto.Unmarshal(msg.Value, &batch); err != nil {
+		tc.log.Warn("topology: skipping malformed device batch", "error", err)
+		return nil
+	}
+	now := time.Now()
+	for _, m := range batch.GetMetrics() {
+		if m.GetTenantId() == "" || m.GetDeviceAddress() == "" {
+			continue
+		}
+		// S39 telemetry exposes no interface IPs yet, so this yields device
+		// nodes without device→hop links — surfaced as a coverage note by the
+		// what-if API, never silently complete.
+		tc.store.ObserveDevice(m.GetTenantId(), topology.DeviceInput{
+			Address: m.GetDeviceAddress(),
+			Name:    m.GetDeviceName(),
+		}, now)
+	}
+	return nil
+}

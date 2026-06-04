@@ -12,6 +12,7 @@ const (
 	NodeService NodeKind = "service" // an eBPF service / workload
 	NodePrefix  NodeKind = "prefix"  // a BGP prefix
 	NodeAS      NodeKind = "as"      // an autonomous system
+	NodeDevice  NodeKind = "device"  // a managed network device (S39 telemetry; S43)
 )
 
 // EdgeKind classifies a topology edge.
@@ -21,6 +22,7 @@ const (
 	EdgePath    EdgeKind = "path"    // traceroute adjacency (hop -> hop)
 	EdgeFlow    EdgeKind = "flow"    // eBPF service edge (service -> service)
 	EdgeRouting EdgeKind = "routing" // BGP origin (as -> prefix)
+	EdgeDevice  EdgeKind = "device"  // device -> hop it carries (interface IP; S43)
 )
 
 // Node is a vertex in the topology graph, valid over [FirstSeen, LastSeen].

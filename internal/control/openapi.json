@@ -2069,6 +2069,194 @@
         }
       }
     },
+    "/v1/topology": {
+      "get": {
+        "operationId": "getTopology",
+        "summary": "Topology dependency graph (S43)",
+        "tags": [
+          "topology"
+        ],
+        "description": "The caller's tenant's dependency graph (agents, hops, hosts, services, prefixes, ASes, devices) in a layout-agnostic node/edge shape, live or AS IT WAS at ?at= (the versioned-graph contract). Includes the per-plane coverage block (path/flow/routing/device edge counts + honesty notes) so the operator can see what the graph actually contains. topology_running=false distinguishes an unwired store.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "description": "RFC3339 instant; empty = now.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The graph.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "topology_running": {
+                      "type": "boolean"
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "coverage": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/topology/whatif": {
+      "post": {
+        "operationId": "simulateWhatIf",
+        "summary": "What-if / impact simulation (S43)",
+        "tags": [
+          "topology"
+        ],
+        "description": "Simulates the failure of one node (e.g. hop:10.0.0.1, service:api, as:64500) or edge (from|kind|to) at a point in time and returns the predicted impact: broken vs rerouted agent→target paths (with the surviving route), transitively impacted services, impacted prefixes, newly disconnected nodes, and SLO impact when the S45 engine is wired. READ-ONLY: the simulation runs on a copy; probectl never acts on predictions (S-EE5 is human-gated). The coverage block reports completeness honestly. Unknown targets are a 404, never an empty 'no impact'.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "target"
+                ],
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "description": "Node id or edge id (from|kind|to) to fail."
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "RFC3339; empty = now."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The predicted impact.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": {
+                      "type": "string"
+                    },
+                    "target_kind": {
+                      "type": "string"
+                    },
+                    "at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "broken_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "rerouted_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "impacted_services": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "impacted_prefixes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "disconnected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "impacted_slos": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "coverage": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/incidents/{id}/cis": {
       "get": {
         "operationId": "incidentCIs",

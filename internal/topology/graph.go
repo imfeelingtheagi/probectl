@@ -15,6 +15,10 @@ type Graph struct {
 	mu     sync.RWMutex
 	nodes  map[string]*Node
 	edges  map[string]*Edge
+
+	// recent collects edge upserts since the last drainRecentEdges call — the
+	// O(touched) feed for the S43 indexed engine's adjacency indexes.
+	recent []Edge
 }
 
 // NewGraph returns an empty graph for a tenant.
@@ -70,6 +74,7 @@ func (g *Graph) UpsertEdge(e Edge, at time.Time) {
 			e.Attributes = map[string]string{}
 		}
 		g.edges[e.ID] = &e
+		g.recent = append(g.recent, Edge{ID: e.ID, From: e.From, To: e.To, Kind: e.Kind})
 		return
 	}
 	if at.Before(cur.FirstSeen) {
@@ -213,4 +218,23 @@ func reconstruct(prev map[string]string, from, to string) []string {
 func sortSnapshot(s *Snapshot) {
 	sort.Slice(s.Nodes, func(i, j int) bool { return s.Nodes[i].ID < s.Nodes[j].ID })
 	sort.Slice(s.Edges, func(i, j int) bool { return s.Edges[i].ID < s.Edges[j].ID })
+}
+
+// drainRecentEdges returns (and clears) the edges upserted since the last
+// call — consumed by the S43 indexed engine to keep adjacency indexes in
+// step without rescanning the edge set.
+func (g *Graph) drainRecentEdges() []Edge {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := g.recent
+	g.recent = nil
+	return out
+}
+
+// edgeValidAt reports whether the edge with id exists and is valid at time at.
+func (g *Graph) edgeValidAt(id string, at time.Time) bool {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	e, ok := g.edges[id]
+	return ok && validAt(e.FirstSeen, e.LastSeen, at)
 }

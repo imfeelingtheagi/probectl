@@ -10,6 +10,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/path"
 	"github.com/imfeelingtheagi/probectl/internal/store"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/internal/topology"
 )
 
 // handleGetPath returns the latest discovered path for a test — the path-viz data
@@ -54,6 +55,11 @@ func (s *Server) handleDiscoverPath(w http.ResponseWriter, r *http.Request) erro
 	}
 	if err := s.pathStore.Save(r.Context(), tid, p); err != nil {
 		return apierror.Internal("path save failed").Wrap(err)
+	}
+	// Fold the discovery into the dependency graph (S43): the path plane
+	// feeds topology at save time — no second discovery pass.
+	if s.topo != nil {
+		s.topo.ObservePath(tid, topology.FromPath(*p, "control"), time.Now())
 	}
 	writeJSON(w, http.StatusOK, p)
 	return nil

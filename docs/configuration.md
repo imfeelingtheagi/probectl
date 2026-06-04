@@ -898,6 +898,16 @@ endpoint is the `…/api/now/table/incident` URL. Inbound deliveries must includ
 unsigned or forged delivery is rejected (`401`). Secrets are runtime config —
 inject them from a secret manager, never commit them.
 
+### Topology graph + what-if (S43)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROBECTL_TOPOLOGY_ENGINE` | `indexed` | graph engine: `indexed` (adjacency-indexed, L/XL) or `memory` (S30 reference). Transparent behind the same query API |
+
+The graph feeds from eBPF/BGP/device streams + path discoveries; served at
+`GET /v1/topology` with what-if simulation at `POST /v1/topology/whatif`.
+See `docs/topology.md`.
+
 ### NDR-lite detection (S42)
 
 | Variable | Default | Purpose |

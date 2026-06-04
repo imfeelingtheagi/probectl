@@ -34,12 +34,23 @@ type RoutingInput struct {
 	EventType string
 }
 
+// DeviceInput is a managed-device observation (S39 telemetry, S43): the device
+// itself, plus the interface IPs it carries when the telemetry exposes them —
+// each links the device to the path-plane hop with that IP (the
+// services↔paths↔DEVICES↔prefixes dependency chain).
+type DeviceInput struct {
+	Address      string // management address (the device's identity)
+	Name         string // sysName / gNMI target (label)
+	InterfaceIPs []string
+}
+
 func hopID(ip string) string      { return "hop:" + ip }
 func hostID(ip string) string     { return "host:" + ip }
 func agentID(id string) string    { return "agent:" + id }
 func serviceID(id string) string  { return "service:" + id }
 func prefixID(cidr string) string { return "prefix:" + cidr }
 func asID(asn uint32) string      { return "as:" + strconv.FormatUint(uint64(asn), 10) }
+func deviceID(addr string) string { return "device:" + addr }
 
 // ObservePath folds a discovered path into the graph: an agent node, hop nodes,
 // hop→hop path edges, and the agent→first-hop / last-hop→target framing.
@@ -96,6 +107,30 @@ func (g *Graph) ObserveServiceEdge(in ServiceEdgeInput, at time.Time) {
 		attrs["network.protocol.name"] = in.Protocol
 	}
 	g.UpsertEdge(Edge{From: src, To: dst, Kind: EdgeFlow, Label: in.Protocol, Attributes: attrs}, at)
+}
+
+// ObserveDevice folds a managed device into the graph: a device node, and a
+// device→hop edge per interface IP (linking the device plane onto the path
+// plane). Telemetry that exposes no interface IPs still yields the device
+// node — the missing linkage is a reportable coverage gap, not silent.
+func (g *Graph) ObserveDevice(in DeviceInput, at time.Time) {
+	if in.Address == "" {
+		return
+	}
+	dev := deviceID(in.Address)
+	label := in.Name
+	if label == "" {
+		label = in.Address
+	}
+	g.UpsertNode(Node{ID: dev, Kind: NodeDevice, Label: label,
+		Attributes: map[string]string{"probectl.device.address": in.Address}}, at)
+	for _, ip := range in.InterfaceIPs {
+		if ip == "" {
+			continue
+		}
+		g.UpsertNode(Node{ID: hopID(ip), Kind: NodeHop, Label: ip}, at)
+		g.UpsertEdge(Edge{From: dev, To: hopID(ip), Kind: EdgeDevice}, at)
+	}
 }
 
 // ObserveRouting folds a BGP routing observation (origin AS → prefix) into the graph.

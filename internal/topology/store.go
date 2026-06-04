@@ -13,6 +13,7 @@ type Store interface {
 	ObservePath(tenant string, in PathInput, at time.Time)
 	ObserveServiceEdge(tenant string, in ServiceEdgeInput, at time.Time)
 	ObserveRouting(tenant string, in RoutingInput, at time.Time)
+	ObserveDevice(tenant string, in DeviceInput, at time.Time)
 
 	SnapshotAt(tenant string, at time.Time) Snapshot
 	Latest(tenant string) Snapshot
@@ -55,6 +56,11 @@ func (s *MemoryStore) ObserveServiceEdge(tenant string, in ServiceEdgeInput, at 
 // ObserveRouting implements Store.
 func (s *MemoryStore) ObserveRouting(tenant string, in RoutingInput, at time.Time) {
 	s.graph(tenant).ObserveRouting(in, at)
+}
+
+// ObserveDevice implements Store.
+func (s *MemoryStore) ObserveDevice(tenant string, in DeviceInput, at time.Time) {
+	s.graph(tenant).ObserveDevice(in, at)
 }
 
 // SnapshotAt implements Store.

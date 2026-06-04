@@ -44,6 +44,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
+	"github.com/imfeelingtheagi/probectl/internal/topology"
 	"github.com/imfeelingtheagi/probectl/internal/version"
 	"github.com/imfeelingtheagi/probectl/migrations"
 )
@@ -195,6 +196,19 @@ func run(cmd string) error {
 		log.Info("on-call/itsm integration enabled", "connectors", len(cfg.NotifyConnectors))
 	}
 	correlator := control.BuildCorrelator(db.Pool(), cfg.IncidentWindow, log, corrOpts...)
+	// Topology dependency graph (S43): the live store behind /v1/topology and
+	// the what-if API, fed by eBPF service edges, BGP events, device telemetry
+	// (consumer below) and path discoveries (at save time). Engine selection is
+	// transparent behind the S30 query API.
+	var topoStore topology.Store
+	if cfg.TopologyEngine == "memory" {
+		topoStore = topology.NewMemoryStore()
+	} else {
+		topoStore = topology.NewIndexedStore() // the L/XL dedicated engine
+	}
+	g.Go(func() error { return control.NewTopologyConsumer(resultBus, topoStore, log).Run(gctx) })
+	log.Info("topology graph enabled", "engine", cfg.TopologyEngine)
+
 	g.Go(func() error {
 		return control.NewBGPIncidentConsumer(resultBus, correlator, log).Run(gctx)
 	})
@@ -235,7 +249,8 @@ func run(cmd string) error {
 		WithDetections(detections).
 		WithEndpointViews(endpointViews).
 		WithLatestResults(latestResults).
-		WithSecrets(secretsResolver) // backend health at /v1/secrets/health (S41)
+		WithSecrets(secretsResolver). // backend health at /v1/secrets/health (S41)
+		WithTopology(topoStore)       // dependency graph + what-if (S43)
 	if alertEngine != nil {
 		// Active alerts + silence/ack (S-FE1) read engine truth, tenant-keyed.
 		srv.WithAlertState(tenancy.DefaultTenantID.String(), alertEngine)
@@ -284,9 +299,10 @@ func run(cmd string) error {
 	// NDR-lite behavioral detection (S42): DGA/exfil/beaconing/egress/lateral
 	// over the DNS/flow/eBPF streams already arriving here. Purely local (no
 	// outbound calls); detections are confidence-scored SIGNALS exported to
-	// incidents + triage + SIEM — never blocks (guardrail 9). The topology
-	// neighbor source plugs in when S43 lands a live store here.
-	ndrEngine, ndrOn, err := control.BuildNDR(cfg, intelSourceOrNil(iocStore), nil, log)
+	// incidents + triage + SIEM — never blocks (guardrail 9). The live
+	// topology store excludes known service relationships from lateral
+	// detection (S43 closes the S42 seam).
+	ndrEngine, ndrOn, err := control.BuildNDR(cfg, intelSourceOrNil(iocStore), topoStore, log)
 	if err != nil {
 		return err // malformed rules dir fails startup (fail closed)
 	}

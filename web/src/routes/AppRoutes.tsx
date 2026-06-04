@@ -3,6 +3,7 @@ import { AppShell } from '../shell/AppShell'
 import { NAV } from '../nav/ia'
 import { AdminPage, NotFoundPage, PlaceholderPage, TargetsPage } from './pages'
 import { PathPage } from './PathPage'
+import { TopologyPage } from './TopologyPage'
 import { IncidentsPage } from './IncidentsPage'
 import { AlertsPage } from './AlertsPage'
 import { SecurityPage } from './SecurityPage'
@@ -23,8 +24,9 @@ export function AppRoutes() {
         <Route path="/security" element={<SecurityPage />} />
         <Route path="/endpoints" element={<EndpointsPage />} />
         <Route path="/ask" element={<AskPage />} />
+        <Route path="/topology" element={<TopologyPage />} />
         <Route path="/admin" element={<AdminPage />} />
-        {NAV.filter((n) => !['/targets', '/path', '/incidents', '/alerts', '/security', '/endpoints', '/ask', '/admin'].includes(n.to)).map((n) => (
+        {NAV.filter((n) => !['/targets', '/path', '/incidents', '/alerts', '/security', '/endpoints', '/ask', '/topology', '/admin'].includes(n.to)).map((n) => (
           <Route key={n.to} path={n.to} element={<PlaceholderPage to={n.to} />} />
         ))}
         <Route path="/gallery" element={<Gallery />} />

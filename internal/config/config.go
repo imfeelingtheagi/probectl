@@ -181,6 +181,11 @@ type Config struct {
 	NDREnabled  bool
 	NDRRulesDir string
 
+	// Topology graph engine (S43, F40): "indexed" (default — adjacency-indexed,
+	// the L/XL dedicated engine) or "memory" (the S30 reference store). Both
+	// sit behind the same query API; the switch is transparent to callers.
+	TopologyEngine string
+
 	// SIEM export (S32, F26): forward the audit stream + threat-plane signals to the
 	// SOC's SIEM. OFF by default — enabling it makes an outbound connection to the
 	// operator-supplied endpoint (sovereignty / no-phone-home). SIEMPreset adapts the
@@ -321,6 +326,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		ThreatIntelFeeds:    l.list("PROBECTL_THREATINTEL_FEEDS"),
 		NDREnabled:          l.boolean("PROBECTL_NDR_ENABLED", true),
 		NDRRulesDir:         l.str("PROBECTL_NDR_RULES_DIR", ""),
+		TopologyEngine:      l.str("PROBECTL_TOPOLOGY_ENGINE", "indexed"),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),
