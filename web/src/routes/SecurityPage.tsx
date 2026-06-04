@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import styles from './security.module.css'
 import { Page } from './pages'
 import {
@@ -24,6 +25,7 @@ import {
   useTLSPosture,
   type TLSPosture,
 } from '../api/tls'
+import { useDetections, type Detection } from '../api/threat'
 
 function when(iso?: string): string {
   if (!iso) return '—'
@@ -153,6 +155,188 @@ function PostureDetail({ posture, onClose }: { posture: TLSPosture; onClose: () 
   )
 }
 
+/** DetectionDetail shows one detection's full provenance — honestly: a
+ *  confidence-scored signal with the attributing feed, never a block, and
+ *  feeds can list benign infrastructure (the 'watch out for'). */
+function DetectionDetail({ detection, onClose }: { detection: Detection; onClose: () => void }) {
+  return (
+    <Modal open onClose={onClose} title={detection.entity}>
+      <dl className={styles.kv}>
+        <dt>Severity</dt>
+        <dd>
+          <Badge tone={severityTone(detection.severity)}>{detection.severity}</Badge>{' '}
+          {typeof detection.confidence === 'number' && detection.confidence > 0 ? (
+            <Badge tone="neutral">confidence {detection.confidence}</Badge>
+          ) : null}
+        </dd>
+        <dt>Detection</dt>
+        <dd>{detection.kind}</dd>
+        {detection.indicator ? (
+          <>
+            <dt>Matched indicator</dt>
+            <dd>{detection.indicator}</dd>
+          </>
+        ) : null}
+        <dt>Provenance</dt>
+        <dd>
+          {detection.source ?? 'unknown'}
+          {detection.category ? ` · ${detection.category}` : ''}
+          {detection.license ? ` · license: ${detection.license}` : ''}
+        </dd>
+        {detection.summary ? (
+          <>
+            <dt>Summary</dt>
+            <dd>{detection.summary}</dd>
+          </>
+        ) : null}
+        <dt>Observed</dt>
+        <dd>{when(detection.observed_at)}</dd>
+      </dl>
+      <p className={styles.notice}>
+        A confidence-scored signal from {detection.source ?? 'a threat feed'} — feeds can list benign
+        infrastructure, and probectl never blocks traffic. Verify before acting.
+      </p>
+      <div className={styles.actionsRow}>
+        {detection.incident_id ? (
+          <Link to={`/incidents?incident=${encodeURIComponent(detection.incident_id)}`}>
+            Open incident timeline
+          </Link>
+        ) : (
+          <span>No correlated incident</span>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+type DetSeverityFilter = 'all' | 'info' | 'warning' | 'critical'
+
+/** DetectionsCard is the IOC/NDR triage list (S-FE3; S42 detections land here). */
+function DetectionsCard() {
+  const detections = useDetections()
+  const [sevFilter, setSevFilter] = useState<DetSeverityFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [needle, setNeedle] = useState('')
+  const [detailID, setDetailID] = useState<string | null>(null)
+
+  const items = useMemo(() => detections.data?.items ?? [], [detections.data])
+  const sources = useMemo(() => Array.from(new Set(items.map((d) => d.source ?? 'unknown'))).sort(), [items])
+
+  const filtered = useMemo(() => {
+    const q = needle.trim().toLowerCase()
+    return items.filter(
+      (d) =>
+        (sevFilter === 'all' || d.severity === sevFilter) &&
+        (sourceFilter === 'all' || (d.source ?? 'unknown') === sourceFilter) &&
+        (!q || `${d.entity} ${d.indicator ?? ''} ${d.kind}`.toLowerCase().includes(q)),
+    )
+  }, [items, sevFilter, sourceFilter, needle])
+
+  const detail = items.find((d) => d.id === detailID) ?? null
+
+  const columns: Column<Detection>[] = [
+    {
+      key: 'severity',
+      header: 'Severity',
+      render: (d) => <Badge tone={severityTone(d.severity)}>{d.severity}</Badge>,
+    },
+    {
+      key: 'confidence',
+      header: 'Confidence',
+      numeric: true,
+      render: (d) => (typeof d.confidence === 'number' && d.confidence > 0 ? String(d.confidence) : '—'),
+    },
+    { key: 'entity', header: 'Entity', render: (d) => d.entity },
+    { key: 'indicator', header: 'Indicator', render: (d) => d.indicator ?? '—' },
+    { key: 'source', header: 'Source', render: (d) => d.source ?? 'unknown' },
+    { key: 'when', header: 'Observed', render: (d) => when(d.observed_at) },
+    {
+      key: 'incident',
+      header: 'Incident',
+      render: (d) =>
+        d.incident_id ? (
+          <Link to={`/incidents?incident=${encodeURIComponent(d.incident_id)}`}>timeline</Link>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      key: 'actions',
+      header: <span className="sr-only">Actions</span>,
+      align: 'end',
+      render: (d) => (
+        <Button size="sm" variant="ghost" onClick={() => setDetailID(d.id)}>
+          Details
+        </Button>
+      ),
+    },
+  ]
+
+  return (
+    <Card>
+      <CardHeader
+        title={`Threat detections (${items.length})`}
+        actions={
+          <div className={styles.filters}>
+            <Field
+              label="Find"
+              value={needle}
+              onChange={(e) => setNeedle(e.target.value)}
+              placeholder="entity, indicator…"
+            />
+            <Select
+              label="Min severity"
+              value={sevFilter}
+              onChange={(e) => setSevFilter(e.target.value as DetSeverityFilter)}
+              options={[
+                { value: 'all', label: 'All severities' },
+                { value: 'critical', label: 'Critical' },
+                { value: 'warning', label: 'Warning' },
+                { value: 'info', label: 'Info' },
+              ]}
+            />
+            <Select
+              label="Source"
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              options={[{ value: 'all', label: 'All sources' }, ...sources.map((s) => ({ value: s, label: s }))]}
+            />
+          </div>
+        }
+      />
+      <CardBody>
+        {detections.isLoading ? (
+          <LoadingState label="Loading detections…" />
+        ) : detections.isError ? (
+          <ErrorState description="Could not load threat detections." />
+        ) : (
+          <>
+            {detections.data && !detections.data.detections_running ? (
+              <p role="status" className={styles.notice}>
+                <Badge tone="warning">detections off</Badge> The threat consumers are not wired — enable
+                threat-intel feeds (S28) to populate triage.
+              </p>
+            ) : null}
+            <Table
+              caption="Threat detections"
+              columns={columns}
+              rows={filtered}
+              rowKey={(d) => d.id}
+              empty={
+                <EmptyState
+                  title="No detections"
+                  description="No observed entity matched a threat-intel indicator."
+                />
+              }
+            />
+          </>
+        )}
+      </CardBody>
+      {detail ? <DetectionDetail detection={detail} onClose={() => setDetailID(null)} /> : null}
+    </Card>
+  )
+}
+
 type FlagFilter = 'all' | 'flagged' | 'expiring' | 'expired' | 'weak' | 'self_signed' | 'ct' | 'intel'
 
 function matchesFlag(p: TLSPosture, f: FlagFilter): boolean {
@@ -177,9 +361,9 @@ function matchesFlag(p: TLSPosture, f: FlagFilter): boolean {
   }
 }
 
-/** SecurityPage is the TLS/cert posture surface (S-FE2): the certificate
- *  inventory, the expiring-soon worklist, and per-cert detail with the certctl
- *  handoff. (The threat/IOC triage surface joins this page in S-FE3.) */
+/** SecurityPage is the security-plane surface: threat/IOC triage (S-FE3,
+ *  fed by S28 + later S42) over the TLS/cert posture inventory, worklist, and
+ *  certctl handoff (S-FE2). */
 export function SecurityPage() {
   const posture = useTLSPosture()
   const [text, setText] = useState('')
@@ -236,8 +420,9 @@ export function SecurityPage() {
   ]
 
   return (
-    <Page title="Security" subtitle="Certificates · TLS posture from observed traffic — never a fresh handshake.">
+    <Page title="Security" subtitle="Threat triage and certificate posture from observed traffic — signals, never blocks.">
       <div className={styles.stack}>
+        <DetectionsCard />
         <Card>
           <CardHeader title={`Expiring soon (${worklist.length})`} />
           <CardBody>

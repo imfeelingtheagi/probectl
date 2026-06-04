@@ -133,3 +133,19 @@ leave it empty to load all built-in feeds.
 - **AUP/provenance tracked** per feed for MSP/commercial resale (§2, §10).
 - **FIPS crypto abstraction** — the cert SHA1 fingerprint goes through
   `crypto.CertSHA1`; no hash primitive is imported outside `internal/crypto` (§3).
+
+## The triage surface (S-FE3)
+
+Attributed matches are retained as tenant-scoped, in-memory **detections**
+(newest first, bounded per tenant; recognized from threat-plane signals
+carrying `intel.*` provenance, so S42's NDR detections land in the same store
+without a new pipeline) and served at `GET /v1/threat/detections`
+(RBAC `threat.read`; `detections_running` honesty flag). Each detection
+carries the flagged entity, the matched indicator, the attributing feed with
+**confidence + category + license (verbatim provenance)**, and the correlated
+**incident id** — the pivot into the incident timeline
+(`/incidents?incident=<id>` is a supported deep link). The web surface lives
+on `/security` above the certificate inventory: severity/source/text filters,
+a provenance detail view that states plainly that feeds can list benign
+infrastructure and that probectl never blocks (guardrail 9). The durable
+trail remains the incident + SIEM export; the store rebuilds from the stream.

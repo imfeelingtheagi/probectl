@@ -41,3 +41,34 @@ func (s *Server) handleTLSPosture(w http.ResponseWriter, r *http.Request) error 
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "collector_running": true})
 	return nil
 }
+
+// WithDetections attaches the detection store backing GET /v1/threat/detections
+// (S-FE3). nil is a no-op. Returns the server for chaining.
+func (s *Server) WithDetections(ds *threat.DetectionStore) *Server {
+	if ds != nil {
+		s.detections = ds
+	}
+	return s
+}
+
+// handleThreatDetections serves GET /v1/threat/detections — the tenant's recent
+// IOC/NDR detections (newest first) with source attribution + confidence and
+// the correlated incident id (the triage pivot). Detections are SIGNALS —
+// probectl never blocks (guardrail 9) — and feeds can list benign
+// infrastructure, so provenance ships verbatim.
+func (s *Server) handleThreatDetections(w http.ResponseWriter, r *http.Request) error {
+	tid, err := s.principalTenant(r)
+	if err != nil {
+		return err
+	}
+	if s.detections == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"items": []threat.Detection{}, "detections_running": false})
+		return nil
+	}
+	items := s.detections.List(tid)
+	if items == nil {
+		items = []threat.Detection{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "detections_running": true})
+	return nil
+}

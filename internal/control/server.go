@@ -86,6 +86,10 @@ type Server struct {
 	// Set via WithTLSPosture; nil reports collector_running=false.
 	tlsPostures *threat.PostureStore
 
+	// Threat detections (S-FE3): IOC/NDR matches recorded by the threat
+	// consumers. Set via WithDetections; nil reports detections_running=false.
+	detections *threat.DetectionStore
+
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).
 	draining atomic.Bool

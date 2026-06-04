@@ -17,6 +17,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/incident"
 	"github.com/imfeelingtheagi/probectl/internal/opendata"
 	"github.com/imfeelingtheagi/probectl/internal/siem"
+	"github.com/imfeelingtheagi/probectl/internal/threat"
 )
 
 // BuildThreatIntel builds the S28 IOC store + refresher from config. It returns
@@ -46,6 +47,7 @@ func BuildThreatIntel(cfg *config.Config, log *slog.Logger) (*opendata.IOCStore,
 // a tenant-scoped threat-plane incident. A match is a confidence-scored SIGNAL
 // with source attribution — probectl never blocks traffic (guardrail 9).
 type IOCConsumer struct {
+	detections *threat.DetectionStore // optional triage feed (S-FE3)
 	bus        bus.Bus
 	correlator *incident.Correlator
 	store      *opendata.IOCStore
@@ -64,6 +66,13 @@ func NewIOCConsumer(b bus.Bus, c *incident.Correlator, store *opendata.IOCStore,
 
 // WithSIEM forwards each IOC-match signal to the SIEM (S32) in addition to
 // correlating it into an incident. nil disables it (the default).
+// WithDetections retains every attributed match for the triage surface
+// (S-FE3). nil is a no-op.
+func (cs *IOCConsumer) WithDetections(ds *threat.DetectionStore) *IOCConsumer {
+	cs.detections = ds
+	return cs
+}
+
 func (cs *IOCConsumer) WithSIEM(fw *siem.Forwarder) *IOCConsumer {
 	cs.siem = fw
 	return cs
@@ -79,8 +88,18 @@ func (cs *IOCConsumer) Run(ctx context.Context) error {
 				return nil
 			}
 			for _, sig := range cs.signals(&r) {
-				if _, err := cs.correlator.Ingest(ctx, sig); err != nil {
+				inc, err := cs.correlator.Ingest(ctx, sig)
+				if err != nil {
 					cs.log.Warn("correlate ioc match into incident failed", "error", err)
+				}
+				if cs.detections != nil {
+					incID := ""
+					if inc != nil {
+						incID = inc.ID
+					}
+					if d, ok := threat.DetectionFromSignal(sig, incID); ok {
+						cs.detections.Record(sig.TenantID, d)
+					}
 				}
 				if cs.siem != nil {
 					if err := cs.siem.Enqueue(ctx, signalToSIEM(sig)); err != nil {

@@ -202,13 +202,17 @@ func run(cmd string) error {
 	// (tenant, target), bounded per tenant; written by the S27 consumer below
 	// and served at /v1/tls/posture.
 	tlsPostures := threat.NewPostureStore(0)
+	// Threat detections (S-FE3): IOC/NDR matches recorded by the threat
+	// consumers below; served at /v1/threat/detections.
+	detections := threat.NewDetectionStore(0)
 
 	srv := control.New(cfg, log, db, db.Pool(), pathStore, nil).
 		WithDispatcher(dispatcher).
 		WithFlowStore(flowStore).
 		WithTSDB(tsdbWriter). // Grafana datasource + federation + remote-write (S40)
 		WithCMDB(cmdbResolver).
-		WithTLSPosture(tlsPostures)
+		WithTLSPosture(tlsPostures).
+		WithDetections(detections)
 	if alertEngine != nil {
 		// Active alerts + silence/ack (S-FE1) read engine truth, tenant-keyed.
 		srv.WithAlertState(tenancy.DefaultTenantID.String(), alertEngine)
@@ -242,7 +246,10 @@ func run(cmd string) error {
 	if intelOn {
 		g.Go(func() error { return iocRefresher.Run(gctx) })
 		g.Go(func() error {
-			return control.NewIOCConsumer(resultBus, correlator, iocStore, log).WithSIEM(siemFwd).Run(gctx)
+			return control.NewIOCConsumer(resultBus, correlator, iocStore, log).
+				WithSIEM(siemFwd).
+				WithDetections(detections). // triage feed (S-FE3)
+				Run(gctx)
 		})
 		log.Info("threat-intel enrichment enabled", "refresh", cfg.ThreatIntelRefresh)
 	}
@@ -259,6 +266,7 @@ func run(cmd string) error {
 		return control.NewTLSPostureConsumer(resultBus, correlator, tlsAnalyzer, log).
 			WithSIEM(siemFwd).
 			WithPostureStore(tlsPostures). // certificate inventory (S-FE2)
+			WithDetections(detections).    // triage feed (S-FE3)
 			Run(gctx)
 	})
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import styles from './incidents.module.css'
 import { Page } from './pages'
 import {
@@ -103,7 +104,10 @@ function Timeline({ incidentId }: { incidentId: string }) {
 
 export function IncidentsPage() {
   const incidents = useIncidents()
-  const [selected, setSelected] = useState<string | null>(null)
+  // Deep-link support (?incident=<id>): other surfaces (threat triage S-FE3,
+  // alerts) pivot straight into a specific incident's timeline.
+  const [params] = useSearchParams()
+  const [selected, setSelected] = useState<string | null>(params.get('incident'))
 
   useEffect(() => {
     if (selected === null && incidents.data && incidents.data.length > 0) {

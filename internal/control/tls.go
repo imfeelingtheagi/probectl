@@ -34,7 +34,8 @@ func BuildTLSAnalyzer(cfg *config.Config) *threat.Analyzer {
 // posture findings — correlating each into a threat-plane incident (feeding the
 // unified timeline + alerting, S16/S17). It NEVER re-handshakes (S27 watch-out).
 type TLSPostureConsumer struct {
-	postures   *threat.PostureStore // optional inventory (S-FE2)
+	postures   *threat.PostureStore   // optional inventory (S-FE2)
+	detections *threat.DetectionStore // optional triage feed (S-FE3)
 	bus        bus.Bus
 	correlator *incident.Correlator
 	analyzer   *threat.Analyzer
@@ -59,6 +60,13 @@ func (cs *TLSPostureConsumer) WithPostureStore(ps *threat.PostureStore) *TLSPost
 	return cs
 }
 
+// WithDetections retains intel-attributed findings (malicious cert/JA3) for
+// the triage surface (S-FE3). nil is a no-op.
+func (cs *TLSPostureConsumer) WithDetections(ds *threat.DetectionStore) *TLSPostureConsumer {
+	cs.detections = ds
+	return cs
+}
+
 func (cs *TLSPostureConsumer) WithSIEM(fw *siem.Forwarder) *TLSPostureConsumer {
 	cs.siem = fw
 	return cs
@@ -74,8 +82,18 @@ func (cs *TLSPostureConsumer) Run(ctx context.Context) error {
 				return nil
 			}
 			for _, sig := range cs.analyzeAndRecord(ctx, &r) {
-				if _, err := cs.correlator.Ingest(ctx, sig); err != nil {
+				inc, err := cs.correlator.Ingest(ctx, sig)
+				if err != nil {
 					cs.log.Warn("correlate tls posture into incident failed", "error", err)
+				}
+				if cs.detections != nil {
+					incID := ""
+					if inc != nil {
+						incID = inc.ID
+					}
+					if d, ok := threat.DetectionFromSignal(sig, incID); ok {
+						cs.detections.Record(sig.TenantID, d)
+					}
 				}
 				if cs.siem != nil {
 					if err := cs.siem.Enqueue(ctx, signalToSIEM(sig)); err != nil {

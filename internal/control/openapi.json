@@ -2335,6 +2335,89 @@
           }
         }
       }
+    },
+    "/v1/threat/detections": {
+      "get": {
+        "operationId": "listThreatDetections",
+        "summary": "Recent IOC/NDR detections with source attribution + confidence",
+        "tags": [
+          "threat"
+        ],
+        "description": "The caller's tenant's recent threat detections (newest first): the flagged entity, the matched indicator, the attributing feed/detector with confidence and license, and the correlated incident id (the triage pivot). Detections are confidence-scored SIGNALS \u2014 probectl never blocks \u2014 and feeds can list benign infrastructure, so provenance ships verbatim. detections_running=false distinguishes unwired consumers from a quiet tenant.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent detections.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detections_running": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "plane": {
+                            "type": "string"
+                          },
+                          "severity": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "integer"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string"
+                          },
+                          "license": {
+                            "type": "string"
+                          },
+                          "indicator": {
+                            "type": "string"
+                          },
+                          "entity": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "incident_id": {
+                            "type": "string"
+                          },
+                          "observed_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
