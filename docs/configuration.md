@@ -898,6 +898,17 @@ endpoint is the `…/api/now/table/incident` URL. Inbound deliveries must includ
 unsigned or forged delivery is rejected (`401`). Secrets are runtime config —
 inject them from a secret manager, never commit them.
 
+### NDR-lite detection (S42)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROBECTL_NDR_ENABLED`   | `true` | behavioral detection engine (DGA/exfil/beaconing/egress/lateral) over local DNS/flow/eBPF streams; signals only — never blocks |
+| `PROBECTL_NDR_RULES_DIR` | (none) | detection-as-code overlay directory; rules merge by id over the embedded defaults (a malformed dir fails startup) |
+
+Detections are confidence-scored threat-plane signals (`ndr.*`) exported to
+incidents (S17), the Security triage surface (S-FE3), and the SIEM (S32).
+See `docs/ndr.md` for the detector and tuning reference.
+
 ### Secrets integration (S41)
 
 Any credential value in this document may be a **secret reference** instead of

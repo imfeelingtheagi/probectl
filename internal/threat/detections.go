@@ -31,13 +31,34 @@ type Detection struct {
 	ObservedAt time.Time `json:"observed_at"`
 }
 
-// DetectionFromSignal recognizes a triage-worthy threat-plane signal — today
-// anything carrying threat-intel provenance (intel.source); S42's NDR
-// detections (also threat-plane signals) extend this recognizer, not a new
-// pipeline. incidentID is the correlated incident when ingest succeeded.
+// DetectionFromSignal recognizes a triage-worthy threat-plane signal: anything
+// carrying threat-intel provenance (intel.source, S28) or an NDR detector rule
+// (detector.rule, S42) — one recognizer, one pipeline. incidentID is the
+// correlated incident when ingest succeeded.
 func DetectionFromSignal(sig incident.Signal, incidentID string) (Detection, bool) {
 	if sig.Plane != "threat" {
 		return Detection{}, false
+	}
+	// NDR behavioral detections (S42): the rule ID is the provenance source,
+	// its kind the category, its computed confidence the score. Intel-backed
+	// evidence (intel.*) rides along when the detector consulted a feed.
+	if rule := sig.Attributes["detector.rule"]; rule != "" {
+		conf, _ := strconv.Atoi(sig.Attributes["detector.confidence"])
+		return Detection{
+			Kind:       sig.Kind,
+			Plane:      sig.Plane,
+			Severity:   string(sig.Severity),
+			Confidence: conf,
+			Source:     rule,
+			Category:   sig.Attributes["detector.kind"],
+			License:    sig.Attributes["intel.license"],
+			Indicator:  sig.Attributes["intel.indicator"],
+			Entity:     sig.Target,
+			Title:      sig.Title,
+			Summary:    sig.Summary,
+			IncidentID: incidentID,
+			ObservedAt: sig.OccurredAt,
+		}, true
 	}
 	src := sig.Attributes["intel.source"]
 	if src == "" {

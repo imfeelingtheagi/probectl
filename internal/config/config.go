@@ -173,6 +173,14 @@ type Config struct {
 	ThreatIntelRefresh time.Duration
 	ThreatIntelFeeds   []string
 
+	// NDR-lite behavioral detection (S42, F37): DGA/exfil/beaconing/egress/
+	// lateral detectors over the locally-collected flow/eBPF/DNS substrate.
+	// ON by default — it makes no outbound calls (sovereignty-safe) and its
+	// detections are SIGNALS, never blocks (guardrail 9). NDRRulesDir overlays
+	// the embedded detection-as-code ruleset (tune/disable/add without code).
+	NDREnabled  bool
+	NDRRulesDir string
+
 	// SIEM export (S32, F26): forward the audit stream + threat-plane signals to the
 	// SOC's SIEM. OFF by default — enabling it makes an outbound connection to the
 	// operator-supplied endpoint (sovereignty / no-phone-home). SIEMPreset adapts the
@@ -311,6 +319,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		ThreatIntelEnabled:  l.boolean("PROBECTL_THREATINTEL_ENABLED", false),
 		ThreatIntelRefresh:  l.dur("PROBECTL_THREATINTEL_REFRESH", 6*time.Hour),
 		ThreatIntelFeeds:    l.list("PROBECTL_THREATINTEL_FEEDS"),
+		NDREnabled:          l.boolean("PROBECTL_NDR_ENABLED", true),
+		NDRRulesDir:         l.str("PROBECTL_NDR_RULES_DIR", ""),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),

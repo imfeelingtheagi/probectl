@@ -1,0 +1,119 @@
+# probectl built-in NDR-lite detection rules (S42, F37).
+#
+# Detection-as-code: every threshold here is operator-tunable by dropping an
+# override file (same rule id) into PROBECTL_NDR_RULES_DIR. Detections are
+# confidence-scored SIGNALS — probectl never blocks traffic (guardrail 9).
+#
+# Threshold reference (per kind):
+#   dns_dga:        min_names (distinct names before judging), entropy (avg
+#                   Shannon bits/char to call a name generated), ratio (fraction
+#                   of generated-looking names that fires), window_s
+#   dns_exfil:      min_queries, qname_bytes (total queried-name bytes in the
+#                   window that fires), unique_ratio (distinct-subdomain
+#                   fraction), window_s
+#   beaconing:      min_samples (intervals before judging), max_jitter (stddev/
+#                   mean of inter-arrival; lower = more regular), min_interval_s,
+#                   max_interval_s
+#   egress_volume:  min_samples (observations to build the baseline),
+#                   spike_factor (bytes vs EWMA baseline that fires), min_bytes
+#   egress_intel:   min_confidence (IOC feed confidence floor)
+#                   lists.bad_asns (AS numbers treated as hostile egress)
+#   lateral:        fanout (distinct internal destinations in the window),
+#                   window_s; lists.ports (east-west service ports watched)
+
+rules:
+  - id: ndr-dns-dga-default
+    version: 1
+    kind: dns_dga
+    name: DGA-like DNS lookups
+    description: >
+      A source resolving many high-entropy, algorithmically-generated-looking
+      names — classic malware rendezvous behavior.
+    severity: warning
+    base_confidence: 50
+    suppress: 1h
+    thresholds:
+      min_names: 20
+      entropy: 3.8
+      ratio: 0.5
+      window_s: 600
+
+  - id: ndr-dns-exfil-default
+    version: 1
+    kind: dns_exfil
+    name: DNS exfiltration pattern
+    description: >
+      High distinct-subdomain volume under one registered domain — data
+      smuggled out in query names.
+    severity: critical
+    base_confidence: 55
+    suppress: 1h
+    thresholds:
+      min_queries: 30
+      qname_bytes: 4096
+      unique_ratio: 0.9
+      window_s: 600
+
+  - id: ndr-beaconing-default
+    version: 1
+    kind: beaconing
+    name: Periodic beaconing
+    description: >
+      Highly regular callbacks from one source to one destination:port —
+      C2 heartbeat behavior. Confidence rises with regularity and with
+      threat-intel reputation of the destination.
+    severity: warning
+    base_confidence: 40
+    suppress: 1h
+    thresholds:
+      min_samples: 8
+      max_jitter: 0.12
+      min_interval_s: 5
+      max_interval_s: 3600
+
+  - id: ndr-egress-volume-default
+    version: 1
+    kind: egress_volume
+    name: Egress volume anomaly
+    description: >
+      A source suddenly pushing far more bytes out than its own baseline —
+      bulk exfiltration or compromise staging.
+    severity: warning
+    base_confidence: 35
+    suppress: 30m
+    thresholds:
+      min_samples: 12
+      spike_factor: 10
+      min_bytes: 10485760 # 10 MiB — never fire on trickles
+
+  - id: ndr-egress-intel-default
+    version: 1
+    kind: egress_intel
+    name: Egress to hostile infrastructure
+    description: >
+      Outbound traffic to a Tor exit, a threat-intel-listed host, or a
+      configured bad ASN.
+    severity: critical
+    base_confidence: 60
+    suppress: 30m
+    thresholds:
+      min_confidence: 50
+    lists:
+      bad_asns: [] # e.g. ["64496", "64511"] — operator-supplied
+
+  - id: ndr-lateral-default
+    version: 1
+    kind: lateral
+    name: Lateral-movement fan-out
+    description: >
+      One internal host reaching many distinct internal hosts on east-west
+      service ports inside a short window — scanning/spread behavior. Known
+      service relationships from the topology map are excluded.
+    severity: critical
+    base_confidence: 50
+    suppress: 30m
+    thresholds:
+      fanout: 10
+      window_s: 300
+    lists:
+      ports: ["22", "445", "3389", "5985", "5986"]

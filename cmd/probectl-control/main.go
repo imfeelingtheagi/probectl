@@ -281,6 +281,24 @@ func run(cmd string) error {
 		log.Info("threat-intel enrichment enabled", "refresh", cfg.ThreatIntelRefresh)
 	}
 
+	// NDR-lite behavioral detection (S42): DGA/exfil/beaconing/egress/lateral
+	// over the DNS/flow/eBPF streams already arriving here. Purely local (no
+	// outbound calls); detections are confidence-scored SIGNALS exported to
+	// incidents + triage + SIEM — never blocks (guardrail 9). The topology
+	// neighbor source plugs in when S43 lands a live store here.
+	ndrEngine, ndrOn, err := control.BuildNDR(cfg, intelSourceOrNil(iocStore), nil, log)
+	if err != nil {
+		return err // malformed rules dir fails startup (fail closed)
+	}
+	if ndrOn {
+		g.Go(func() error {
+			return control.NewNDRConsumer(resultBus, ndrEngine, correlator, log).
+				WithSIEM(siemFwd).
+				WithDetections(detections).
+				Run(gctx)
+		})
+	}
+
 	// TLS/cert posture (S27): analyze captured TLS from HTTPS synthetic results
 	// into threat-plane incidents (expiry/weakness + a trustctl renewal handoff),
 	// reusing already-captured TLS — never re-handshaking. When threat-intel is on,
@@ -363,4 +381,14 @@ func runMigrations(ctx context.Context, db *store.DB, log *slog.Logger) error {
 		log.Info("migrations applied", "count", len(applied), "versions", applied)
 	}
 	return nil
+}
+
+// intelSourceOrNil adapts the optional IOC store to the engine's seam: a nil
+// *IOCStore must become a nil INTERFACE (not a typed-nil) so the engine's
+// nil checks behave.
+func intelSourceOrNil(s *opendata.IOCStore) threat.IntelSource {
+	if s == nil {
+		return nil
+	}
+	return s
 }
