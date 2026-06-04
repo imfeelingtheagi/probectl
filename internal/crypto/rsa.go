@@ -43,3 +43,19 @@ func SignRS256(privateKeyPEM, data []byte) ([]byte, error) {
 	digest := sha256.Sum256(data)
 	return rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 }
+
+// GenerateRSAKeyPEM generates an RSA private key and returns it PKCS#8
+// PEM-encoded ("PRIVATE KEY"). It lives here so callers (including tests
+// that fabricate service-account keys) never touch RSA primitives directly
+// (guardrail 3 — the crypto-import gate enforces this repo-wide).
+func GenerateRSAKeyPEM(bits int) ([]byte, error) {
+	key, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		return nil, fmt.Errorf("crypto: generate rsa key: %w", err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("crypto: marshal rsa key: %w", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), nil
+}

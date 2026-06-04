@@ -3,17 +3,15 @@ package secrets
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 )
 
 func ctxT(t *testing.T) context.Context {
@@ -341,12 +339,12 @@ func TestAzureKeyVault(t *testing.T) {
 }
 
 func TestGCPSecretManager(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	// Key material comes from internal/crypto — never RSA primitives directly
+	// (guardrail 3; the crypto-import gate enforces it).
+	keyPEM, err := crypto.GenerateRSAKeyPEM(2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY",
-		Bytes: mustPKCS8(t, key)})
 	saJSON, _ := json.Marshal(map[string]string{
 		"client_email": "svc@acme-prod.iam.gserviceaccount.com",
 		"private_key":  string(keyPEM),
@@ -392,13 +390,4 @@ func TestGCPSecretManager(t *testing.T) {
 	if err != nil || got != "gcp-s3cret" {
 		t.Fatalf("fetch = %q err=%v", got, err)
 	}
-}
-
-func mustPKCS8(t *testing.T, key *rsa.PrivateKey) []byte {
-	t.Helper()
-	b, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
 }
