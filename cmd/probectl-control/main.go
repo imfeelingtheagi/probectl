@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,9 +32,11 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/incident"
 	"github.com/imfeelingtheagi/probectl/internal/lifecycle"
 	"github.com/imfeelingtheagi/probectl/internal/logging"
+	"github.com/imfeelingtheagi/probectl/internal/opendata"
 	"github.com/imfeelingtheagi/probectl/internal/otel/otlp"
 	"github.com/imfeelingtheagi/probectl/internal/pipeline"
 	"github.com/imfeelingtheagi/probectl/internal/store"
+	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/migrate"
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
@@ -126,6 +129,26 @@ func run(cmd string) error {
 	}
 	defer pathStore.Close()
 
+	// Flow analytics store (S38): where NetFlow/IPFIX/sFlow records land
+	// (ClickHouse at volume; memory in the lightweight deploy) and the
+	// /v1/flows/* views are served from.
+	flowStore, err := flowstore.New(cfg.FlowStoreMode, cfg.FlowStoreURL, cfg.FlowRetentionDays)
+	if err != nil {
+		return fmt.Errorf("flow store: %w", err)
+	}
+	defer flowStore.Close()
+
+	// ASN/geo enrichment for flows (S15 via S38): OPT-IN — Team Cymru is an
+	// outbound DNS dependency, so it stays off unless explicitly enabled
+	// (no-phone-home guardrail). Device-asserted AS numbers always flow through.
+	var flowEnricher pipeline.FlowEnricher
+	if cfg.FlowEnrichASN {
+		en := opendata.NewEnricher(log)
+		en.Register(opendata.NewCymru(net.DefaultResolver))
+		flowEnricher = en
+		log.Info("flow ASN enrichment enabled", "source", "team-cymru")
+	}
+
 	// Brokers agent-to-agent measurement sessions; sessions are started by the
 	// test API in a later sprint.
 	a2aBroker := a2a.NewBroker()
@@ -145,9 +168,11 @@ func run(cmd string) error {
 	dispatcher, notifyOn := control.BuildDispatcher(cfg, db.Pool(), log)
 
 	g.Go(func() error {
-		return control.New(cfg, log, db, db.Pool(), pathStore, nil).WithDispatcher(dispatcher).Run(gctx)
+		return control.New(cfg, log, db, db.Pool(), pathStore, nil).WithDispatcher(dispatcher).WithFlowStore(flowStore).Run(gctx)
 	})
 	g.Go(func() error { return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).Run(gctx) })
+	// Flow pipeline (S38): probectl.flow.events -> enrich -> flow store.
+	g.Go(func() error { return pipeline.NewFlowConsumer(resultBus, flowStore, flowEnricher, log).Run(gctx) })
 
 	// Incident correlation (S17): related signals across planes group into one
 	// incident. Alerts feed it via a sink; BGP events via a bus consumer. When

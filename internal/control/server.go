@@ -18,6 +18,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/notify"
 	"github.com/imfeelingtheagi/probectl/internal/path"
 	"github.com/imfeelingtheagi/probectl/internal/store"
+	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 )
 
@@ -58,6 +59,10 @@ type Server struct {
 	// sync the operator's tooling.
 	dispatcher *notify.Dispatcher
 
+	// Flow analytics store (S38). Defaults to in-memory; main attaches the
+	// configured store (ClickHouse in production) via WithFlowStore.
+	flowStore flowstore.Store
+
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).
 	draining atomic.Bool
@@ -68,6 +73,16 @@ type Server struct {
 // tooling. nil is a no-op (the feature stays off). Returns the server for chaining.
 func (s *Server) WithDispatcher(d *notify.Dispatcher) *Server {
 	s.dispatcher = d
+	return s
+}
+
+// WithFlowStore attaches the flow-analytics store (S38) backing /v1/flows/*.
+// nil is a no-op (the in-memory default from New stays). Returns the server
+// for chaining.
+func (s *Server) WithFlowStore(fs flowstore.Store) *Server {
+	if fs != nil {
+		s.flowStore = fs
+	}
 	return s
 }
 
@@ -83,7 +98,8 @@ func New(cfg *config.Config, log *slog.Logger, pinger store.Pinger, pool *pgxpoo
 	if discover == nil {
 		discover = path.Run
 	}
-	s := &Server{cfg: cfg, log: log, pinger: pinger, pool: pool, pathStore: pathStore, discover: discover}
+	s := &Server{cfg: cfg, log: log, pinger: pinger, pool: pool, pathStore: pathStore, discover: discover,
+		flowStore: flowstore.NewMemory()}
 
 	// Identity & access (S18). The SSO provider factory is always present; the
 	// session manager + authenticator need a DB (nil in operational-only tests).

@@ -30,6 +30,7 @@ const (
 	permIncidentRead   = "incident.read"
 	permIncidentWrite  = "incident.write"
 	permChangeRead     = "change.read"
+	permFlowRead       = "flow.read"
 	permAuditRead      = "audit.read"
 	permAIQuery        = "ai.query"
 	permDirectoryRead  = "directory.read"
@@ -44,6 +45,7 @@ var allPermissionKeys = []string{
 	permAlertRead, permAlertWrite,
 	permIncidentRead, permIncidentWrite,
 	permChangeRead,
+	permFlowRead,
 	permDirectoryRead, permDirectoryWrite,
 	permAuditRead,
 	permAIQuery,

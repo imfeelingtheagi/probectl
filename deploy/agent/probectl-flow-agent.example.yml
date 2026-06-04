@@ -1,0 +1,37 @@
+# probectl-flow-agent example configuration (S38, F17).
+# Every key has a PROBECTL_FLOW_* environment override — see docs/configuration.md.
+# Deploy the collector adjacent to its exporters: flow export protocols are
+# plaintext UDP by design, so the datagrams should never cross untrusted
+# segments (docs/flow.md, "Security posture").
+
+tenant_id: "00000000-0000-0000-0000-000000000001" # REQUIRED — every record is tenant-bound (F50)
+agent_id: "" # default: OS hostname
+
+bus:
+  mode: memory # memory | kafka
+  brokers: []  # kafka mode, e.g. ["kafka-1:9092", "kafka-2:9092"]
+
+# NetFlow v5 AND v9 share one socket (version-sniffed).
+netflow:
+  enabled: true
+  listen: ":2055"
+ipfix:
+  enabled: true
+  listen: ":4739"
+sflow:
+  enabled: true
+  listen: ":6343"
+
+# Batching: a flush goes out at batch_size records or flush_interval, whichever
+# comes first.
+batch_size: 1000
+flush_interval: 2s
+
+# v9/IPFIX template state — TTL'd and size-capped (untrusted input).
+template_ttl: 30m
+max_templates: 4096
+
+# High-volume tuning: kernel receive buffer, decode->flush queue, readers/socket.
+read_buffer_bytes: 4194304
+queue_size: 65536
+workers: 2

@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+// Device flow records (S38, F17): NetFlow v5/v9, IPFIX, and sFlow v5 datagrams
+// decoded by the flow collector into one normalized record. Field names follow
+// OpenTelemetry source.* / destination.* / network.* semantic conventions from
+// the first field (matching result.proto / ebpf.proto), so the OTLP layer (S22)
+// EXPOSES these signals rather than remapping them; fields with no OTel/ECS
+// equivalent use the probectl.flow.* namespace. The tenant is the outermost
+// scope (probectl.tenant.id, F50): every batch is tenant-tagged on the bus and
+// tenant-scoped in ClickHouse.
+//
+// Sampling: bytes/packets carry the RAW exported counters; sampling_rate is the
+// exporter's rate (1 = unsampled); bytes_scaled/packets_scaled are the
+// sampling-corrected estimates (raw x rate) used by analytics.
+//
+// Backward compatibility: fields are additive-only; never renumber or reuse tags.
+package probectl.flow.v1;
+
+option go_package = "github.com/imfeelingtheagi/probectl/internal/gen/probectl/flow/v1;flowv1";
+
+message FlowRecord {
+  // --- Resource identity (OTel resource attributes) ---
+  string tenant_id = 1;        // -> "probectl.tenant.id" (outermost scope, F50)
+  string agent_id = 2;         // -> "probectl.agent.id" (the collecting agent)
+  string exporter_address = 3; // -> "probectl.flow.exporter.address" (the device)
+  uint32 observation_domain = 4; // v9 source ID / IPFIX observation domain / sFlow sub-agent
+
+  // flow_protocol is the wire protocol the record was decoded from:
+  // netflow5 | netflow9 | ipfix | sflow5.
+  string flow_protocol = 5; // -> "probectl.flow.protocol"
+
+  int64 observed_at_unix_nano = 6; // collector receive time (OTel-style ns)
+  int64 start_unix_nano = 7;       // flow start (exporter clock, mapped to unix)
+  int64 end_unix_nano = 8;         // flow end
+
+  // --- 5-tuple (OTel source.* / destination.* / network.* conventions) ---
+  string source_address = 9;       // -> "source.address"
+  uint32 source_port = 10;         // -> "source.port"
+  string destination_address = 11; // -> "destination.address"
+  uint32 destination_port = 12;    // -> "destination.port"
+  string network_transport = 13;   // -> "network.transport" (tcp | udp | icmp | "<number>")
+  string network_type = 14;        // -> "network.type" (ipv4 | ipv6)
+
+  // --- Interface / L2 / L3 detail ---
+  uint32 input_interface = 15;  // SNMP ifIndex in  -> "probectl.flow.interface.in"
+  uint32 output_interface = 16; // SNMP ifIndex out -> "probectl.flow.interface.out"
+  uint32 vlan = 17;             // 802.1Q VID when present
+  uint32 tos = 18;              // IP ToS/DSCP byte
+  uint32 tcp_flags = 19;        // cumulative TCP flags
+  string next_hop = 20;         // forwarding next hop, when exported
+
+  // --- Volume + sampling ---
+  uint64 bytes = 21;          // raw exported octets
+  uint64 packets = 22;        // raw exported packets
+  uint64 sampling_rate = 23;  // 1 = unsampled -> "probectl.flow.sampling.rate"
+  uint64 bytes_scaled = 24;   // bytes x sampling_rate (analytics input)
+  uint64 packets_scaled = 25; // packets x sampling_rate
+
+  // --- Enrichment (S15 opendata: filled control-plane side; ECS-aligned names,
+  // no OTel equivalent exists for AS/geo on source/destination) ---
+  uint32 source_asn = 26;             // -> "source.as.number"
+  string source_as_name = 27;         // -> "source.as.organization.name"
+  string source_country = 28;         // -> "source.geo.country.iso_code"
+  uint32 destination_asn = 29;        // -> "destination.as.number"
+  string destination_as_name = 30;    // -> "destination.as.organization.name"
+  string destination_country = 31;    // -> "destination.geo.country.iso_code"
+}
+
+// FlowBatch is the bus payload on probectl.flow.events: one collector flush,
+// tenant-keyed. Batching amortizes publish overhead at NetFlow volumes.
+message FlowBatch {
+  repeated FlowRecord flows = 1;
+}

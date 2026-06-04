@@ -23,6 +23,12 @@ const EBPFFlowsTopic = "probectl.ebpf.flows"
 // ExportMetricsServiceRequest.
 const OTLPMetricsTopic = "probectl.otlp.metrics"
 
+// FlowEventsTopic carries normalized device-flow batches (NetFlow v5/v9, IPFIX,
+// sFlow v5) from the flow collector (S38), tenant-tagged via the message key.
+// Payload: flowv1.FlowBatch. The control plane consumes it, enriches ASN/geo
+// (S15), and persists to ClickHouse (internal/store/flowstore).
+const FlowEventsTopic = "probectl.flow.events"
+
 // EndpointResultsTopic carries DEM results from the endpoint agent (S37) — WiFi /
 // gateway / last-mile / session signals and the slowdown attribution — tenant-
 // tagged via the message key. Payload: resultv1.Result (the canonical canary

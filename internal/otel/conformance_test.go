@@ -5,6 +5,7 @@ import (
 
 	bgpv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/bgp/v1"
 	ebpfv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/ebpf/v1"
+	flowv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/flow/v1"
 	resultv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/result/v1"
 )
 
@@ -35,6 +36,13 @@ func TestAllSignalMappingsConform(t *testing.T) {
 		"path": PathAttributes(PathSummary{
 			TenantID: "t", Target: "example.com", TargetIP: "93.184.216.34", Mode: "icmp",
 			HopCount: 12, DestinationReached: true,
+		}),
+		"netflow": NetFlowAttributes(&flowv1.FlowRecord{
+			TenantId: "t", AgentId: "a", ExporterAddress: "203.0.113.10", FlowProtocol: "netflow9",
+			SourceAddress: "10.0.0.1", SourcePort: 53, DestinationAddress: "10.0.0.2", DestinationPort: 443,
+			NetworkTransport: "udp", NetworkType: "ipv4", InputInterface: 3, OutputInterface: 4,
+			SamplingRate: 64, SourceAsn: 64500, SourceAsName: "ACME", SourceCountry: "DE",
+			DestinationAsn: 64501, DestinationAsName: "OTHER", DestinationCountry: "NL",
 		}),
 	}
 

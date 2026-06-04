@@ -55,6 +55,12 @@ awk -v mod="${MODULE}" '
     floor["internal/siem"]           = 80
     floor["internal/notify"]         = 72
     floor["internal/lifecycle"]      = 80
+    # Decoders + template/sampling state are exhaustively fixture-tested; the
+    # UDP read loops are exercised by the collector e2e test.
+    floor["internal/flow"]           = 75
+    # Memory store + anomaly detector + SQL builders are unit-tested; the
+    # ClickHouse HTTP paths are covered by the live-stack integration job.
+    floor["internal/store/flowstore"] = 50
     floor["internal/browser"]        = 75
     floor["internal/objectstore"]    = 78
     # The per-OS WiFi/traceroute COLLECTORS shell out to system tools and are

@@ -1205,6 +1205,225 @@
           }
         }
       }
+    },
+    "/v1/flows/top": {
+      "get": {
+        "operationId": "flowTopTalkers",
+        "summary": "Top talkers from the flow plane (sampling-corrected)",
+        "tags": [
+          "flows"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "description": "Grouping: src | dst | pair | src_asn | dst_asn (default src).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "src",
+                "dst",
+                "pair",
+                "src_asn",
+                "dst_asn"
+              ]
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Look-back window as a Go duration (default 1h).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Max rows (default 10, cap 1000).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top traffic contributors in the window, largest first, ASN/geo-enriched.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowTopList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/flows/capacity": {
+      "get": {
+        "operationId": "flowCapacity",
+        "summary": "Per-exporter/interface throughput buckets (capacity view)",
+        "tags": [
+          "flows"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          },
+          {
+            "name": "exporter",
+            "in": "query",
+            "required": false,
+            "description": "Filter to one exporter address.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "description": "Interface direction to group by: in | out (default in).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "in",
+                "out"
+              ]
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Look-back window as a Go duration (default 1h).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "required": false,
+            "description": "Bucket size as a Go duration (default window/20, min 1m).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sampling-corrected bps/pps per (exporter, interface, bucket).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowCapacityList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/flows/anomalies": {
+      "get": {
+        "operationId": "flowAnomalies",
+        "summary": "Interfaces whose latest bucket departs from their own baseline",
+        "tags": [
+          "flows"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          },
+          {
+            "name": "exporter",
+            "in": "query",
+            "required": false,
+            "description": "Filter to one exporter address.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "description": "Interface direction: in | out (default in).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "in",
+                "out"
+              ]
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Baseline window as a Go duration (default 1h).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "required": false,
+            "description": "Bucket size as a Go duration (default window/20, min 1m).",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(ns|us|ms|s|m|h)$"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "required": false,
+            "description": "Sensitivity in standard deviations (default 3).",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "min_bps",
+            "in": "query",
+            "required": false,
+            "description": "Ignore interfaces below this current bps (default 1000).",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anomalous interfaces, strongest departure first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowAnomalyList"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2411,6 +2630,108 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ABACPolicy"
+            }
+          }
+        }
+      },
+      "FlowTopRow": {
+        "type": "object",
+        "description": "One top-talkers row. key is the address/ASN per the grouping; detail carries the pair destination or AS organization name.",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "packets": {
+            "type": "integer"
+          },
+          "flows": {
+            "type": "integer"
+          }
+        }
+      },
+      "FlowTopList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlowTopRow"
+            }
+          }
+        }
+      },
+      "FlowCapacityPoint": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exporter": {
+            "type": "string"
+          },
+          "iface": {
+            "type": "integer"
+          },
+          "bps": {
+            "type": "number"
+          },
+          "pps": {
+            "type": "number"
+          }
+        }
+      },
+      "FlowCapacityList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlowCapacityPoint"
+            }
+          }
+        }
+      },
+      "FlowAnomaly": {
+        "type": "object",
+        "properties": {
+          "exporter": {
+            "type": "string"
+          },
+          "iface": {
+            "type": "integer"
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "current_bps": {
+            "type": "number"
+          },
+          "baseline_bps": {
+            "type": "number"
+          },
+          "stddev_bps": {
+            "type": "number"
+          },
+          "sigma": {
+            "type": "number"
+          }
+        }
+      },
+      "FlowAnomalyList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlowAnomaly"
             }
           }
         }

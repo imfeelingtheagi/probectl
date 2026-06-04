@@ -619,6 +619,50 @@ verdict) are published to `probectl.endpoint.results` (`resultv1.Result`,
 tenant-keyed), flowing through the same pipeline as every other canary. The agent
 **discloses exactly what it collects at startup** and never phones home.
 
+### Flow collector (`probectl-flow-agent`, S38)
+
+The flow collector listens for NetFlow v5/v9, IPFIX, and sFlow v5 datagrams from
+network devices, decodes them (template + sampling handling), and publishes
+normalized batches to `probectl.flow.events` (`flowv1.FlowBatch`, tenant-keyed).
+It reads a YAML config (default path `PROBECTL_FLOW_CONFIG`); `PROBECTL_FLOW_*`
+env vars override the file. See [`flow.md`](flow.md) for the security posture —
+flow export protocols are plaintext UDP by design, so every datagram is treated
+as untrusted and the collector should sit adjacent to its exporters.
+
+| Variable                          | Default     | Meaning                                                        |
+| --------------------------------- | ----------- | --------------------------------------------------------------- |
+| `PROBECTL_FLOW_CONFIG`             | (none)      | path to the YAML config (`-config` flag overrides)              |
+| `PROBECTL_FLOW_TENANT`             | (required)  | tenant every flow record is stamped with (F50)                  |
+| `PROBECTL_FLOW_AGENT_ID`           | OS hostname | collector identifier                                            |
+| `PROBECTL_FLOW_BUS_MODE`           | `memory`    | `memory` \| `kafka`                                             |
+| `PROBECTL_FLOW_BUS_BROKERS`        | (none)      | comma-separated Kafka brokers (kafka mode)                      |
+| `PROBECTL_FLOW_NETFLOW_ENABLED`    | `true`      | serve NetFlow v5 **and** v9 (version-sniffed) on one socket     |
+| `PROBECTL_FLOW_NETFLOW_LISTEN`     | `:2055`     | NetFlow UDP listen address                                      |
+| `PROBECTL_FLOW_IPFIX_ENABLED`      | `true`      | serve IPFIX                                                     |
+| `PROBECTL_FLOW_IPFIX_LISTEN`       | `:4739`     | IPFIX UDP listen address                                        |
+| `PROBECTL_FLOW_SFLOW_ENABLED`      | `true`      | serve sFlow v5                                                  |
+| `PROBECTL_FLOW_SFLOW_LISTEN`       | `:6343`     | sFlow UDP listen address                                        |
+| `PROBECTL_FLOW_BATCH_SIZE`         | `1000`      | records per emitted batch                                       |
+| `PROBECTL_FLOW_FLUSH_INTERVAL`     | `2s`        | max time a record waits before emission                         |
+| `PROBECTL_FLOW_TEMPLATE_TTL`       | `30m`       | v9/IPFIX template expiry                                        |
+| `PROBECTL_FLOW_MAX_TEMPLATES`      | `4096`      | template-cache size cap (untrusted-input bound)                 |
+| `PROBECTL_FLOW_READ_BUFFER_BYTES`  | `4194304`   | kernel UDP receive buffer (burst absorption)                    |
+| `PROBECTL_FLOW_QUEUE_SIZE`         | `65536`     | decode→flush channel depth (overflow drops are counted)         |
+| `PROBECTL_FLOW_WORKERS`            | `2`         | reader goroutines per socket                                    |
+| `PROBECTL_FLOW_LOG_LEVEL`          | `info`      | `debug` \| `info` \| `warn` \| `error`                          |
+| `PROBECTL_FLOW_LOG_FORMAT`         | `json`      | `json` \| `text`                                                |
+
+The **control plane** consumes the topic, optionally enriches ASN/geo, and
+persists to the flow store backing `/v1/flows/*` (top-talkers / capacity /
+anomalies):
+
+| Variable                        | Default  | Meaning                                                             |
+| -------------------------------- | -------- | -------------------------------------------------------------------- |
+| `PROBECTL_FLOWSTORE_MODE`         | `memory` | `memory` \| `clickhouse`                                             |
+| `PROBECTL_FLOWSTORE_URL`          | (none)   | ClickHouse HTTP(S) endpoint (required in clickhouse mode)            |
+| `PROBECTL_FLOW_RETENTION_DAYS`    | `0`      | > 0 applies a ClickHouse delete-TTL to `probectl_flows`              |
+| `PROBECTL_FLOW_ENRICH_ASN`        | `false`  | OPT-IN Team Cymru ASN enrichment (outbound DNS — off by default per the no-phone-home guardrail; device-exported AS numbers always pass through) |
+
 ### OTLP receiver (S22)
 
 The control plane optionally ingests external OpenTelemetry metrics over OTLP —

@@ -101,6 +101,18 @@ type Config struct {
 	PathStoreMode string
 	PathStoreURL  string
 
+	// Flow store (S38): where device-flow records (NetFlow/IPFIX/sFlow) land and
+	// the flow analytics are served from. memory (default) or clickhouse.
+	// FlowRetentionDays > 0 applies a ClickHouse delete-TTL (high-volume
+	// retention). FlowEnrichASN opts in to ASN/geo enrichment via the S15
+	// opendata sources (Team Cymru DNS lookups — an OUTBOUND dependency, so it
+	// is off by default per the no-phone-home guardrail; device-asserted AS
+	// numbers always pass through).
+	FlowStoreMode     string
+	FlowStoreURL      string
+	FlowRetentionDays int
+	FlowEnrichASN     bool
+
 	// OTLP receiver (S22): TLS-only, authenticated, tenant-scoped ingest of
 	// external OTLP. Enabled when an address + TLS cert/key + tokens are all set.
 	OTLPGRPCAddr    string
@@ -249,6 +261,10 @@ func Load(getenv func(string) string) (*Config, error) {
 		TSDBURL:             l.str("PROBECTL_TSDB_URL", ""),
 		PathStoreMode:       l.enum("PROBECTL_PATHSTORE_MODE", "memory", "memory", "clickhouse"),
 		PathStoreURL:        l.str("PROBECTL_PATHSTORE_URL", ""),
+		FlowStoreMode:       l.enum("PROBECTL_FLOWSTORE_MODE", "memory", "memory", "clickhouse"),
+		FlowStoreURL:        l.str("PROBECTL_FLOWSTORE_URL", ""),
+		FlowRetentionDays:   l.intRange("PROBECTL_FLOW_RETENTION_DAYS", 0, 0, 3650),
+		FlowEnrichASN:       l.boolean("PROBECTL_FLOW_ENRICH_ASN", false),
 		AlertEvalInterval:   l.dur("PROBECTL_ALERT_EVAL_INTERVAL", 30*time.Second),
 		IncidentWindow:      l.dur("PROBECTL_INCIDENT_WINDOW", 10*time.Minute),
 		AuthMode:            l.enum("PROBECTL_AUTH_MODE", "dev", "dev", "session"),
@@ -311,6 +327,9 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if cfg.PathStoreMode == "clickhouse" && cfg.PathStoreURL == "" {
 		l.errf("PROBECTL_PATHSTORE_MODE=clickhouse requires PROBECTL_PATHSTORE_URL")
+	}
+	if cfg.FlowStoreMode == "clickhouse" && cfg.FlowStoreURL == "" {
+		l.errf("PROBECTL_FLOWSTORE_MODE=clickhouse requires PROBECTL_FLOWSTORE_URL")
 	}
 	if (cfg.OTLPGRPCAddr != "" || cfg.OTLPHTTPAddr != "") && !cfg.OTLPEnabled() {
 		l.errf("the OTLP receiver is TLS-only and authenticated: set PROBECTL_OTLP_TLS_CERT_FILE, PROBECTL_OTLP_TLS_KEY_FILE, and PROBECTL_OTLP_TOKENS (token=tenant,...) alongside an address")

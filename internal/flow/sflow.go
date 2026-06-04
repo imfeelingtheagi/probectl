@@ -1,0 +1,268 @@
+package flow
+
+import (
+	"encoding/binary"
+	"fmt"
+	"net/netip"
+	"time"
+)
+
+// sFlow v5: an XDR-encoded datagram of samples. probectl decodes flow samples
+// (format 1) and expanded flow samples (format 3), extracting the raw-packet-
+// header record (format 1) and parsing Ethernet/802.1Q/IPv4/IPv6/TCP/UDP far
+// enough for the 5-tuple. Counter samples are skipped by length (interface
+// counters are the S39 device plane's job). Every sample carries its own
+// sampling rate — sFlow is sampled by construction.
+const (
+	sflowMaxSamples = 256
+	sflowMaxRecords = 64
+)
+
+// decodeSFlow decodes one sFlow v5 datagram.
+func decodeSFlow(pkt []byte, exporter string, now time.Time) ([]Record, error) {
+	r := xdr{b: pkt}
+	if v := r.u32(); v != 5 {
+		return nil, fmt.Errorf("sflow: unexpected version %d", v)
+	}
+	addrType := r.u32()
+	switch addrType {
+	case 1:
+		r.skip(4)
+	case 2:
+		r.skip(16)
+	default:
+		return nil, fmt.Errorf("sflow: bad agent address type %d", addrType)
+	}
+	subAgent := r.u32()
+	r.skip(4) // sequence number
+	r.skip(4) // uptime ms
+	n := int(r.u32())
+	if r.err != nil {
+		return nil, fmt.Errorf("sflow: truncated header")
+	}
+	if n <= 0 || n > sflowMaxSamples {
+		return nil, fmt.Errorf("sflow: implausible sample count %d", n)
+	}
+
+	var out []Record
+	for i := 0; i < n && r.err == nil; i++ {
+		sampleType := r.u32()
+		sampleLen := int(r.u32())
+		body := r.bytes(sampleLen)
+		if r.err != nil {
+			return out, fmt.Errorf("sflow: truncated sample %d", i)
+		}
+		format := sampleType & 0xFFF
+		if sampleType>>12 != 0 { // enterprise-specific sample: skip
+			continue
+		}
+		switch format {
+		case 1: // flow sample
+			decodeSFlowSample(body, false, exporter, subAgent, now, &out)
+		case 3: // expanded flow sample
+			decodeSFlowSample(body, true, exporter, subAgent, now, &out)
+		default: // counter samples (2, 4) and others: skipped by length
+		}
+	}
+	return out, nil
+}
+
+// decodeSFlowSample decodes one (expanded) flow sample's records.
+func decodeSFlowSample(b []byte, expanded bool, exporter string, subAgent uint32, now time.Time, out *[]Record) {
+	r := xdr{b: b}
+	r.skip(4) // sequence number
+	var inIf, outIf uint32
+	if expanded {
+		r.skip(8) // source id type + index
+		rate := r.u32()
+		r.skip(8)       // sample pool + drops
+		r.skip(4)       // input format
+		inIf = r.u32()  // input value
+		r.skip(4)       // output format
+		outIf = r.u32() // output value
+		decodeSFlowRecords(&r, exporter, subAgent, rate, inIf, outIf, now, out)
+		return
+	}
+	r.skip(4) // source id (type<<24|index)
+	rate := r.u32()
+	r.skip(8) // sample pool + drops
+	inIf = r.u32()
+	outIf = r.u32()
+	decodeSFlowRecords(&r, exporter, subAgent, rate, inIf, outIf, now, out)
+}
+
+func decodeSFlowRecords(r *xdr, exporter string, subAgent, rate, inIf, outIf uint32, now time.Time, out *[]Record) {
+	n := int(r.u32())
+	if n <= 0 || n > sflowMaxRecords || r.err != nil {
+		return
+	}
+	for i := 0; i < n && r.err == nil; i++ {
+		recType := r.u32()
+		recLen := int(r.u32())
+		body := r.bytes(recLen)
+		if r.err != nil {
+			return
+		}
+		if recType&0xFFF != 1 || recType>>12 != 0 {
+			continue // only the raw-packet-header record is mapped
+		}
+		rec, ok := parseRawPacketHeader(body)
+		if !ok {
+			continue
+		}
+		rec.Exporter = exporter
+		rec.ObservationDomain = subAgent
+		rec.Protocol = ProtoSFlow5
+		rec.ObservedAt = now
+		rec.Start, rec.End = now, now // sFlow samples are instantaneous
+		rec.InIf, rec.OutIf = inIf, outIf
+		if rate == 0 {
+			rate = 1
+		}
+		rec.SamplingRate = uint64(rate)
+		rec.Packets = 1
+		*out = append(*out, rec)
+	}
+}
+
+// parseRawPacketHeader parses an sFlow raw-packet-header record: header
+// protocol (1 = Ethernet), frame length, stripped bytes, and the leading bytes
+// of the sampled frame, from which the 5-tuple is parsed.
+func parseRawPacketHeader(b []byte) (Record, bool) {
+	r := xdr{b: b}
+	proto := r.u32()
+	frameLen := r.u32()
+	r.skip(4) // stripped
+	hdrLen := int(r.u32())
+	hdr := r.bytes(hdrLen)
+	if r.err != nil || proto != 1 { // 1 = ETHERNET-ISO8023
+		return Record{}, false
+	}
+	rec := Record{Bytes: uint64(frameLen)}
+	if !parseEthernet(hdr, &rec) {
+		return Record{}, false
+	}
+	return rec, true
+}
+
+// parseEthernet walks Ethernet → optional 802.1Q → IPv4/IPv6 → TCP/UDP far
+// enough to fill the 5-tuple. Anything unparseable simply yields ok=false —
+// sampled headers are routinely truncated.
+func parseEthernet(h []byte, rec *Record) bool {
+	if len(h) < 14 {
+		return false
+	}
+	etherType := binary.BigEndian.Uint16(h[12:14])
+	off := 14
+	if etherType == 0x8100 { // 802.1Q
+		if len(h) < 18 {
+			return false
+		}
+		rec.VLAN = binary.BigEndian.Uint16(h[14:16]) & 0x0FFF
+		etherType = binary.BigEndian.Uint16(h[16:18])
+		off = 18
+	}
+	switch etherType {
+	case 0x0800: // IPv4
+		return parseIPv4(h[off:], rec)
+	case 0x86DD: // IPv6
+		return parseIPv6(h[off:], rec)
+	default:
+		return false
+	}
+}
+
+func parseIPv4(h []byte, rec *Record) bool {
+	if len(h) < 20 || h[0]>>4 != 4 {
+		return false
+	}
+	ihl := int(h[0]&0x0F) * 4
+	if ihl < 20 || len(h) < ihl {
+		return false
+	}
+	rec.ToS = h[1]
+	rec.Transport = h[9]
+	rec.SrcAddr = netip.AddrFrom4([4]byte(h[12:16]))
+	rec.DstAddr = netip.AddrFrom4([4]byte(h[16:20]))
+	parseL4(h[ihl:], rec)
+	return true
+}
+
+func parseIPv6(h []byte, rec *Record) bool {
+	if len(h) < 40 || h[0]>>4 != 6 {
+		return false
+	}
+	rec.ToS = (h[0]&0x0F)<<4 | h[1]>>4 // traffic class
+	rec.Transport = h[6]               // next header (extension headers not walked)
+	rec.SrcAddr = netip.AddrFrom16([16]byte(h[8:24]))
+	rec.DstAddr = netip.AddrFrom16([16]byte(h[24:40]))
+	parseL4(h[40:], rec)
+	return true
+}
+
+func parseL4(h []byte, rec *Record) {
+	switch rec.Transport {
+	case 6: // TCP
+		if len(h) >= 14 {
+			rec.SrcPort = binary.BigEndian.Uint16(h[0:2])
+			rec.DstPort = binary.BigEndian.Uint16(h[2:4])
+			rec.TCPFlags = h[13]
+		} else if len(h) >= 4 {
+			rec.SrcPort = binary.BigEndian.Uint16(h[0:2])
+			rec.DstPort = binary.BigEndian.Uint16(h[2:4])
+		}
+	case 17: // UDP
+		if len(h) >= 4 {
+			rec.SrcPort = binary.BigEndian.Uint16(h[0:2])
+			rec.DstPort = binary.BigEndian.Uint16(h[2:4])
+		}
+	}
+}
+
+// xdr is a tiny bounds-checked big-endian reader for sFlow's XDR encoding.
+// Reads after an error return zero values; err records the first overrun.
+type xdr struct {
+	b   []byte
+	off int
+	err error
+}
+
+func (x *xdr) u32() uint32 {
+	if x.err != nil || x.off+4 > len(x.b) {
+		x.fail()
+		return 0
+	}
+	v := binary.BigEndian.Uint32(x.b[x.off : x.off+4])
+	x.off += 4
+	return v
+}
+
+func (x *xdr) bytes(n int) []byte {
+	if x.err != nil || n < 0 || x.off+n > len(x.b) {
+		x.fail()
+		return nil
+	}
+	v := x.b[x.off : x.off+n]
+	// XDR pads opaque data to 4-byte boundaries.
+	pad := (4 - n%4) % 4
+	if x.off+n+pad <= len(x.b) {
+		x.off += n + pad
+	} else {
+		x.off += n
+	}
+	return v
+}
+
+func (x *xdr) skip(n int) {
+	if x.err != nil || x.off+n > len(x.b) {
+		x.fail()
+		return
+	}
+	x.off += n
+}
+
+func (x *xdr) fail() {
+	if x.err == nil {
+		x.err = fmt.Errorf("sflow: truncated datagram at offset %d", x.off)
+	}
+}
