@@ -1,0 +1,78 @@
+/* Synthetic result-detail layout (S-FE5). Layout-only — every visual value
+   rides the S8a design tokens (the no-hardcoded-colors gate enforces it). */
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0 0 var(--space-3);
+}
+
+.kv dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.kv dd {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.agentBlock {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.agentBlock:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* The HTTP waterfall: one row per phase, proportional bar + value. */
+.waterfall {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waterfall li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 5rem;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.phaseName {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.track {
+  position: relative;
+  height: var(--space-3);
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+  min-width: 2px;
+}
+
+.value {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}

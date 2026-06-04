@@ -23,6 +23,7 @@ import {
 } from '../components'
 import { useCreateTest, useDeleteTest, useTests, type Test } from '../api/tests'
 import { AuthoringPanel } from './AuthoringPanel'
+import { ResultDetail } from './ResultDetail'
 import { useAgents, type Agent } from '../api/agents'
 
 export function Page({
@@ -161,6 +162,7 @@ export function TargetsPage() {
   const del = useDeleteTest()
   const { push } = useToast()
   const [creating, setCreating] = useState(false)
+  const [resultsFor, setResultsFor] = useState<Test | null>(null)
 
   function remove(t: Test) {
     del.mutate(t.id, {
@@ -185,9 +187,14 @@ export function TargetsPage() {
       header: <span className="sr-only">Actions</span>,
       align: 'end',
       render: (t) => (
-        <Button variant="ghost" size="sm" onClick={() => remove(t)} aria-label={`Delete ${t.name}`}>
-          Delete
-        </Button>
+        <>
+          <Button variant="ghost" size="sm" onClick={() => setResultsFor(t)} aria-label={`Results for ${t.name}`}>
+            Results
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => remove(t)} aria-label={`Delete ${t.name}`}>
+            Delete
+          </Button>
+        </>
       ),
     },
   ]
@@ -214,7 +221,7 @@ export function TargetsPage() {
       <AuthoringPanel />
 
       <Card>
-        <CardHeader title="Tests" description="Live results land here once the metrics API ships (S23)." />
+        <CardHeader title="Tests" description="Open Results on any test for its per-type latest result detail." />
         <CardBody>
           {isPending ? (
             <LoadingState label="Loading tests…" />
@@ -243,6 +250,7 @@ export function TargetsPage() {
       </Card>
 
       <CreateTestModal open={creating} onClose={() => setCreating(false)} />
+      {resultsFor ? <ResultDetail test={resultsFor} onClose={() => setResultsFor(null)} /> : null}
     </Page>
   )
 }

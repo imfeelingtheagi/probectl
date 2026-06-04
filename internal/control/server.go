@@ -95,6 +95,10 @@ type Server struct {
 	// maintains. Set via WithEndpointViews; nil reports collector_running=false.
 	endpointViews *endpoint.SnapshotStore
 
+	// Latest synthetic results (S-FE5): newest full result per (type, target,
+	// agent). Set via WithLatestResults; nil reports collector_running=false.
+	latestResults *LatestResults
+
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).
 	draining atomic.Bool

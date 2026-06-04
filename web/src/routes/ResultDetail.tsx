@@ -1,0 +1,204 @@
+import styles from './results.module.css'
+import { Badge, EmptyState, Modal, Table, type Column } from '../components'
+import { a, latencyFamily, m, useLatestResults, type LatestResult } from '../api/results'
+import type { Test } from '../api/tests'
+
+/** Per-type synthetic result views (S-FE5). One consistent pattern across
+ *  types — header kv + a type-specific breakdown — extending the S9 screens
+ *  with S8a components only. Every shipped type renders named fields; unknown
+ *  types fall back to a named metrics table, never raw JSON. */
+
+function when(iso?: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
+}
+
+function num(v: number | undefined, unit = '', digits = 1): string {
+  if (v === undefined) return '—'
+  return `${Number(v.toFixed(digits))}${unit}`
+}
+
+/** HTTPWaterfall renders the dns→connect→tls→ttfb phase breakdown (S13). */
+function HTTPWaterfall({ r }: { r: LatestResult }) {
+  const phases: Array<[string, number | undefined]> = [
+    ['DNS', m(r, 'http.dns.ms')],
+    ['Connect', m(r, 'http.connect.ms')],
+    ['TLS', m(r, 'http.tls.ms')],
+    ['TTFB', m(r, 'http.ttfb.ms')],
+  ]
+  const total = m(r, 'http.total.ms') ?? phases.reduce((s, [, v]) => s + (v ?? 0), 0)
+  let offset = 0
+  return (
+    <>
+      <ul className={styles.waterfall} aria-label="HTTP timing waterfall">
+        {phases.map(([name, v]) => {
+          const left = total > 0 ? (offset / total) * 100 : 0
+          const width = total > 0 && v !== undefined ? (v / total) * 100 : 0
+          offset += v ?? 0
+          return (
+            <li key={name}>
+              <span className={styles.phaseName}>{name}</span>
+              <span className={styles.track} aria-hidden="true">
+                {v !== undefined ? (
+                  <span className={styles.bar} style={{ left: `${left}%`, width: `${Math.max(width, 1)}%` }} />
+                ) : null}
+              </span>
+              <span className={styles.value}>{num(v, ' ms')}</span>
+            </li>
+          )
+        })}
+      </ul>
+      <dl className={styles.kv}>
+        <dt>Total</dt>
+        <dd>
+          {num(total, ' ms')}
+          {m(r, 'http.status') !== undefined ? ` · HTTP ${num(m(r, 'http.status'), '', 0)}` : ''}
+        </dd>
+        {m(r, 'http.throughput.kbps') !== undefined ? (
+          <>
+            <dt>Throughput</dt>
+            <dd>
+              {num(m(r, 'http.throughput.kbps'), ' kbps', 0)} · {num(m(r, 'http.content.bytes'), ' bytes', 0)}
+            </dd>
+          </>
+        ) : null}
+        {m(r, 'http.tls.cert_expiry_days') !== undefined ? (
+          <>
+            <dt>Cert expiry</dt>
+            <dd>{num(m(r, 'http.tls.cert_expiry_days'), ' days', 0)}</dd>
+          </>
+        ) : null}
+      </dl>
+    </>
+  )
+}
+
+/** DNSBreakdown renders the resolution detail (S12). */
+function DNSBreakdown({ r }: { r: LatestResult }) {
+  const secure = m(r, 'dns.dnssec.secure')
+  return (
+    <dl className={styles.kv}>
+      <dt>Query</dt>
+      <dd>
+        {num(m(r, 'dns.query.ms'), ' ms')} · {num(m(r, 'dns.answers'), '', 0)} answer(s) ·{' '}
+        {a(r, 'dns.rcode') ?? '—'}
+      </dd>
+      {a(r, 'dns.answer') ? (
+        <>
+          <dt>Answers</dt>
+          <dd>{a(r, 'dns.answer')}</dd>
+        </>
+      ) : null}
+      <dt>Resolver</dt>
+      <dd>
+        {a(r, 'dns.server') ?? a(r, 'server.address') ?? '—'}
+        {a(r, 'dns.transport') ? ` via ${a(r, 'dns.transport')}` : ''}
+        {a(r, 'dns.qtype') ? ` · ${a(r, 'dns.qtype')}` : ''}
+      </dd>
+      {secure !== undefined ? (
+        <>
+          <dt>DNSSEC</dt>
+          <dd>
+            <Badge tone={secure === 1 ? 'success' : 'warning'}>{secure === 1 ? 'validated' : 'not validated'}</Badge>
+          </dd>
+        </>
+      ) : null}
+    </dl>
+  )
+}
+
+/** LatencyLoss renders the shared latency family + loss (S7/S8: icmp/tcp/udp). */
+function LatencyLoss({ r }: { r: LatestResult }) {
+  const fam = latencyFamily(r.type) ?? 'rtt'
+  const loss = m(r, 'loss.ratio')
+  return (
+    <dl className={styles.kv}>
+      <dt>Loss</dt>
+      <dd>
+        {loss !== undefined ? (
+          <Badge tone={loss === 0 ? 'success' : loss < 0.05 ? 'warning' : 'danger'}>
+            {num(loss * 100, '%', 1)}
+          </Badge>
+        ) : (
+          '—'
+        )}{' '}
+        {num(m(r, 'packets.received'), '', 0)}/{num(m(r, 'packets.sent'), '', 0)} received
+      </dd>
+      <dt>{fam === 'rtt' ? 'RTT' : 'Connect'}</dt>
+      <dd>
+        min {num(m(r, `${fam}.min.ms`), ' ms')} · avg {num(m(r, `${fam}.avg.ms`), ' ms')} · max{' '}
+        {num(m(r, `${fam}.max.ms`), ' ms')} · σ {num(m(r, `${fam}.stddev.ms`), ' ms')}
+      </dd>
+      <dt>Jitter</dt>
+      <dd>{num(m(r, 'jitter.ms'), ' ms')}</dd>
+    </dl>
+  )
+}
+
+/** GenericMetrics is the named-field fallback for types without a dedicated
+ *  view — still a labeled table, never raw JSON. */
+function GenericMetrics({ r }: { r: LatestResult }) {
+  const rows = Object.entries(r.metrics ?? {}).sort(([x], [y]) => x.localeCompare(y))
+  const columns: Column<[string, number]>[] = [
+    { key: 'metric', header: 'Metric', render: ([k]) => k },
+    { key: 'value', header: 'Value', numeric: true, render: ([, v]) => String(v) },
+  ]
+  if (rows.length === 0) return <p>No metrics reported.</p>
+  return <Table caption={`Metrics for ${r.type}`} columns={columns} rows={rows} rowKey={([k]) => k} />
+}
+
+function TypedBreakdown({ r }: { r: LatestResult }) {
+  switch (r.type) {
+    case 'http':
+      return <HTTPWaterfall r={r} />
+    case 'dns':
+      return <DNSBreakdown r={r} />
+    case 'icmp':
+    case 'tcp':
+    case 'udp':
+      return <LatencyLoss r={r} />
+    default:
+      return <GenericMetrics r={r} />
+  }
+}
+
+/** ResultDetail shows a test's latest result per reporting agent. */
+export function ResultDetail({ test, onClose }: { test: Test; onClose: () => void }) {
+  const latest = useLatestResults()
+  const matches = (latest.data?.items ?? []).filter((r) => r.type === test.type && r.target === test.target)
+
+  return (
+    <Modal open onClose={onClose} title={`${test.name} — latest results`}>
+      {matches.length === 0 ? (
+        <EmptyState
+          title="No results yet"
+          description={
+            latest.data && !latest.data.collector_running
+              ? 'The result-view consumer is not wired.'
+              : 'Results appear after the first probe run for this test.'
+          }
+        />
+      ) : (
+        matches.map((r) => (
+          <div className={styles.agentBlock} key={`${r.agent_id}-${r.type}-${r.target}`}>
+            <dl className={styles.kv}>
+              <dt>Agent</dt>
+              <dd>
+                {r.agent_id || '—'} · <Badge tone={r.success ? 'success' : 'danger'}>{r.success ? 'ok' : 'failed'}</Badge>{' '}
+                · {when(r.observed_at)}
+              </dd>
+              {r.error ? (
+                <>
+                  <dt>Error</dt>
+                  <dd>{r.error}</dd>
+                </>
+              ) : null}
+            </dl>
+            <TypedBreakdown r={r} />
+          </div>
+        ))
+      )}
+    </Modal>
+  )
+}

@@ -2495,6 +2495,80 @@
           }
         }
       }
+    },
+    "/v1/results/latest": {
+      "get": {
+        "operationId": "listLatestResults",
+        "summary": "Latest synthetic result per (type, target, agent) with full detail",
+        "tags": [
+          "tests"
+        ],
+        "description": "The caller's tenant's newest result per synthetic series, carrying the full per-type detail (DNS rcode/answers/DNSSEC, HTTP dns/connect/tls/ttfb waterfall phases, ICMP/TCP/UDP latency families + loss) \u2014 the read model behind the test-result views (S-FE5). collector_running=false distinguishes an unwired consumer from no results yet.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "collector_running": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "agent_id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "type": "string"
+                          },
+                          "success": {
+                            "type": "boolean"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "duration_ms": {
+                            "type": "number"
+                          },
+                          "metrics": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            }
+                          },
+                          "attributes": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "observed_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

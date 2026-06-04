@@ -66,14 +66,17 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <header className={styles.header}>
+        {/* A div, not <header>: inside a dialog a header maps to a second
+            banner landmark (axe landmark-no-duplicate-banner); the dialog is
+            labelled via aria-labelledby. */}
+        <div className={styles.header}>
           <h2 id={titleId} className={styles.title}>
             {title}
           </h2>
           <Button variant="ghost" size="sm" iconOnly onClick={onClose} aria-label="Close dialog">
             <Icon name="close" />
           </Button>
-        </header>
+        </div>
         <div className={styles.body}>{children}</div>
         {footer ? <footer className={styles.footer}>{footer}</footer> : null}
       </div>

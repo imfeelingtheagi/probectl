@@ -209,6 +209,9 @@ func run(cmd string) error {
 	// Endpoint DEM views (S-FE4): latest WiFi/gateway/last-mile/attribution per
 	// endpoint, fed by the endpoint-view consumer; served at /v1/endpoints.
 	endpointViews := endpoint.NewSnapshotStore(0)
+	// Latest synthetic results (S-FE5): the per-type result detail behind the
+	// test-result views; served at /v1/results/latest.
+	latestResults := control.NewLatestResults(0)
 
 	srv := control.New(cfg, log, db, db.Pool(), pathStore, nil).
 		WithDispatcher(dispatcher).
@@ -217,7 +220,8 @@ func run(cmd string) error {
 		WithCMDB(cmdbResolver).
 		WithTLSPosture(tlsPostures).
 		WithDetections(detections).
-		WithEndpointViews(endpointViews)
+		WithEndpointViews(endpointViews).
+		WithLatestResults(latestResults)
 	if alertEngine != nil {
 		// Active alerts + silence/ack (S-FE1) read engine truth, tenant-keyed.
 		srv.WithAlertState(tenancy.DefaultTenantID.String(), alertEngine)
@@ -230,6 +234,8 @@ func run(cmd string) error {
 	g.Go(func() error { return pipeline.NewDeviceConsumer(resultBus, tsdbWriter, log).Run(gctx) })
 	// Endpoint DEM view (S-FE4): probectl.endpoint.results -> snapshot store.
 	g.Go(func() error { return control.NewEndpointViewConsumer(resultBus, endpointViews, log).Run(gctx) })
+	// Latest-result view (S-FE5): probectl.network.results -> latest-result store.
+	g.Go(func() error { return control.NewResultViewConsumer(resultBus, latestResults, log).Run(gctx) })
 
 	// SIEM export (S32): forward the audit stream + threat-plane signals to the
 	// SOC's SIEM. OFF unless configured (an outbound connection to the operator's

@@ -526,3 +526,18 @@ p95 (the first place a pooled-cardinality or RLS-cost problem surfaces, guardrai
 1). `Baseline` holds the generous floors/ceilings the CI `perf-smoke` job
 asserts; the harness is the engine S48 (full L/XL gate) and S-T7 (fairness)
 extend.
+
+## Synthetic result views (S-FE5)
+
+The canary pipeline flattens results into TSDB series, but each result's
+per-type DETAIL (DNS rcode/answers/DNSSEC, the HTTP dns→connect→tls→ttfb
+waterfall, the ICMP/TCP/UDP latency families + loss) lives in its metrics +
+attributes. A latest-result read model (`internal/control.LatestResults`, fed
+by its own consumer group on `probectl.network.results`) retains the newest
+full result per (tenant, type, target, agent) — tenant-partitioned, bounded,
+newest-wins — and serves it at `GET /v1/results/latest` (RBAC `test.read`;
+`collector_running` honesty flag). The Targets & Tests screen renders it per
+type: an HTTP waterfall, a DNS resolution breakdown, a shared latency/loss
+view for ICMP/TCP/UDP, and a named-field fallback for future types — no test
+type renders as raw JSON. History stays in the TSDB; this is the latest-only
+detail view.
