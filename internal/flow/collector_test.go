@@ -79,10 +79,20 @@ func TestCollectorEndToEnd(t *testing.T) {
 	send(nfAddr, buildNF5(1000, unix, 0, []nf5rec{{
 		src: [4]byte{10, 0, 0, 1}, dst: [4]byte{10, 0, 0, 2}, pkts: 1, bytes: 64, proto: 6, sport: 1, dport: 2,
 	}}))
-	send(nfAddr, buildNF9Template(1000, unix, 7, 260, nf9V4Fields))
-	send(nfAddr, buildNF9Data(1000, unix, 7, 260, [][]byte{
-		nf9V4Row([4]byte{10, 0, 0, 3}, [4]byte{10, 0, 0, 4}, 5, 6, 17, 128, 2, 0, 0),
-	}))
+	// NetFlow v9 data can only decode once its template is registered. The
+	// socket is drained by a worker POOL, so a one-shot template-then-data
+	// pair can be processed out of order (data first → a correct TemplateMiss
+	// per RFC 7011 §8, but then the record is dropped). Real exporters resend
+	// templates periodically; mimic that by resending the v9 pair until the
+	// record lands — making the test independent of worker scheduling and of
+	// kernel UDP-buffer drops under -race load.
+	sendV9 := func() {
+		send(nfAddr, buildNF9Template(1000, unix, 7, 260, nf9V4Fields))
+		send(nfAddr, buildNF9Data(1000, unix, 7, 260, [][]byte{
+			nf9V4Row([4]byte{10, 0, 0, 3}, [4]byte{10, 0, 0, 4}, 5, 6, 17, 128, 2, 0, 0),
+		}))
+	}
+	sendV9()
 	hdr := buildEthIPv4TCP(0, [4]byte{10, 0, 0, 5}, [4]byte{10, 0, 0, 6}, 80, 1024, 0x10, 6)
 	send(sfAddr, buildSFlowRaw(64, 1, 2, hdr, false, false))
 
@@ -108,6 +118,7 @@ func TestCollectorEndToEnd(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out; got %d records, stats %+v", len(recs), c.StatsSnapshot())
 		}
+		sendV9() // resend the template+data pair (exporter-style retransmit)
 		time.Sleep(10 * time.Millisecond)
 	}
 
