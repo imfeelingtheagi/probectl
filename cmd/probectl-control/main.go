@@ -157,11 +157,14 @@ func run(cmd string) error {
 	// ASN/geo enrichment for flows (S15 via S38): OPT-IN — Team Cymru is an
 	// outbound DNS dependency, so it stays off unless explicitly enabled
 	// (no-phone-home guardrail). Device-asserted AS numbers always flow through.
+	// The same enricher instance powers the outage view's IP→scope join (S47a).
 	var flowEnricher pipeline.FlowEnricher
+	var ipEnricher *opendata.Enricher
 	if cfg.FlowEnrichASN {
 		en := opendata.NewEnricher(log)
 		en.Register(opendata.NewCymru(net.DefaultResolver))
 		flowEnricher = en
+		ipEnricher = en
 		log.Info("flow ASN enrichment enabled", "source", "team-cymru")
 	}
 
@@ -241,6 +244,23 @@ func run(cmd string) error {
 		return err // malformed policy dir fails startup
 	}
 
+	// Collective internet-outage view (S47a): public outage feeds (OPT-IN —
+	// enabling them makes outbound fetches) + the customer's own vantage
+	// points, correlated per tenant. The engine is local-only and on by
+	// default; without the IP enricher it degrades honestly (events render,
+	// vantage detection and impact correlation report unavailable).
+	outageStore, outageRefresher, outageFeedsOn := control.BuildOutageFeeds(cfg, log)
+	outageEngine, outageOn := control.BuildOutage(cfg, outageStore, ipEnricher, log)
+	if outageFeedsOn {
+		g.Go(func() error { return outageRefresher.Run(gctx) })
+	}
+	if outageOn {
+		g.Go(func() error {
+			return control.NewOutageConsumer(resultBus, outageEngine, correlator, log).Run(gctx)
+		})
+		log.Info("outage view enabled", "feeds", outageFeedsOn, "scope_resolution", ipEnricher != nil)
+	}
+
 	g.Go(func() error {
 		return control.NewBGPIncidentConsumer(resultBus, correlator, log).Run(gctx)
 	})
@@ -289,6 +309,12 @@ func run(cmd string) error {
 	}
 	if complianceOn {
 		srv.WithCompliance(complianceEngine) // verdicts + evidence at /v1/compliance (S46)
+	}
+	if outageOn {
+		srv.WithOutage(outageEngine) // collective outage view at /v1/outages (S47a)
+	}
+	if outageFeedsOn {
+		srv.WithOutageFeeds(outageRefresher) // feed health + AUP provenance (S47a)
 	}
 	if alertEngine != nil {
 		// Active alerts + silence/ack (S-FE1) read engine truth, tenant-keyed.

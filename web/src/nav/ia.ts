@@ -18,6 +18,7 @@ export const NAV: NavItem[] = [
   { to: '/path', label: 'Path & Topology', icon: 'path' },
   { to: '/topology', label: 'Topology', icon: 'path' },
   { to: '/incidents', label: 'Incidents', icon: 'incidents' },
+  { to: '/outages', label: 'Internet outages', icon: 'outage' },
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
   { to: '/endpoints', label: 'Endpoints', icon: 'endpoints' },
   { to: '/security', label: 'Security', icon: 'security' },

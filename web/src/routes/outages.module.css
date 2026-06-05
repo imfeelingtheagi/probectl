@@ -1,0 +1,39 @@
+/* Collective internet-outage view (S47a) — S8a tokens only. */
+
+.coverage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-warning);
+  background: var(--color-warning-soft);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.affected {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.scopeName {
+  color: var(--color-text-muted);
+}
+
+.feedMeta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.sectionGap {
+  margin-top: var(--space-4);
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/endpoint"
 	"github.com/imfeelingtheagi/probectl/internal/notify"
+	"github.com/imfeelingtheagi/probectl/internal/outage"
 	"github.com/imfeelingtheagi/probectl/internal/path"
 	"github.com/imfeelingtheagi/probectl/internal/promapi"
 	"github.com/imfeelingtheagi/probectl/internal/slo"
@@ -121,6 +122,12 @@ type Server struct {
 	// Compliance validator (S46). Set via WithCompliance; nil reports
 	// compliance_running=false.
 	complianceEngine *compliance.Engine
+
+	// Collective internet-outage view (S47a). Set via WithOutage /
+	// WithOutageFeeds; nil engine reports outage_running=false, nil feeds
+	// reports feeds_enabled=false.
+	outageEngine *outage.Engine
+	outageFeeds  *outage.Refresher
 
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).

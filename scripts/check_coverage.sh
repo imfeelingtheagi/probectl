@@ -82,6 +82,9 @@ awk -v mod="${MODULE}" '
     # Policy parse/validate, the verdict engine, and the evidence hash chain
     # are pure and fully unit-tested.
     floor["internal/compliance"]     = 85
+    # Feed adapters run against recorded fixtures; the store + engine
+    # (vantage detection, correlation, tenant isolation) are fully unit-tested.
+    floor["internal/outage"]         = 80
     # Memory store + anomaly detector + SQL builders are unit-tested; the
     # ClickHouse HTTP paths are covered by the live-stack integration job.
     floor["internal/store/flowstore"] = 50

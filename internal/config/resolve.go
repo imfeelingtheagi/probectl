@@ -19,6 +19,7 @@ import (
 //	PROBECTL_CMDB_SECRET             → CMDBSecret
 //	PROBECTL_AI_MODEL_TOKEN          → AIModelToken
 //	PROBECTL_SIEM_TOKEN              → SIEMToken
+//	PROBECTL_OUTAGE_RADAR_TOKEN      → OutageRadarToken
 //	PROBECTL_CHANGE_WEBHOOKS         → ChangeWebhooks[].Secret
 //	PROBECTL_NOTIFY_CONNECTORS       → NotifyConnectors[].Secret
 //	PROBECTL_NOTIFY_INBOUND          → NotifyInbound[].Secret
@@ -40,6 +41,7 @@ func (c *Config) ResolveSecretRefs(ctx context.Context, resolve func(context.Con
 		{"PROBECTL_CMDB_SECRET", &c.CMDBSecret},
 		{"PROBECTL_AI_MODEL_TOKEN", &c.AIModelToken},
 		{"PROBECTL_SIEM_TOKEN", &c.SIEMToken},
+		{"PROBECTL_OUTAGE_RADAR_TOKEN", &c.OutageRadarToken},
 	}
 	for i := range c.NotifyConnectors {
 		fields = append(fields, struct {

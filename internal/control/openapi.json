@@ -2442,6 +2442,178 @@
         }
       }
     },
+    "/v1/outages": {
+      "get": {
+        "operationId": "getOutages",
+        "summary": "Collective internet-outage view (S47a)",
+        "tags": [
+          "outage"
+        ],
+        "description": "The collective internet-outage view for the caller's tenant: shared public outage events (IODA / Cloudflare Radar — opt-in feeds, ingested once) annotated with THIS tenant's affected tests, the tenant's own vantage-detected outages, per-feed health + AUP provenance, and coverage notes. Honesty contract: coverage = your vantage points + public open data — probectl does not operate a global probe fleet; scope_resolution=false reports that IP enrichment is off and correlation is degraded; outage_running=false distinguishes an unwired engine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The outage view.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outage_running": {
+                      "type": "boolean"
+                    },
+                    "feeds_enabled": {
+                      "type": "boolean"
+                    },
+                    "scope_resolution": {
+                      "type": "boolean"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "ioda",
+                              "cloudflare_radar",
+                              "vantage"
+                            ]
+                          },
+                          "scope": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "asn",
+                                  "country",
+                                  "region",
+                                  "unknown"
+                                ]
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "severity": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "number"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "start": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "end": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "evidence_url": {
+                            "type": "string"
+                          },
+                          "ongoing": {
+                            "type": "boolean"
+                          },
+                          "affected_tests": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "canary_type": {
+                                  "type": "string"
+                                },
+                                "target": {
+                                  "type": "string"
+                                },
+                                "failures": {
+                                  "type": "integer"
+                                },
+                                "last_failure": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "vantage_events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "feeds": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "last_success": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "last_error": {
+                            "type": "string"
+                          },
+                          "events": {
+                            "type": "integer"
+                          },
+                          "license": {
+                            "type": "string"
+                          },
+                          "attribution": {
+                            "type": "string"
+                          },
+                          "commercial_use": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "coverage_notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/compliance": {
       "get": {
         "operationId": "listComplianceResults",

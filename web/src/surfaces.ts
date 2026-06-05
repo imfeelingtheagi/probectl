@@ -50,6 +50,7 @@ export const SURFACES: SurfaceDecl[] = [
   { capability: 'Network egress cost summary + budgets (FinOps showback)', sprint: 'S44', kind: 'native', route: '/cost' },
   { capability: 'SLOs, error budgets + multi-window burn rates (OpenSLO)', sprint: 'S45', kind: 'native', route: '/slos' },
   { capability: 'Segmentation validation + audit evidence (PCI/NIST/zero-trust)', sprint: 'S46', kind: 'native', route: '/compliance' },
+  { capability: 'Collective internet-outage view (open data + your vantages)', sprint: 'S47a', kind: 'native', route: '/outages' },
   { capability: 'Secret-backend config + credential health', sprint: 'S41', kind: 'native', route: '/admin' },
 
   // --- federated surfaces (by design) ---

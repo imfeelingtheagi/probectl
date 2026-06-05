@@ -213,6 +213,21 @@ type Config struct {
 	ComplianceEnabled   bool
 	CompliancePolicyDir string
 
+	// Collective internet-outage view (S47a, F19). OutageEnabled gates the
+	// LOCAL engine (vantage detection + correlation over the result stream —
+	// no outbound calls; ON by default). OutageFeedsEnabled separately gates
+	// the public feeds (IODA / Cloudflare Radar) — OFF by default because
+	// enabling it makes outbound fetches (sovereignty / no-phone-home).
+	// OutageFeeds names the feeds to load (empty → all built-in);
+	// OutageRadarToken is the Cloudflare API token the radar feed requires
+	// (secret-ref resolvable); OutageRetention bounds the event window.
+	OutageEnabled      bool
+	OutageFeedsEnabled bool
+	OutageFeeds        []string
+	OutageRefresh      time.Duration
+	OutageRetention    time.Duration
+	OutageRadarToken   string
+
 	// SIEM export (S32, F26): forward the audit stream + threat-plane signals to the
 	// SOC's SIEM. OFF by default — enabling it makes an outbound connection to the
 	// operator-supplied endpoint (sovereignty / no-phone-home). SIEMPreset adapts the
@@ -364,6 +379,13 @@ func Load(getenv func(string) string) (*Config, error) {
 		SLODir:              l.str("PROBECTL_SLO_DIR", ""),
 		ComplianceEnabled:   l.boolean("PROBECTL_COMPLIANCE_ENABLED", true),
 		CompliancePolicyDir: l.str("PROBECTL_COMPLIANCE_POLICY_DIR", ""),
+
+		OutageEnabled:      l.boolean("PROBECTL_OUTAGE_ENABLED", true),
+		OutageFeedsEnabled: l.boolean("PROBECTL_OUTAGE_FEEDS_ENABLED", false),
+		OutageFeeds:        l.list("PROBECTL_OUTAGE_FEEDS"),
+		OutageRefresh:      l.dur("PROBECTL_OUTAGE_REFRESH", 10*time.Minute),
+		OutageRetention:    l.dur("PROBECTL_OUTAGE_RETENTION", 48*time.Hour),
+		OutageRadarToken:   l.str("PROBECTL_OUTAGE_RADAR_TOKEN", ""),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),

@@ -7,6 +7,7 @@ import { TopologyPage } from './TopologyPage'
 import { CostPage } from './CostPage'
 import { SLOsPage } from './SLOsPage'
 import { CompliancePage } from './CompliancePage'
+import { OutagesPage } from './OutagesPage'
 import { IncidentsPage } from './IncidentsPage'
 import { AlertsPage } from './AlertsPage'
 import { SecurityPage } from './SecurityPage'
@@ -31,8 +32,9 @@ export function AppRoutes() {
         <Route path="/cost" element={<CostPage />} />
         <Route path="/slos" element={<SLOsPage />} />
         <Route path="/compliance" element={<CompliancePage />} />
+        <Route path="/outages" element={<OutagesPage />} />
         <Route path="/admin" element={<AdminPage />} />
-        {NAV.filter((n) => !['/targets', '/path', '/incidents', '/alerts', '/security', '/endpoints', '/ask', '/topology', '/cost', '/slos', '/compliance', '/admin'].includes(n.to)).map((n) => (
+        {NAV.filter((n) => !['/targets', '/path', '/incidents', '/alerts', '/security', '/endpoints', '/ask', '/topology', '/cost', '/slos', '/compliance', '/outages', '/admin'].includes(n.to)).map((n) => (
           <Route key={n.to} path={n.to} element={<PlaceholderPage to={n.to} />} />
         ))}
         <Route path="/gallery" element={<Gallery />} />

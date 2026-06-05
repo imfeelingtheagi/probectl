@@ -11,6 +11,7 @@ export type IconName =
   | 'ask'
   | 'dashboards'
   | 'compliance'
+  | 'outage'
   | 'admin'
   | 'search'
   | 'sun'
@@ -22,6 +23,15 @@ export type IconName =
   | 'info'
 
 const paths: Record<IconName, ReactNode> = {
+  outage: (
+    // A globe with a broken meridian — the collective internet-outage view.
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M4 12h7M14.5 12H20" />
+      <path d="M12 4a12.5 12.5 0 0 1 0 16" />
+      <path d="M12 4a12.5 12.5 0 0 0-2.5 5.5M9 14.5A12.5 12.5 0 0 0 12 20" />
+    </>
+  ),
   endpoints: (
     <>
       <rect x="4" y="6" width="16" height="10" rx="1.5" />

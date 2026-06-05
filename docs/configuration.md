@@ -943,6 +943,23 @@ Verdicts at `GET /v1/compliance`, hash-chained audit evidence at
 `GET /v1/compliance/evidence`, and the Compliance page. See
 `docs/compliance.md`.
 
+### Collective internet-outage view (S47a)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROBECTL_OUTAGE_ENABLED`       | `true`  | the local engine: vantage detection over your own results + correlation with external events (no outbound calls) |
+| `PROBECTL_OUTAGE_FEEDS_ENABLED` | `false` | **opt-in** public outage feeds (IODA, Cloudflare Radar) — enabling makes outbound fetches (sovereignty / no-phone-home) |
+| `PROBECTL_OUTAGE_FEEDS`         | (all)   | feeds to load: `ioda`, `cloudflare_radar` |
+| `PROBECTL_OUTAGE_REFRESH`       | `10m`   | feed refresh cadence (last-good kept on failure) |
+| `PROBECTL_OUTAGE_RETENTION`     | `48h`   | event window kept/queried |
+| `PROBECTL_OUTAGE_RADAR_TOKEN`   | (none)  | Cloudflare API token the radar feed requires (secret-ref resolvable, S41); the feed is omitted without it |
+
+The collective view at `GET /v1/outages` (events + the caller-tenant's
+affected tests + vantage detections + feed AUP/health + coverage notes) and
+the Internet outages page. Scope resolution (IP→ASN/country) rides the S15
+enricher (`PROBECTL_FLOW_ENRICH_ASN`); without it the response reports the
+degradation honestly. See `docs/outage.md`.
+
 ### NDR-lite detection (S42)
 
 | Variable | Default | Purpose |
