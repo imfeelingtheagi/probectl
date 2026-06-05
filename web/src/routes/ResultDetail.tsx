@@ -136,6 +136,49 @@ function LatencyLoss({ r }: { r: LatestResult }) {
   )
 }
 
+/** mosTone maps a MOS onto the standard satisfaction bands. */
+function mosTone(mos: number): 'success' | 'warning' | 'danger' {
+  if (mos >= 4.0) return 'success'
+  if (mos >= 3.6) return 'warning'
+  return 'danger'
+}
+
+/** VoiceBreakdown renders the RTP voice-quality result (S47c): MOS up front,
+ *  then R-factor / jitter / loss / delay — with the model named so a computed
+ *  MOS is never mistaken for a measured listening score. */
+function VoiceBreakdown({ r }: { r: LatestResult }) {
+  const mos = m(r, 'voice.mos')
+  return (
+    <dl className={styles.kv}>
+      <dt>MOS</dt>
+      <dd>
+        {mos !== undefined ? (
+          <>
+            <Badge tone={mosTone(mos)}>{num(mos, '', 2)}</Badge> · R-factor{' '}
+            {num(m(r, 'voice.r_factor'), '', 1)}
+          </>
+        ) : (
+          '— (no echoes — voice path unmeasurable)'
+        )}
+      </dd>
+      <dt>Jitter / loss</dt>
+      <dd>
+        {num(m(r, 'voice.jitter.ms'), ' ms')} (RFC 3550) · loss {num(m(r, 'voice.loss.pct'), '%', 1)} ·{' '}
+        {num(m(r, 'packets.received'), '', 0)}/{num(m(r, 'packets.sent'), '', 0)} packets
+      </dd>
+      <dt>Delay</dt>
+      <dd>
+        one-way est. {num(m(r, 'voice.one_way.ms'), ' ms')} · RTT avg {num(m(r, 'rtt.avg.ms'), ' ms')}
+      </dd>
+      <dt>Model</dt>
+      <dd>
+        {a(r, 'voice.codec') ?? '—'} · {a(r, 'voice.model') ?? '—'} · one-way ={' '}
+        {a(r, 'voice.one_way_estimate') ?? '—'}
+      </dd>
+    </dl>
+  )
+}
+
 /** GenericMetrics is the named-field fallback for types without a dedicated
  *  view — still a labeled table, never raw JSON. */
 function GenericMetrics({ r }: { r: LatestResult }) {
@@ -158,6 +201,8 @@ function TypedBreakdown({ r }: { r: LatestResult }) {
     case 'tcp':
     case 'udp':
       return <LatencyLoss r={r} />
+    case 'voice':
+      return <VoiceBreakdown r={r} />
     default:
       return <GenericMetrics r={r} />
   }

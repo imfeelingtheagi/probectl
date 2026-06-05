@@ -47,6 +47,19 @@ function resultFixtures(): LatestResult[] {
       error: 'timeout waiting for echo', observed_at: at,
       metrics: { 'loss.ratio': 1, 'packets.sent': 5, 'packets.received': 0 },
     },
+    {
+      agent_id: 'a1', type: 'voice', target: 'pbx.acme.example:5004', success: true, observed_at: at,
+      metrics: {
+        'voice.mos': 3.1, 'voice.r_factor': 61.4, 'voice.jitter.ms': 12.42,
+        'voice.one_way.ms': 96.5, 'voice.loss.pct': 8.5,
+        'loss.ratio': 0.085, 'packets.sent': 150, 'packets.received': 137,
+        'rtt.avg.ms': 64.2, 'rtt.min.ms': 50.1, 'rtt.max.ms': 110.4, 'rtt.stddev.ms': 9.9, 'jitter.ms': 8.8,
+      },
+      attributes: {
+        'voice.codec': 'g711', 'voice.model': 'itu-t-g107-e-model-simplified',
+        'voice.one_way_estimate': 'rtt/2 + codec + jitter buffer',
+      },
+    },
   ]
 }
 
@@ -56,6 +69,7 @@ const testsList = [
   { id: 't3', name: 'core ping', type: 'icmp', target: '10.0.0.7', interval_seconds: 30, timeout_seconds: 5, params: {}, enabled: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
   { id: 't4', name: 'db tcp', type: 'tcp', target: 'db.acme.example:5432', interval_seconds: 30, timeout_seconds: 5, params: {}, enabled: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
   { id: 't5', name: 'udp echo', type: 'udp', target: 'echo.acme.example:9999', interval_seconds: 30, timeout_seconds: 5, params: {}, enabled: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: 't6', name: 'voip probe', type: 'voice', target: 'pbx.acme.example:5004', interval_seconds: 60, timeout_seconds: 5, params: { codec: 'g711' }, enabled: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
 ]
 
 function resultsBackend(items: LatestResult[]) {
@@ -136,11 +150,30 @@ describe('synthetic result views (S-FE5)', () => {
     expect(within(dialog).getByText('100%')).toBeDefined()
   })
 
+  test('voice renders MOS (E-model) + jitter/loss with the model named (S47c)', async () => {
+    const { fetcher } = resultsBackend(resultFixtures())
+    vi.stubGlobal('fetch', fetcher)
+    renderApp('/targets')
+    const dialog = await openResults('voip probe')
+
+    // The contract fields: MOS prominent with the satisfaction tone…
+    expect(within(dialog).getByText('3.1')).toBeDefined()
+    expect(within(dialog).getByText(/R-factor\s*61\.4/)).toBeDefined()
+    // …jitter/loss…
+    expect(within(dialog).getByText(/12\.4 ms \(RFC 3550\) · loss 8\.5%/)).toBeDefined()
+    expect(within(dialog).getByText(/137\/150 packets/)).toBeDefined()
+    // …the delay estimate stated AS an estimate…
+    expect(within(dialog).getByText(/one-way est\. 96\.5 ms/)).toBeDefined()
+    // …and the model honesty: a computed score, never a measured one.
+    expect(within(dialog).getByText(/g711 · itu-t-g107-e-model-simplified/)).toBeDefined()
+    expect(await axe(dialog)).toHaveNoViolations()
+  })
+
   test('consistency: no view ever renders raw JSON', async () => {
     const { fetcher } = resultsBackend(resultFixtures())
     vi.stubGlobal('fetch', fetcher)
     renderApp('/targets')
-    for (const name of ['app http', 'apex dns', 'core ping']) {
+    for (const name of ['app http', 'apex dns', 'core ping', 'voip probe']) {
       const dialog = await openResults(name)
       expect(dialog.textContent).not.toMatch(/[{}"]/) // no JSON braces/quotes leak
       await userEvent.click(within(dialog).getByRole('button', { name: /close/i }))

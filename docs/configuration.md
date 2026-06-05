@@ -218,6 +218,17 @@ target that echoes (a UDP echo service, or a probectl agent-to-agent responder);
 non-echoing target reports as 100% loss. `params.payload_bytes` (≥10) sets the
 datagram size.
 
+### Voice/RTP tests (S47c)
+
+The `voice` canary streams real RTP packets at codec cadence to an echoing
+target and scores the path: **MOS + R-factor (simplified ITU-T G.107
+E-model), RFC 3550 jitter, loss, and a one-way delay estimate**. `target` is
+`host:port`. Parameters: `codec` (`g711` default, `g729`),
+`duration_seconds` (1–10, default 3), `dscp` (default 46/EF). The model
+variant and the one-way-estimate method ride the result attributes — a
+computed MOS is never presented as a measured listening score. See
+`docs/voice.md`.
+
 ### DNS tests (S12)
 
 The `dns` canary queries DNS and reports **resolution time, the answer, and an

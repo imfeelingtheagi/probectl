@@ -26,7 +26,7 @@ type Spec struct {
 // ValidTypes is the set of canary types (mirrors the agent's plugin registry).
 var ValidTypes = map[string]bool{
 	"icmp": true, "tcp": true, "udp": true, "noop": true,
-	"dns": true, "http": true, "a2a": true,
+	"dns": true, "http": true, "a2a": true, "voice": true,
 }
 
 // Defaults applied by Normalize.

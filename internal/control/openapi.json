@@ -3597,7 +3597,8 @@
               "dns",
               "http",
               "a2a",
-              "noop"
+              "noop",
+              "voice"
             ]
           },
           "target": {
@@ -4481,7 +4482,8 @@
               "dns",
               "http",
               "a2a",
-              "noop"
+              "noop",
+              "voice"
             ]
           },
           "target": {

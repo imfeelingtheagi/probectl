@@ -62,6 +62,7 @@ func run() error {
 	reg.Register("udp", canary.NewUDP)
 	reg.Register("dns", canary.NewDNS)
 	reg.Register("http", canary.NewHTTP)
+	reg.Register("voice", canary.NewVoice) // RTP MOS/jitter/loss (S47c)
 
 	a, err := agent.New(cfg, reg, log)
 	if err != nil {

@@ -85,7 +85,7 @@ export function NotFoundPage() {
 
 // --- Targets & Tests (live /v1/tests CRUD) ---
 
-const TEST_TYPES = ['icmp', 'tcp', 'udp', 'dns', 'http', 'a2a', 'noop']
+const TEST_TYPES = ['icmp', 'tcp', 'udp', 'dns', 'http', 'voice', 'a2a', 'noop']
 
 function CreateTestModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { push } = useToast()
@@ -144,7 +144,7 @@ function CreateTestModal({ open, onClose }: { open: boolean; onClose: () => void
           label="Target"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          placeholder={type === 'tcp' || type === 'udp' ? 'host:port' : '1.1.1.1'}
+          placeholder={type === 'tcp' || type === 'udp' || type === 'voice' ? 'host:port' : '1.1.1.1'}
           hint={type === 'noop' ? 'Not required for noop.' : undefined}
         />
         <Field
