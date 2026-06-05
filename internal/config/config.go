@@ -206,6 +206,13 @@ type Config struct {
 	SLOEnabled bool
 	SLODir     string
 
+	// Compliance / segmentation validation (S46, F43): declared policies
+	// validated against OBSERVED flow/eBPF traffic — verdicts + audit-grade
+	// evidence; never enforcement. ON by default (local-only); a malformed
+	// policy dir fails startup.
+	ComplianceEnabled   bool
+	CompliancePolicyDir string
+
 	// SIEM export (S32, F26): forward the audit stream + threat-plane signals to the
 	// SOC's SIEM. OFF by default — enabling it makes an outbound connection to the
 	// operator-supplied endpoint (sovereignty / no-phone-home). SIEMPreset adapts the
@@ -355,6 +362,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		CostPriced:          l.boolean("PROBECTL_COST_PRICED", true),
 		SLOEnabled:          l.boolean("PROBECTL_SLO_ENABLED", true),
 		SLODir:              l.str("PROBECTL_SLO_DIR", ""),
+		ComplianceEnabled:   l.boolean("PROBECTL_COMPLIANCE_ENABLED", true),
+		CompliancePolicyDir: l.str("PROBECTL_COMPLIANCE_POLICY_DIR", ""),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),

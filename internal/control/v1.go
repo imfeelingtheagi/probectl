@@ -79,6 +79,8 @@ func (s *Server) apiRoutes() []apiRoute {
 		{http.MethodGet, "/v1/topology", s.handleTopology, ai.PermTopologyRead},
 		{http.MethodGet, "/v1/cost/summary", s.handleCostSummary, ai.PermMetricsRead},
 		{http.MethodGet, "/v1/slos", s.handleSLOs, ai.PermMetricsRead},
+		{http.MethodGet, "/v1/compliance", s.handleCompliance, permThreatRead},
+		{http.MethodGet, "/v1/compliance/evidence", s.handleComplianceEvidence, permAuditRead},
 		{http.MethodGet, "/v1/slos/openslo", s.handleSLOExport, ai.PermMetricsRead},
 		{http.MethodPost, "/v1/topology/whatif", s.handleWhatIf, ai.PermTopologyRead},
 		{http.MethodGet, "/v1/incidents/{id}/cis", s.handleIncidentCIs, permIncidentRead},

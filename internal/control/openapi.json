@@ -2442,6 +2442,74 @@
         }
       }
     },
+    "/v1/compliance": {
+      "get": {
+        "operationId": "listComplianceResults",
+        "summary": "Segmentation validation results (S46)",
+        "tags": [
+          "compliance"
+        ],
+        "description": "The caller's tenant's per-rule segmentation verdicts from OBSERVED flow/eBPF traffic: violation (forbidden traffic observed, with bounded flow evidence), observed_clean (traffic between the zones observed, none in the forbidden scope), or not_observed (no traffic seen — explicitly NOT proof of isolation). The coverage block states what was actually watched; probectl never claims 'compliant' beyond observed traffic, and never enforces.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The verdicts + coverage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "compliance_running": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "coverage": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/compliance/evidence": {
+      "get": {
+        "operationId": "exportComplianceEvidence",
+        "summary": "Audit-grade compliance evidence export (S46)",
+        "tags": [
+          "compliance"
+        ],
+        "description": "A self-verifying, timestamped evidence document: per-rule results with PCI DSS / NIST / zero-trust framework mappings and bounded violation samples, hash-chained via the internal crypto provider (any post-export tampering breaks verification), with the coverage caveats embedded — an auditor sees exactly what was and wasn't observed. Requires audit read.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The evidence document (probectl-compliance-evidence/v1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/incidents/{id}/cis": {
       "get": {
         "operationId": "incidentCIs",

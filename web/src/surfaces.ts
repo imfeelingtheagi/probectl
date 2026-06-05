@@ -49,6 +49,7 @@ export const SURFACES: SurfaceDecl[] = [
   { capability: 'Topology dependency graph + what-if impact simulation', sprint: 'S43', kind: 'native', route: '/topology' },
   { capability: 'Network egress cost summary + budgets (FinOps showback)', sprint: 'S44', kind: 'native', route: '/cost' },
   { capability: 'SLOs, error budgets + multi-window burn rates (OpenSLO)', sprint: 'S45', kind: 'native', route: '/slos' },
+  { capability: 'Segmentation validation + audit evidence (PCI/NIST/zero-trust)', sprint: 'S46', kind: 'native', route: '/compliance' },
   { capability: 'Secret-backend config + credential health', sprint: 'S41', kind: 'native', route: '/admin' },
 
   // --- federated surfaces (by design) ---
@@ -87,7 +88,7 @@ export const SURFACES: SurfaceDecl[] = [
 
 
   { capability: 'Curated in-app dashboards', sprint: 'S45 (Grafana covers it today via S40)', kind: 'placeholder', route: '/dashboards' },
-  { capability: 'Compliance / segmentation evidence', sprint: 'S46', kind: 'placeholder', route: '/compliance' },
+
 ]
 
 /** RegistryViolation is one coverage/consistency failure (gate output). */

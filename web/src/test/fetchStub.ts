@@ -50,6 +50,8 @@ export function defaultFetch(): typeof fetch {
         },
       })
     if (url.endsWith('/v1/slos')) return jsonResponse({ slo_running: true, items: [] })
+    if (url.endsWith('/v1/compliance'))
+      return jsonResponse({ compliance_running: true, items: [], coverage: { flow_observed: false, ebpf_observed: false, observations: 0, zones_seen: 0, zones_total: 0, notes: [] } })
     if (url.endsWith('/v1/secrets/health'))
       return jsonResponse({
         resolver_running: true,

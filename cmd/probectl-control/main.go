@@ -323,6 +323,21 @@ func run(cmd string) error {
 		})
 	}
 
+	// Compliance / segmentation validation (S46): declared policies validated
+	// against observed flow + eBPF traffic; violations are SIGNALS into
+	// incidents + SIEM. probectl validates — it never enforces.
+	complianceEngine, complianceOn, err := control.BuildCompliance(cfg, log)
+	if err != nil {
+		return err // malformed policy dir fails startup
+	}
+	if complianceOn {
+		g.Go(func() error {
+			return control.NewComplianceConsumer(resultBus, complianceEngine, correlator, log).
+				WithSIEM(siemFwd).
+				Run(gctx)
+		})
+	}
+
 	// NDR-lite behavioral detection (S42): DGA/exfil/beaconing/egress/lateral
 	// over the DNS/flow/eBPF streams already arriving here. Purely local (no
 	// outbound calls); detections are confidence-scored SIGNALS exported to

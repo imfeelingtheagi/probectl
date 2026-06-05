@@ -14,6 +14,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/ai/author"
 	"github.com/imfeelingtheagi/probectl/internal/auth"
 	"github.com/imfeelingtheagi/probectl/internal/cmdb"
+	"github.com/imfeelingtheagi/probectl/internal/compliance"
 	"github.com/imfeelingtheagi/probectl/internal/config"
 	"github.com/imfeelingtheagi/probectl/internal/cost"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
@@ -116,6 +117,10 @@ type Server struct {
 
 	// SLO engine (S45). Set via WithSLO; nil reports slo_running=false.
 	sloEngine *slo.Engine
+
+	// Compliance validator (S46). Set via WithCompliance; nil reports
+	// compliance_running=false.
+	complianceEngine *compliance.Engine
 
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).

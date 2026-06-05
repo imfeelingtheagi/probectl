@@ -932,6 +932,17 @@ federated to Grafana (S40). See `docs/finops.md`.
 Statuses at `GET /v1/slos`, OpenSLO export at `GET /v1/slos/openslo`, and the
 SLOs page. See `docs/slo.md`.
 
+### Compliance / segmentation validation (S46)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROBECTL_COMPLIANCE_ENABLED`    | `true` | segmentation validator over observed flow/eBPF traffic (validation only — never enforcement) |
+| `PROBECTL_COMPLIANCE_POLICY_DIR` | (none) | segmentation policy YAML directory (strictly validated; malformed files fail startup) |
+
+Verdicts at `GET /v1/compliance`, hash-chained audit evidence at
+`GET /v1/compliance/evidence`, and the Compliance page. See
+`docs/compliance.md`.
+
 ### NDR-lite detection (S42)
 
 | Variable | Default | Purpose |
