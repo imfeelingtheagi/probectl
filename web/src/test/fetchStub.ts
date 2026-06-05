@@ -49,6 +49,7 @@ export function defaultFetch(): typeof fetch {
           chatty_pairs: [], trend: [], budgets: [],
         },
       })
+    if (url.endsWith('/v1/slos')) return jsonResponse({ slo_running: true, items: [] })
     if (url.endsWith('/v1/secrets/health'))
       return jsonResponse({
         resolver_running: true,

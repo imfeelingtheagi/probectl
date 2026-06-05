@@ -199,6 +199,13 @@ type Config struct {
 	CostPricesFile string
 	CostPriced     bool
 
+	// SLO engine (S45, F42): OpenSLO v1 definitions loaded from SLODir
+	// (*.yaml; multi-document files allowed), evaluated per tenant over the
+	// synthetic-result stream with error budgets + multi-window burn-rate
+	// alerts. ON by default (local-only); a malformed dir fails startup.
+	SLOEnabled bool
+	SLODir     string
+
 	// SIEM export (S32, F26): forward the audit stream + threat-plane signals to the
 	// SOC's SIEM. OFF by default — enabling it makes an outbound connection to the
 	// operator-supplied endpoint (sovereignty / no-phone-home). SIEMPreset adapts the
@@ -346,6 +353,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		CostBudgets:         l.str("PROBECTL_COST_BUDGETS", ""),
 		CostPricesFile:      l.str("PROBECTL_COST_PRICES_FILE", ""),
 		CostPriced:          l.boolean("PROBECTL_COST_PRICED", true),
+		SLOEnabled:          l.boolean("PROBECTL_SLO_ENABLED", true),
+		SLODir:              l.str("PROBECTL_SLO_DIR", ""),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),

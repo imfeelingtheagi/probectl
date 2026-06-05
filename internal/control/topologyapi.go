@@ -104,7 +104,13 @@ func (s *Server) handleWhatIf(w http.ResponseWriter, r *http.Request) error {
 		}
 		at = parsed
 	}
-	imp, err := topology.Simulate(s.topo, tid, req.Target, at, nil)
+	// The SLO engine (S45) feeds SLO impact into the simulation when wired;
+	// a typed-nil must become a nil INTERFACE so Simulate's checks behave.
+	var sloSrc topology.SLOSource
+	if s.sloEngine != nil {
+		sloSrc = s.sloEngine
+	}
+	imp, err := topology.Simulate(s.topo, tid, req.Target, at, sloSrc)
 	if err != nil {
 		return apierror.NotFound(err.Error())
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/notify"
 	"github.com/imfeelingtheagi/probectl/internal/path"
 	"github.com/imfeelingtheagi/probectl/internal/promapi"
+	"github.com/imfeelingtheagi/probectl/internal/slo"
 	"github.com/imfeelingtheagi/probectl/internal/store"
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
@@ -112,6 +113,9 @@ type Server struct {
 	// FinOps cost engine (S44). Set via WithCost; nil reports
 	// cost_running=false.
 	costEngine *cost.Engine
+
+	// SLO engine (S45). Set via WithSLO; nil reports slo_running=false.
+	sloEngine *slo.Engine
 
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).

@@ -48,6 +48,7 @@ export const SURFACES: SurfaceDecl[] = [
   { capability: 'Agent fleet admin', sprint: 'S9', kind: 'native', route: '/admin' },
   { capability: 'Topology dependency graph + what-if impact simulation', sprint: 'S43', kind: 'native', route: '/topology' },
   { capability: 'Network egress cost summary + budgets (FinOps showback)', sprint: 'S44', kind: 'native', route: '/cost' },
+  { capability: 'SLOs, error budgets + multi-window burn rates (OpenSLO)', sprint: 'S45', kind: 'native', route: '/slos' },
   { capability: 'Secret-backend config + credential health', sprint: 'S41', kind: 'native', route: '/admin' },
 
   // --- federated surfaces (by design) ---
@@ -84,7 +85,7 @@ export const SURFACES: SurfaceDecl[] = [
 
   // --- declared placeholders (engine lands with the named sprint) ---
 
-  { capability: 'SLOs, error budgets + burn rates', sprint: 'S45', kind: 'placeholder', route: '/slos' },
+
   { capability: 'Curated in-app dashboards', sprint: 'S45 (Grafana covers it today via S40)', kind: 'placeholder', route: '/dashboards' },
   { capability: 'Compliance / segmentation evidence', sprint: 'S46', kind: 'placeholder', route: '/compliance' },
 ]

@@ -922,6 +922,16 @@ See `docs/topology.md`.
 Summary at `GET /v1/cost/summary` and the Cost page; deep dashboards are
 federated to Grafana (S40). See `docs/finops.md`.
 
+### SLO engine (S45)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROBECTL_SLO_ENABLED` | `true` | OpenSLO SLI/SLO engine over the synthetic-result stream (error budgets + multi-window burn-rate signals) |
+| `PROBECTL_SLO_DIR`     | (none) | directory of OpenSLO v1 YAML definitions (strictly validated; malformed/duplicate definitions fail startup) |
+
+Statuses at `GET /v1/slos`, OpenSLO export at `GET /v1/slos/openslo`, and the
+SLOs page. See `docs/slo.md`.
+
 ### NDR-lite detection (S42)
 
 | Variable | Default | Purpose |

@@ -2339,6 +2339,109 @@
         }
       }
     },
+    "/v1/slos": {
+      "get": {
+        "operationId": "listSLOs",
+        "summary": "SLO statuses (S45)",
+        "tags": [
+          "slo"
+        ],
+        "description": "The caller's tenant's SLO statuses from the OpenSLO-defined SLIs: attainment over the SLO window, error budget remaining, total events, cold_start honesty flag, and the multi-window burn rates (fast 1h/5m @14.4x, medium 6h/30m @6x, slow 3d/6h @1x — the Google SRE multi-window multi-burn-rate method) with per-window firing state. slo_running=false distinguishes an unwired engine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The statuses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "slo_running": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "service": {
+                            "type": "string"
+                          },
+                          "team": {
+                            "type": "string"
+                          },
+                          "objective": {
+                            "type": "number"
+                          },
+                          "window": {
+                            "type": "string"
+                          },
+                          "attainment": {
+                            "type": "number"
+                          },
+                          "error_budget_remaining": {
+                            "type": "number"
+                          },
+                          "total_events": {
+                            "type": "integer"
+                          },
+                          "cold_start": {
+                            "type": "boolean"
+                          },
+                          "burn_rates": {
+                            "type": "array",
+                            "items": {
+                              "type": "object"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/slos/openslo": {
+      "get": {
+        "operationId": "exportOpenSLO",
+        "summary": "OpenSLO export (S45)",
+        "tags": [
+          "slo"
+        ],
+        "description": "The loaded SLO definitions as an OpenSLO v1 YAML stream (multi-document). Lossless: documents round-trip unchanged between probectl and other OpenSLO tooling. Definitions are deployment-level configuration (PROBECTL_SLO_DIR); statuses are tenant-scoped.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenSLO YAML.",
+            "content": {
+              "application/yaml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/incidents/{id}/cis": {
       "get": {
         "operationId": "incidentCIs",

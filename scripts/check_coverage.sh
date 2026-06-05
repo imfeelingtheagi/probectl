@@ -76,6 +76,9 @@ awk -v mod="${MODULE}" '
     # Mapper/classifier/pricing/engine are pure and fully unit-tested; the
     # remainder is config-string plumbing.
     floor["internal/cost"]           = 80
+    # OpenSLO parse/round-trip, the SLI bucket math, and the burn ladder are
+    # fully unit-tested; the remainder is YAML-file plumbing.
+    floor["internal/slo"]            = 80
     # Memory store + anomaly detector + SQL builders are unit-tested; the
     # ClickHouse HTTP paths are covered by the live-stack integration job.
     floor["internal/store/flowstore"] = 50

@@ -310,6 +310,19 @@ func run(cmd string) error {
 		log.Info("threat-intel enrichment enabled", "refresh", cfg.ThreatIntelRefresh)
 	}
 
+	// SLO engine (S45): OpenSLO definitions evaluated per tenant over the
+	// synthetic-result stream; burn-rate breaches are SIGNALS into incidents,
+	// and the engine feeds SLO impact into S43 what-if simulations.
+	sloEngine, sloOn, err := control.BuildSLO(cfg, log)
+	if err != nil {
+		return err // malformed SLO definitions fail startup
+	}
+	if sloOn {
+		g.Go(func() error {
+			return control.NewSLOConsumer(resultBus, sloEngine, correlator, log).Run(gctx)
+		})
+	}
+
 	// NDR-lite behavioral detection (S42): DGA/exfil/beaconing/egress/lateral
 	// over the DNS/flow/eBPF streams already arriving here. Purely local (no
 	// outbound calls); detections are confidence-scored SIGNALS exported to
