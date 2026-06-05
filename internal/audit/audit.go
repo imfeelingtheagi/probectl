@@ -94,7 +94,7 @@ func TenantVerify(ctx context.Context, s tenancy.Scope) error {
 		return err
 	}
 	defer rows.Close()
-	return verify(rows, s.Tenant.String())
+	return verify(rows, s.Tenant.String(), genesis)
 }
 
 // ProviderAppend appends an event to the global provider/break-glass chain.
@@ -131,19 +131,45 @@ func ProviderAppend(ctx context.Context, pool *pgxpool.Pool, actor, action, targ
 
 // ProviderVerify recomputes the global provider chain.
 func ProviderVerify(ctx context.Context, pool *pgxpool.Pool) error {
+	return ProviderVerifyFrom(ctx, pool, 0)
+}
+
+// ProviderHeadSeq returns the provider chain's current head sequence (0 when
+// empty) — capture it before an operation to verify just that operation's
+// suffix with ProviderVerifyFrom.
+func ProviderHeadSeq(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	var seq int64
+	err := pool.QueryRow(ctx, `SELECT coalesce(max(seq), 0) FROM provider_audit_events`).Scan(&seq)
+	return seq, err
+}
+
+// ProviderVerifyFrom recomputes the provider chain AFTER afterSeq, anchoring
+// on that record's stored hash (genesis when afterSeq is 0). It proves the
+// suffix's integrity without asserting anything about earlier history — the
+// scoped check a caller needs when it shares the global stream with other
+// writers (or, in CI, with the tamper-detection suite itself).
+func ProviderVerifyFrom(ctx context.Context, pool *pgxpool.Pool, afterSeq int64) error {
+	prev := genesis
+	if afterSeq > 0 {
+		if err := pool.QueryRow(ctx,
+			`SELECT hash FROM provider_audit_events WHERE seq = $1`, afterSeq).Scan(&prev); err != nil {
+			return fmt.Errorf("read anchor seq %d: %w", afterSeq, err)
+		}
+	}
 	rows, err := pool.Query(ctx,
-		`SELECT seq, actor, action, target, data, prev_hash, hash FROM provider_audit_events ORDER BY seq`)
+		`SELECT seq, actor, action, target, data, prev_hash, hash FROM provider_audit_events
+		  WHERE seq > $1 ORDER BY seq`, afterSeq)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-	return verify(rows, providerStream)
+	return verify(rows, providerStream, prev)
 }
 
 // verify walks an ordered set of records, recomputing each hash and checking the
 // chain linkage.
-func verify(rows pgx.Rows, streamKey string) error {
-	prev := genesis
+func verify(rows pgx.Rows, streamKey string, startPrev string) error {
+	prev := startPrev
 	for rows.Next() {
 		var (
 			seq                    int64

@@ -83,24 +83,42 @@ func TestProviderAuditTamperDetection(t *testing.T) {
 	pool := setup(ctx, t)
 	defer pool.Close()
 
-	// The provider stream is global; reset it for a deterministic chain.
-	if _, err := pool.Exec(ctx, `TRUNCATE provider_audit_events`); err != nil {
-		t.Fatalf("reset provider stream: %v", err)
+	// The provider stream is GLOBAL and the integration database is shared
+	// across test packages running in parallel — so this test never truncates
+	// and never asserts the whole chain. It anchors on the current head,
+	// verifies only its own suffix, tampers only its own record, and RESTORES
+	// it (a corrupted chain left behind would fail other packages' verifies).
+	head, err := ProviderHeadSeq(ctx, pool)
+	if err != nil {
+		t.Fatalf("head: %v", err)
 	}
-
 	for i, action := range []string{"tenant.provision", "breakglass.grant"} {
 		if _, err := ProviderAppend(ctx, pool, "operator-x", action, fmt.Sprintf("p-%d", i), map[string]any{"n": i}); err != nil {
 			t.Fatalf("append: %v", err)
 		}
 	}
-	if err := ProviderVerify(ctx, pool); err != nil {
+	if err := ProviderVerifyFrom(ctx, pool, head); err != nil {
 		t.Fatalf("verify (clean): %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `UPDATE provider_audit_events SET action = 'hacked' WHERE seq = 2`); err != nil {
+	// Tamper with OUR second record, bypassing append-only (superuser).
+	victim := head + 2
+	var orig string
+	if err := pool.QueryRow(ctx,
+		`UPDATE provider_audit_events SET action = 'hacked' WHERE seq = $1 RETURNING 'breakglass.grant'`,
+		victim).Scan(&orig); err != nil {
 		t.Fatalf("tamper: %v", err)
 	}
-	if err := ProviderVerify(ctx, pool); err == nil {
-		t.Fatal("ProviderVerify should detect tampering, but reported a valid chain")
+	if err := ProviderVerifyFrom(ctx, pool, head); err == nil {
+		t.Fatal("ProviderVerifyFrom should detect tampering, but reported a valid chain")
+	}
+
+	// Restore, leaving the shared chain valid for everyone else.
+	if _, err := pool.Exec(ctx,
+		`UPDATE provider_audit_events SET action = $2 WHERE seq = $1`, victim, orig); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if err := ProviderVerifyFrom(ctx, pool, head); err != nil {
+		t.Fatalf("verify (restored): %v", err)
 	}
 }

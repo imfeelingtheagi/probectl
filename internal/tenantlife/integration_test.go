@@ -156,6 +156,10 @@ func TestLifecycleEndToEndPG(t *testing.T) {
 	}
 
 	// ERASE: gone from every store; the bystander untouched; attested.
+	providerHead, err := audit.ProviderHeadSeq(ctx, pool)
+	if err != nil {
+		t.Fatalf("provider head: %v", err)
+	}
 	att, err := e.Erase(ctx, victim, "it-life-a-"+stamp, "it-admin")
 	if err != nil {
 		t.Fatal(err)
@@ -180,8 +184,11 @@ func TestLifecycleEndToEndPG(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("tenant_retention remaining: %d", n)
 	}
-	// The attestation rode the provider audit chain and the chain verifies.
-	if err := audit.ProviderVerify(ctx, pool); err != nil {
+	// The attestation rode the provider audit chain and ITS suffix verifies.
+	// (Anchored on the pre-erase head: the provider stream is global and the
+	// CI database is shared with packages that test tamper DETECTION — this
+	// test asserts the integrity of what IT appended, not world history.)
+	if err := audit.ProviderVerifyFrom(ctx, pool, providerHead); err != nil {
 		t.Fatalf("provider chain must verify after the attestation: %v", err)
 	}
 }
