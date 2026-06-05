@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -80,15 +81,16 @@ func TestPolicyStorePG(t *testing.T) {
 		t.Fatalf("all: %+v err=%v", all, err)
 	}
 
-	// The gate consumes the stored override.
+	// The gate consumes the stored override (the fetch is asynchronous by
+	// design — admission never blocks on Postgres — so poll with a sleep).
 	g := NewGate(Policy{}, store)
-	g.EffectivePolicy(ctx, tnA)
-	deadline := 0
-	for g.EffectivePolicy(ctx, tnA).ResultsPerSec != 100 && deadline < 2000 {
-		deadline++
+	g.EffectivePolicy(ctx, tnA) // schedules the refresh
+	deadline := time.Now().Add(5 * time.Second)
+	for g.EffectivePolicy(ctx, tnA).ResultsPerSec != 100 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
 	}
-	if g.EffectivePolicy(ctx, tnA).ResultsPerSec != 100 {
-		t.Fatalf("gate must see the stored override: %+v", g.EffectivePolicy(ctx, tnA))
+	if got := g.EffectivePolicy(ctx, tnA); got.ResultsPerSec != 100 {
+		t.Fatalf("gate must see the stored override: %+v", got)
 	}
 
 	// Tenant-side RLS: tenant B reads its OWN policy view — A's row is
