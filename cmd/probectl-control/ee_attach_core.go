@@ -21,6 +21,6 @@ import (
 // editions gate builds this variant in CI to prove core stands alone.
 func attachEE(context.Context, *control.Server, *config.Config, *slog.Logger,
 	*license.Manager, *pgxpool.Pool, *control.LatestResults, flowstore.Store,
-	*tenantlife.Engine) error {
+	*tenantlife.Engine, func(context.Context, string) (string, error)) error {
 	return nil
 }

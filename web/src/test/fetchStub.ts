@@ -66,6 +66,8 @@ export function defaultFetch(): typeof fetch {
         backends: [{ scheme: 'env', configured: true, resolves: 0, failures: 0, cached_leases: 0 }],
       })
     if (url.endsWith('/branding')) return jsonResponse({ product_name: 'probectl' })
+    if (url.endsWith('/v1/security/keys'))
+      return jsonResponse({ error: { message: 'not found' } }, 404)
     if (url.endsWith('/v1/lifecycle/retention'))
       return jsonResponse({ flow_retention_days: null, isolation_model: 'pooled' })
     if (url.endsWith('/v1/editions'))

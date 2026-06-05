@@ -91,6 +91,8 @@ func (s *Server) apiRoutes() []apiRoute {
 		{http.MethodGet, "/v1/lifecycle/retention", s.handleLifecycleRetentionGet, permLifecycleErase},
 		{http.MethodPut, "/v1/lifecycle/retention", s.handleLifecycleRetentionPut, permLifecycleErase},
 		{http.MethodPost, "/v1/lifecycle/erase", s.handleLifecycleErase, permLifecycleErase},
+		{http.MethodGet, "/v1/security/keys", s.handleKeysStatus, permSecurityKeys},
+		{http.MethodPost, "/v1/security/keys/rotate", s.handleKeysRotate, permSecurityKeys},
 		{http.MethodPost, "/v1/topology/whatif", s.handleWhatIf, ai.PermTopologyRead},
 		{http.MethodGet, "/v1/incidents/{id}/cis", s.handleIncidentCIs, permIncidentRead},
 		{http.MethodGet, "/v1/agents/{id}/ci", s.handleAgentCI, permAgentRead},

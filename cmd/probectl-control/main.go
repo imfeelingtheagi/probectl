@@ -45,6 +45,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/internal/tenantcrypto"
 	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
 	"github.com/imfeelingtheagi/probectl/internal/topology"
@@ -94,6 +95,18 @@ func run(cmd string) error {
 	}
 	if err := cfg.ResolveSecretRefs(context.Background(), secretsResolver.Resolve); err != nil {
 		return err
+	}
+	// S-T6: install the deployment envelope as the at-rest sealer for
+	// sensitive tenant-owned values (alert channel secrets, ...). Keyless dev
+	// deployments run passthrough; the licensed byok build replaces the
+	// PRIMARY with the per-tenant keyring at the attach seam — this dv1
+	// sealer stays registered as an opener, so existing rows keep decrypting.
+	if cfg.EnvelopeKey != "" {
+		sealer, err := tenantcrypto.NewEnvelopeSealer(cfg.EnvelopeKeyID, cfg.EnvelopeKey)
+		if err != nil {
+			return fmt.Errorf("envelope sealer: %w", err)
+		}
+		tenantcrypto.SetPrimary(sealer)
 	}
 	// mcp-stdio uses stdout for its JSON-RPC channel, so its logs go to stderr.
 	logOut := os.Stdout
@@ -390,7 +403,7 @@ func run(cmd string) error {
 	// The ee attach seam (S-T1+): licensed commercial features are constructed
 	// and mounted here — and ONLY here. The core-only build (-tags
 	// probectl_core) compiles the no-op twin, proving core stands alone.
-	if err := attachEE(gctx, srv, cfg, log, lic, db.Pool(), latestResults, flowStore, lifeEngine); err != nil {
+	if err := attachEE(gctx, srv, cfg, log, lic, db.Pool(), latestResults, flowStore, lifeEngine, secretsResolver.Resolve); err != nil {
 		return err
 	}
 	if alertEngine != nil {

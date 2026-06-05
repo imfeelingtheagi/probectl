@@ -14,6 +14,6 @@ export interface LifecycleStatus {
 export function useLifecycle() {
   return useQuery({
     queryKey: ['lifecycle'],
-    queryFn: () => apiFetch<LifecycleStatus>('/v1/lifecycle/retention'),
+    queryFn: () => apiFetch<LifecycleStatus>('/lifecycle/retention'),
   })
 }

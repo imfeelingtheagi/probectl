@@ -3727,6 +3727,26 @@
           }
         }
       }
+    },
+    "/v1/security/keys": {
+      "get": {
+        "summary": "The tenant's at-rest key chain (S-T6: versions, mode, state \u2014 key MATERIAL never crosses; hidden 404 when byok is not licensed)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/security/keys/rotate": {
+      "post": {
+        "summary": "Rotate the tenant's key: managed re-key or BYOK via an S41 secret reference (validated-resolvable BEFORE activation \u2014 the lockout guard); retired versions stay decrypt-only (no downtime)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "components": {

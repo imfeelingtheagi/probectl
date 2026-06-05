@@ -31,6 +31,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
+	"github.com/imfeelingtheagi/probectl/internal/tenantcrypto"
 	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
 	"github.com/imfeelingtheagi/probectl/internal/topology"
@@ -165,6 +166,10 @@ type Server struct {
 	// Tenant lifecycle engine (S-T5, core): export / retention / verifiable
 	// erasure. Set via WithTenantLife; nil answers 503 not wired.
 	tenantLife *tenantlife.Engine
+
+	// Per-tenant key management (S-T6, ee-backed): set via WithKeyManager at
+	// the attach seam; nil = the /v1/security/keys surface hides (404).
+	keyManager tenantcrypto.KeyManager
 
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).

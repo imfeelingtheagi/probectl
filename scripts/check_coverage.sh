@@ -115,6 +115,8 @@ awk -v mod="${MODULE}" '
     # application/no-bleed/domain/email suites on the memory store; the pgx
     # store runs in the integration job.
     floor["ee/whitelabel"]           = 55
+    floor["ee/tenantkeys"]           = 65
+    floor["internal/tenantcrypto"]   = 80
     # The core branding seam (S-T4): validation + seam + normalization are
     # fully unit-tested.
     floor["internal/branding"]       = 80

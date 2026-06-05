@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -21,13 +22,16 @@ import (
 	"github.com/imfeelingtheagi/probectl/ee/billing"
 	"github.com/imfeelingtheagi/probectl/ee/provider"
 	"github.com/imfeelingtheagi/probectl/ee/silo"
+	"github.com/imfeelingtheagi/probectl/ee/tenantkeys"
 	"github.com/imfeelingtheagi/probectl/ee/whitelabel"
 	"github.com/imfeelingtheagi/probectl/internal/branding"
 	"github.com/imfeelingtheagi/probectl/internal/config"
 	"github.com/imfeelingtheagi/probectl/internal/control"
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/license"
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/internal/tenantcrypto"
 	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 	"github.com/imfeelingtheagi/probectl/internal/usage"
 )
@@ -38,7 +42,8 @@ import (
 // surfaces stay hidden (404).
 func attachEE(ctx context.Context, srv *control.Server, cfg *config.Config, log *slog.Logger,
 	lic *license.Manager, pool *pgxpool.Pool, results *control.LatestResults,
-	flowStore flowstore.Store, life *tenantlife.Engine) error {
+	flowStore flowstore.Store, life *tenantlife.Engine,
+	resolveSecret func(context.Context, string) (string, error)) error {
 	// Siloed/hybrid isolation (S-T2). Attached BEFORE the provider plane so
 	// tenant provisioning can create isolated stores from the first call.
 	var siloOps provider.SiloOps
@@ -109,6 +114,31 @@ func attachEE(ctx context.Context, srv *control.Server, cfg *config.Config, log 
 		branding.SetSource(resolver)
 		wl = &provider.WhiteLabel{Store: wstore, Invalidate: resolver.Invalidate}
 		log.Info("white-label branding attached (S-T4)")
+	}
+
+	// Per-tenant key isolation / BYOK (S-T6). The keyring replaces the
+	// deployment envelope as the PRIMARY sealer; the deployment sealer stays
+	// registered as an opener (main installed it), so pre-existing dv1 rows
+	// keep decrypting — decrypt-on-read, no migration. BYOK references
+	// resolve through the S41 secrets resolver at use time and are validated
+	// resolvable BEFORE activation (the lockout guard in ee/tenantkeys).
+	if lic.Has(license.FeatureBYOK) {
+		if cfg.EnvelopeKey == "" {
+			// Fail loudly: a licensed byok deployment without a master KEK
+			// would silently store managed tenant KEKs unprotectable.
+			return fmt.Errorf("byok is licensed but PROBECTL_ENVELOPE_KEY is not set (the deployment master wraps managed tenant keys)")
+		}
+		kp, err := crypto.NewStaticKeyProviderFromBase64(cfg.EnvelopeKeyID, cfg.EnvelopeKey)
+		if err != nil {
+			return fmt.Errorf("byok master key: %w", err)
+		}
+		ring, err := tenantkeys.NewKeyring(tenantkeys.NewPGStore(pool), crypto.NewEnvelope(kp), tenantkeys.RefResolver(resolveSecret))
+		if err != nil {
+			return err
+		}
+		tenantcrypto.SetPrimary(ring) // dv1 opener stays registered (main)
+		srv.WithKeyManager(tenantkeys.NewManager(ring))
+		log.Info("per-tenant key isolation attached (S-T6)", "scheme", "tk1", "modes", "managed|byok")
 	}
 
 	if lic.Has(license.FeatureProviderPlane) {

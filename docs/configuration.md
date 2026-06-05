@@ -1086,6 +1086,16 @@ API, the CSV/JSONL billing-export feed, per-tenant quotas (creation-gating
 only — telemetry is never quota-dropped), and the console showback card are
 documented in `docs/metering.md`.
 
+### Per-tenant key isolation / BYOK (S-T6, ee/)
+
+Unlocked by the `byok` feature (Enterprise). No new config keys: the keyring
+wraps managed tenant KEKs under **`PROBECTL_ENVELOPE_KEY`** (required when
+byok is licensed — startup fails loudly without it) and resolves BYOK
+references through the S41 secret backends. Surfaces: `GET/POST
+/v1/security/keys[...]` (permission `security.keys`) + the Admin →
+Encryption keys card. The full model — sealing formats, rotation, the BYOK
+lockout warning, crypto-offboarding — is in `docs/byok.md`.
+
 ### NDR-lite detection (S42)
 
 | Variable | Default | Purpose |

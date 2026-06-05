@@ -28,6 +28,8 @@ import { useAgents, type Agent } from '../api/agents'
 import { useSecretsHealth, type SecretBackendHealth } from '../api/secrets'
 import { useEditions, type FeatureInfo } from '../api/editions'
 import { useLifecycle } from '../api/lifecycle'
+import { ApiError } from '../api/client'
+import { useKeys, useRotateKey, type KeyInfo } from '../api/keys'
 
 export function Page({
   title,
@@ -380,9 +382,92 @@ export function AdminPage() {
         </CardBody>
       </Card>
       <SecretBackendsCard />
+      <KeysCard />
       <LifecycleCard />
       <EditionsCard />
     </Page>
+  )
+}
+
+/** KeysCard (S-T6, ee): the tenant's at-rest key chain — versions, mode,
+ *  state — with managed rotation and BYOK. Key MATERIAL never reaches the
+ *  browser. Unlicensed deployments answer 404 and the card renders nothing
+ *  (hidden-unlicensed, the usage-card pattern). */
+function KeysCard() {
+  const { data, isPending, isError, error } = useKeys()
+  const rotate = useRotateKey()
+  const [byokRef, setByokRef] = useState('')
+
+  // Hidden-unlicensed: render NOTHING until the API proves the keyring is
+  // installed — no frame during pending, no card at all on the 404.
+  if (isPending) return null
+  if (isError && error instanceof ApiError && error.status === 404) return null
+
+  const columns: Column<KeyInfo>[] = [
+    { key: 'version', header: 'Version', render: (k) => <strong>v{k.version}</strong> },
+    { key: 'mode', header: 'Mode', render: (k) => <Badge tone={k.mode === 'byok' ? 'accent' : 'neutral'}>{k.mode}</Badge> },
+    {
+      key: 'state',
+      header: 'State',
+      render: (k) =>
+        k.state === 'active' ? (
+          <StatusDot tone="success" label="Active" />
+        ) : k.state === 'retired' ? (
+          <StatusDot tone="neutral" label="Retired (decrypt-only)" />
+        ) : (
+          <StatusDot tone="danger" label="Destroyed" />
+        ),
+    },
+    { key: 'created', header: 'Created', render: (k) => k.created_at || '—' },
+  ]
+
+  return (
+    <Card>
+      <CardHeader
+        title="Encryption keys"
+        description="Your tenant's at-rest key chain. Rotation re-keys new data immediately; retired versions stay decrypt-only (no downtime). BYOK points at YOUR secret manager — if you revoke it, your data becomes unreadable (no shared-key fallback)."
+      />
+      <CardBody>
+        {isError ? (
+          <ErrorState description="Could not load the key chain." />
+        ) : (
+          <>
+            <Table
+              caption="Tenant key chain"
+              columns={columns}
+              rows={data ?? []}
+              rowKey={(k) => String(k.version)}
+              empty={
+                <EmptyState
+                  icon="admin"
+                  title="No tenant key yet"
+                  description="A managed key is provisioned automatically on first use, or rotate one in now."
+                />
+              }
+            />
+            <form
+              className={styles.actions}
+              onSubmit={(e) => {
+                e.preventDefault()
+                rotate.mutate(byokRef ? { mode: 'byok', byok_ref: byokRef } : { mode: 'managed' })
+              }}
+            >
+              <Field
+                label="BYOK secret reference (blank = managed rotation)"
+                value={byokRef}
+                onChange={(e) => setByokRef(e.target.value)}
+                placeholder="vault:kv/tenants/acme#kek"
+              />
+              <Button type="submit" variant="primary" disabled={rotate.isPending}>
+                {byokRef ? 'Activate BYOK' : 'Rotate managed key'}
+              </Button>
+            </form>
+            {rotate.isSuccess ? <p className={styles.editionsLede}>Rotated — new data seals under v{rotate.data.version}.</p> : null}
+            {rotate.isError ? <p role="alert" className={styles.editionsLede}>{(rotate.error as Error).message}</p> : null}
+          </>
+        )}
+      </CardBody>
+    </Card>
   )
 }
 

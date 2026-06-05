@@ -42,6 +42,7 @@ The engine, per store:
 | Provider rows about the tenant (usage, quotas, branding, break-glass, retention) | provider-role scoped deletes | per-table count == 0 |
 | ClickHouse flows | pooled: synchronous lightweight delete (`mutations_sync=2`); siloed: `DROP DATABASE` | post-delete count == 0 |
 | Object store | `DeletePrefix` on `tenant/<id>/` and `silo/<id>/` | post-delete list empty |
+| Tenant keys (S-T6, byok-licensed) | **crypto-shred**: every key version's wrapped KEK nulled, state `destroyed` — any `tk1:` ciphertext (including in backups) is permanently unreadable; destroyed chains refuse re-keying | versions-destroyed count on the attestation's `tenant_keys` line; unlicensed deployments record "no per-tenant keyring installed" |
 | TSDB | memory mode: in-place series delete. **Prometheus mode: MANUAL STEP** — run the admin `delete_series` API for `{tenant_id="<id>"}` or let retention expire them; the attestation marks this store incomplete until then | per mode |
 
 The tenant registry row is **tombstoned** (`status=deleted`) — the
