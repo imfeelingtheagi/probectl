@@ -2,6 +2,8 @@ package flowstore
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"sort"
 	"strconv"
 	"sync"
@@ -188,6 +190,60 @@ func (m *Memory) Anomalies(_ context.Context, q AnomalyQuery) ([]Anomaly, error)
 }
 
 // Close is a no-op.
+// DeleteTenant removes every flow of one tenant (S-T5).
+func (m *Memory) DeleteTenant(_ context.Context, tenantID string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	kept := m.rows[:0]
+	for _, r := range m.rows {
+		if r.TenantID != tenantID {
+			kept = append(kept, r)
+		}
+	}
+	m.rows = kept
+	var remaining int64
+	for _, r := range m.rows {
+		if r.TenantID == tenantID {
+			remaining++
+		}
+	}
+	return remaining, nil
+}
+
+// DeleteTenantBefore removes one tenant's flows older than cutoff (S-T5).
+func (m *Memory) DeleteTenantBefore(_ context.Context, tenantID string, cutoff time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	kept := m.rows[:0]
+	for _, r := range m.rows {
+		if r.TenantID == tenantID && r.TS.Before(cutoff) {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	m.rows = kept
+	return nil
+}
+
+// ExportTenant streams one tenant's flows as JSON Lines (S-T5).
+func (m *Memory) ExportTenant(_ context.Context, tenantID string, w io.Writer) (int64, error) {
+	m.mu.Lock()
+	rows := make([]Row, 0)
+	for _, r := range m.rows {
+		if r.TenantID == tenantID {
+			rows = append(rows, r)
+		}
+	}
+	m.mu.Unlock()
+	enc := json.NewEncoder(w)
+	for i := range rows {
+		if err := enc.Encode(rows[i]); err != nil {
+			return int64(i), err
+		}
+	}
+	return int64(len(rows)), nil
+}
+
 func (m *Memory) Close() error { return nil }
 
 func indexByte(s string, b byte) int {

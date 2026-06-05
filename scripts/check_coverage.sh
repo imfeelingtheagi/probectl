@@ -118,6 +118,11 @@ awk -v mod="${MODULE}" '
     # The core branding seam (S-T4): validation + seam + normalization are
     # fully unit-tested.
     floor["internal/branding"]       = 80
+    # Tenant lifecycle (S-T5, core): the erase/export/attestation engine runs
+    # the named gone-from-every-store + round-trip suites on the memory
+    # stores; the Postgres legs (RLS-scoped deletes, retention, provider
+    # rows, chain-verified attestation) run in the integration job.
+    floor["internal/tenantlife"]     = 28
     # Memory store + anomaly detector + SQL builders are unit-tested; the
     # ClickHouse HTTP paths are covered by the live-stack integration job.
     floor["internal/store/flowstore"] = 50

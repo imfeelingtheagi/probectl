@@ -27,6 +27,7 @@ import { ResultDetail } from './ResultDetail'
 import { useAgents, type Agent } from '../api/agents'
 import { useSecretsHealth, type SecretBackendHealth } from '../api/secrets'
 import { useEditions, type FeatureInfo } from '../api/editions'
+import { useLifecycle } from '../api/lifecycle'
 
 export function Page({
   title,
@@ -379,8 +380,78 @@ export function AdminPage() {
         </CardBody>
       </Card>
       <SecretBackendsCard />
+      <LifecycleCard />
       <EditionsCard />
     </Page>
+  )
+}
+
+/** LifecycleCard (S-T5, core): self-service data export, the retention
+ *  control, and residency/isolation visibility — export + verifiable
+ *  deletion are a compliance right, present in every edition. */
+function LifecycleCard() {
+  const { data, isPending, isError } = useLifecycle()
+  const [days, setDays] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSaved(false)
+    try {
+      const res = await fetch('/v1/lifecycle/retention', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flow_retention_days: days === '' ? null : Number(days) }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setSaved(true)
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Data lifecycle"
+        description="Export your tenant's data (portability bundle), tighten flow retention, and see where your data lives. Verifiable erasure is available via the API/runbook — it is irreversible and slug-confirmed."
+      />
+      <CardBody>
+        {isPending ? (
+          <LoadingState label="Loading lifecycle…" />
+        ) : isError ? (
+          <ErrorState description="Tenant lifecycle is not wired on this deployment." />
+        ) : (
+          <>
+            <p className={styles.editionsLede}>
+              Isolation: <Badge tone={data?.isolation_model === 'pooled' ? 'neutral' : 'accent'}>{data?.isolation_model ?? 'pooled'}</Badge>
+              {data?.residency ? <> · residency {data.residency}</> : null}
+              {' · '}
+              <a href="/v1/lifecycle/export" download>
+                Export my data (tar.gz)
+              </a>
+            </p>
+            <form className={styles.actions} onSubmit={save}>
+              <Field
+                label="Flow retention days (blank = deployment default)"
+                inputMode="numeric"
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+                placeholder={data?.flow_retention_days != null ? String(data.flow_retention_days) : 'default'}
+              />
+              <Button type="submit" variant="primary">
+                Save retention
+              </Button>
+            </form>
+            {saved ? <p className={styles.editionsLede}>Retention saved.</p> : null}
+            {error ? <p role="alert" className={styles.editionsLede}>{error}</p> : null}
+          </>
+        )}
+      </CardBody>
+    </Card>
   )
 }
 

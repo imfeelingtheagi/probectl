@@ -39,6 +39,8 @@ const (
 	permAIQuery        = "ai.query"
 	permDirectoryRead  = "directory.read"
 	permDirectoryWrite = "directory.write"
+	permLifecycleExp   = "lifecycle.export"
+	permLifecycleErase = "lifecycle.erase"
 )
 
 // allPermissionKeys is the full catalog — granted to the dev-mode principal so
@@ -52,6 +54,7 @@ var allPermissionKeys = []string{
 	permFlowRead,
 	permMetricsWrite, permCMDBRead, permThreatRead,
 	permDirectoryRead, permDirectoryWrite,
+	permLifecycleExp, permLifecycleErase,
 	permAuditRead,
 	permAIQuery,
 	ai.PermMetricsRead, ai.PermEventsRead, ai.PermEntitiesRead, ai.PermTopologyRead,

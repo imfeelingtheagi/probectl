@@ -127,6 +127,13 @@ func (s *Service) RecordBrandingChange(ctx context.Context, actor, target, custo
 	return s.audit.Append(ctx, actor, "provider.branding_set", target, data)
 }
 
+// RecordTenantErase audits a provider-triggered erasure on the provider stream.
+func (s *Service) RecordTenantErase(ctx context.Context, actor, tenantID string, complete bool, reportSHA string) error {
+	return s.audit.Append(ctx, actor, "provider.tenant_erase", tenantID, map[string]any{
+		"complete": complete, "report_sha256": reportSHA,
+	})
+}
+
 func (s *Service) invalidateRouter() {
 	if s.routerInvalidate != nil {
 		s.routerInvalidate()

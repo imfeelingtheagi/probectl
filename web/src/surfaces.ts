@@ -64,6 +64,7 @@ export const SURFACES: SurfaceDecl[] = [
   { capability: 'Carbon/energy estimate (ESG view of network traffic)', sprint: 'S48', kind: 'native', route: '/cost' },
   { capability: 'Secret-backend config + credential health', sprint: 'S41', kind: 'native', route: '/admin' },
   { capability: 'Editions / license state (Admin → Editions)', sprint: 'S-T0', kind: 'native', route: '/admin' },
+  { capability: 'Tenant data lifecycle: export, retention, residency visibility', sprint: 'S-T5', kind: 'native', route: '/admin' },
   // The provider/operator console (ee/) is deliberately OFF the tenant nav: a
   // separate privilege domain, hidden when unlicensed (the API 404s).
   { capability: 'Provider console: tenant lifecycle, fleet, break-glass (operators)', sprint: 'S-T1', kind: 'native', route: '/provider', offNav: true },

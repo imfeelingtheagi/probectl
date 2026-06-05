@@ -58,6 +58,9 @@ type Deps struct {
 	Metering *Metering
 	// S-T4: the white-label capability (nil unless white_label is licensed).
 	WhiteLabel *WhiteLabel
+	// S-T5: the CORE tenant-lifecycle engine (export/erasure is a compliance
+	// right; the provider plane only adds the operator-facing erase view).
+	Lifecycle Lifecycle
 }
 
 // Build constructs the provider plane handler. It fails loudly on missing
@@ -104,7 +107,8 @@ func Build(cfg *config.Config, d Deps) (http.Handler, error) {
 		log = slog.Default()
 	}
 	return NewHandler(svc, NewSessions(), tenantAuth, log,
-		cfg.ProviderBootstrapToken, cfg.HSTSEnabled).WithMetering(d.Metering).WithWhiteLabel(d.WhiteLabel), nil
+		cfg.ProviderBootstrapToken, cfg.HSTSEnabled).
+		WithMetering(d.Metering).WithWhiteLabel(d.WhiteLabel).WithLifecycle(d.Lifecycle), nil
 }
 
 // providerAudit writes the separate, tamper-evident provider audit stream.

@@ -1058,6 +1058,25 @@ Custom domains need a certificate at the TLS-terminating ingress (or via
 trustctl) — see `docs/white-label.md` for the token-override contract, the
 no-bleed rules, and the email-template contract.
 
+### Tenant lifecycle: export, retention, erasure (S-T5, core)
+
+Export + verifiable deletion are a compliance right — core in every edition.
+`GET /v1/lifecycle/export` (permission `lifecycle.export`) streams the
+portability bundle; `GET/PUT /v1/lifecycle/retention` + `POST
+/v1/lifecycle/erase` (permission `lifecycle.erase`, slug-confirmed,
+irreversible) manage retention and run the attested cross-store erasure. The
+provider console adds the operator-side erase trigger. See
+`docs/runbooks/tenant-offboarding.md` for the full procedure and the
+per-store verification table.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROBECTL_BACKUP_RETENTION_NOTE` | (a generic statement) | your backup-TTL statement, included VERBATIM in every deletion attestation — be explicit about snapshot expiry |
+
+The daily retention sweeper enforces per-tenant `flow_retention_days`
+(tighter than the deployment TTL). Prometheus-mode TSDB series deletion is a
+documented manual step (the attestation says so honestly).
+
 ### Per-tenant metering & quotas (S-T3, ee/)
 
 No configuration keys: metering activates with a license granting `metering`

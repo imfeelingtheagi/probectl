@@ -262,6 +262,12 @@ type Config struct {
 	ProviderBootstrapToken          string
 	ProviderBreakGlassMaxTTLMinutes int
 
+	// BackupRetentionNote (S-T5): the operator's backup-TTL statement,
+	// included verbatim in every deletion attestation (the explicit
+	// backup-retention story — live-store deletion is attested; snapshots
+	// expire per this stated policy).
+	BackupRetentionNote string
+
 	// DataPlanes (S-T2, ee/; siloed_isolation): named residency targets for
 	// siloed/hybrid tenants — "name=clickhouseURL[;name=clickhouseURL...]".
 	// Residency pins a tenant's ClickHouse data plane; see docs/isolation.md
@@ -439,6 +445,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		ProviderBootstrapToken:          l.str("PROBECTL_PROVIDER_BOOTSTRAP_TOKEN", ""),
 		ProviderBreakGlassMaxTTLMinutes: l.intRange("PROBECTL_PROVIDER_BREAKGLASS_MAX_TTL_MINUTES", 240, 5, 1440),
 		DataPlanes:                      l.str("PROBECTL_DATAPLANES", ""),
+		BackupRetentionNote:             l.str("PROBECTL_BACKUP_RETENTION_NOTE", ""),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),

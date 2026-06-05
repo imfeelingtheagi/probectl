@@ -303,6 +303,16 @@
           }
         }
       }
+    },
+    "/provider/v1/tenants/{id}/erase": {
+      "post": {
+        "summary": "IRREVERSIBLE verifiable erasure of a tenant across every store (the CORE S-T5 engine; admin SoD; confirm=<slug>; returns + audits the deletion attestation)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   }
 }

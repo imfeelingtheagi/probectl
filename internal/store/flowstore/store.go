@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -134,6 +135,16 @@ type Store interface {
 	TopTalkers(ctx context.Context, q TopQuery) ([]TopRow, error)
 	Capacity(ctx context.Context, q CapacityQuery) ([]CapacityPoint, error)
 	Anomalies(ctx context.Context, q AnomalyQuery) ([]Anomaly, error)
+	// DeleteTenant removes EVERY flow of one tenant (S-T5 verifiable
+	// deletion; routed: a siloed tenant's database is dropped) and returns
+	// the remaining count for that tenant (0 = verified gone).
+	DeleteTenant(ctx context.Context, tenantID string) (remaining int64, err error)
+	// DeleteTenantBefore removes one tenant's flows older than cutoff
+	// (S-T5 per-tenant retention).
+	DeleteTenantBefore(ctx context.Context, tenantID string, cutoff time.Time) error
+	// ExportTenant streams one tenant's flows as JSON Lines into w
+	// (S-T5 portability export).
+	ExportTenant(ctx context.Context, tenantID string, w io.Writer) (int64, error)
 	Close() error
 }
 

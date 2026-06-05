@@ -291,6 +291,97 @@ func (c *ClickHouse) Capacity(ctx context.Context, q CapacityQuery) ([]CapacityP
 	return out, nil
 }
 
+// DeleteTenant removes EVERY flow of one tenant. A siloed tenant's database
+// is DROPPED (the whole container); pooled tenants get a synchronous
+// lightweight-delete mutation (mutations_sync=2 — the call returns only when
+// the rows are gone, so the returned remaining-count is a real verification).
+func (c *ClickHouse) DeleteTenant(ctx context.Context, tenantID string) (int64, error) {
+	t, err := c.route(tenantID)
+	if err != nil {
+		return -1, err
+	}
+	if t.Database != "" { // siloed/hybrid: drop the per-tenant database
+		if err := c.DropTenantDatabase(ctx, t); err != nil {
+			return -1, err
+		}
+		return 0, nil
+	}
+	if err := c.exec(ctx, t.BaseURL,
+		"DELETE FROM "+sharedFlowsTable+" WHERE tenant_id="+chStr(tenantID)+" SETTINGS mutations_sync=2", nil); err != nil {
+		return -1, fmt.Errorf("flowstore: delete tenant: %w", err)
+	}
+	rows, err := c.query(ctx, t.BaseURL,
+		"SELECT count() AS n FROM "+sharedFlowsTable+" WHERE tenant_id="+chStr(tenantID))
+	if err != nil {
+		return -1, err
+	}
+	var remaining int64
+	if len(rows) > 0 {
+		remaining = int64(chToFloat(rows[0]["n"]))
+	}
+	return remaining, nil
+}
+
+// DeleteTenantBefore removes one tenant's flows older than cutoff (S-T5
+// per-tenant retention), on the tenant's routed store.
+func (c *ClickHouse) DeleteTenantBefore(ctx context.Context, tenantID string, cutoff time.Time) error {
+	t, err := c.route(tenantID)
+	if err != nil {
+		return err
+	}
+	table, err := tableFor(t)
+	if err != nil {
+		return err
+	}
+	return c.exec(ctx, t.BaseURL,
+		"DELETE FROM "+table+" WHERE tenant_id="+chStr(tenantID)+" AND ts < "+chTime(cutoff)+" SETTINGS mutations_sync=2", nil)
+}
+
+// ExportTenant streams one tenant's flows as JSON Lines into w, straight from
+// the ClickHouse HTTP response (no buffering — exports can be large).
+func (c *ClickHouse) ExportTenant(ctx context.Context, tenantID string, w io.Writer) (int64, error) {
+	t, err := c.route(tenantID)
+	if err != nil {
+		return 0, err
+	}
+	table, err := tableFor(t)
+	if err != nil {
+		return 0, err
+	}
+	sql := "SELECT * FROM " + table + " WHERE tenant_id=" + chStr(tenantID) + " ORDER BY ts FORMAT JSONEachRow"
+	u := c.baseFor(t.BaseURL) + "/?query=" + url.QueryEscape(sql)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("flowstore: export: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return 0, fmt.Errorf("flowstore: export status %d: %s", resp.StatusCode, b)
+	}
+	n, err := io.Copy(&lineCounter{w: w}, resp.Body)
+	_ = n
+	if err != nil {
+		return 0, err
+	}
+	// Count exported lines for the manifest.
+	rows, qerr := c.query(ctx, t.BaseURL, "SELECT count() AS n FROM "+table+" WHERE tenant_id="+chStr(tenantID))
+	if qerr != nil || len(rows) == 0 {
+		return -1, nil // streamed fine; count unavailable
+	}
+	return int64(chToFloat(rows[0]["n"])), nil
+}
+
+// lineCounter passes bytes through (kept simple; counting via the follow-up
+// count query keeps the stream zero-copy).
+type lineCounter struct{ w io.Writer }
+
+func (l *lineCounter) Write(p []byte) (int, error) { return l.w.Write(p) }
+
 // Anomalies fetches the capacity series and applies the shared detector, so
 // ClickHouse and Memory flag identically.
 func (c *ClickHouse) Anomalies(ctx context.Context, q AnomalyQuery) ([]Anomaly, error) {

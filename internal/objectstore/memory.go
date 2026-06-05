@@ -1,6 +1,9 @@
 package objectstore
 
 import (
+	"sort"
+	"strings"
+
 	"context"
 	"sync"
 )
@@ -51,6 +54,37 @@ func (m *MemStore) Stat(_ context.Context, key string) (int64, bool, error) {
 		return 0, false, nil
 	}
 	return o.Size, true, nil
+}
+
+// List returns the keys under prefix, sorted.
+func (m *MemStore) List(_ context.Context, prefix string) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var keys []string
+	for k := range m.objects {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+// DeletePrefix removes every object under prefix (S-T5 verifiable deletion).
+func (m *MemStore) DeletePrefix(_ context.Context, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for k := range m.objects {
+		if strings.HasPrefix(k, prefix) {
+			delete(m.objects, k)
+			n++
+		}
+	}
+	return n, nil
 }
 
 // Len reports the number of stored objects (test inspection).

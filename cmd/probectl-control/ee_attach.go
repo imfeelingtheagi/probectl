@@ -28,6 +28,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/license"
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 	"github.com/imfeelingtheagi/probectl/internal/usage"
 )
 
@@ -37,7 +38,7 @@ import (
 // surfaces stay hidden (404).
 func attachEE(ctx context.Context, srv *control.Server, cfg *config.Config, log *slog.Logger,
 	lic *license.Manager, pool *pgxpool.Pool, results *control.LatestResults,
-	flowStore flowstore.Store) error {
+	flowStore flowstore.Store, life *tenantlife.Engine) error {
 	// Siloed/hybrid isolation (S-T2). Attached BEFORE the provider plane so
 	// tenant provisioning can create isolated stores from the first call.
 	var siloOps provider.SiloOps
@@ -126,6 +127,7 @@ func attachEE(ctx context.Context, srv *control.Server, cfg *config.Config, log 
 			},
 			Metering:   metering,
 			WhiteLabel: wl,
+			Lifecycle:  life,
 		})
 		if err != nil {
 			return err

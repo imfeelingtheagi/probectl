@@ -50,6 +50,9 @@ type Handler struct {
 	// whitelabel (S-T4): nil unless the white_label feature is licensed.
 	whitelabel *WhiteLabel
 
+	// lifecycle (S-T5): the CORE erase engine (the provider view of it).
+	lifecycle Lifecycle
+
 	mux *http.ServeMux
 }
 
@@ -88,7 +91,8 @@ func Routes() []RouteDecl {
 		{http.MethodPost, "/provider/v1/consent/{id}"},
 	}
 	base = append(base, meteringRoutes()...)
-	return append(base, brandingRoutes()...)
+	base = append(base, brandingRoutes()...)
+	return append(base, lifecycleRoutes()...)
 }
 
 // NewHandler builds the provider HTTP surface.
@@ -130,6 +134,10 @@ func NewHandler(svc *Service, sessions *Sessions, tenantAuth TenantAuth, log *sl
 	h.handle("GET /provider/v1/usage/export", h.asOperator("", h.handleUsageExport))
 	h.handle("GET /provider/v1/tenants/{id}/quotas", h.asOperator("", h.handleGetQuotas))
 	h.handle("PUT /provider/v1/tenants/{id}/quotas", h.asOperator(RoleAdmin, h.handlePutQuotas))
+
+	// Verifiable erasure (S-T5; the engine is core — this is the operator
+	// trigger). Admin SoD; slug-confirmed; audited.
+	h.handle("POST /provider/v1/tenants/{id}/erase", h.asOperator(RoleAdmin, h.handleTenantErase))
 
 	// White-label branding (S-T4). Admin SoD on writes (brand changes are
 	// commercial decisions); not_found until WithWhiteLabel attaches.

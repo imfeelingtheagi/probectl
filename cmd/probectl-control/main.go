@@ -20,12 +20,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/imfeelingtheagi/probectl/internal/a2a"
 	"github.com/imfeelingtheagi/probectl/internal/agenttransport"
 	"github.com/imfeelingtheagi/probectl/internal/alert"
+	"github.com/imfeelingtheagi/probectl/internal/audit"
 	"github.com/imfeelingtheagi/probectl/internal/bus"
 	"github.com/imfeelingtheagi/probectl/internal/config"
 	"github.com/imfeelingtheagi/probectl/internal/control"
@@ -43,6 +45,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
 	"github.com/imfeelingtheagi/probectl/internal/topology"
 	"github.com/imfeelingtheagi/probectl/internal/version"
@@ -369,13 +372,25 @@ func run(cmd string) error {
 		}, cfg.RUMRatePerMin)
 	}
 	srv.WithLicense(lic) // editions truth at /v1/editions (S-T0)
+	// Per-tenant lifecycle (S-T5, core): export / retention / verifiable
+	// erasure with attestation. The object store is agent-side (browser
+	// artifacts), so the control plane's engine runs without one — recorded
+	// honestly per store in every attestation. The daily sweeper enforces
+	// per-tenant flow retention.
+	lifeEngine := tenantlife.New(db.Pool(), flowStore, nil, tsdbWriter,
+		func(ctx context.Context, actor, action, target string, data map[string]any) error {
+			_, err := audit.ProviderAppend(ctx, db.Pool(), actor, action, target, data)
+			return err
+		}, cfg.BackupRetentionNote, log)
+	srv.WithTenantLife(lifeEngine)
+	g.Go(func() error { lifeEngine.RunRetention(gctx, 24*time.Hour); return nil })
 	// Tenant lifecycle gate (S-T1): users of suspended/offboarded tenants are
 	// rejected at the API; data and ingestion are untouched.
 	srv.WithTenantStatus(control.NewTenantStatusCache(db.Pool(), 0))
 	// The ee attach seam (S-T1+): licensed commercial features are constructed
 	// and mounted here — and ONLY here. The core-only build (-tags
 	// probectl_core) compiles the no-op twin, proving core stands alone.
-	if err := attachEE(gctx, srv, cfg, log, lic, db.Pool(), latestResults, flowStore); err != nil {
+	if err := attachEE(gctx, srv, cfg, log, lic, db.Pool(), latestResults, flowStore, lifeEngine); err != nil {
 		return err
 	}
 	if alertEngine != nil {

@@ -32,6 +32,11 @@ type Store interface {
 	Get(ctx context.Context, key string) (Object, error)
 	// Stat returns the size and existence of key without reading the body.
 	Stat(ctx context.Context, key string) (size int64, exists bool, err error)
+	// List returns the keys under a prefix (S-T5 export manifests).
+	List(ctx context.Context, prefix string) ([]string, error)
+	// DeletePrefix removes every object under a prefix and returns the count
+	// (S-T5 verifiable deletion). Deleting an empty prefix is a no-op.
+	DeletePrefix(ctx context.Context, prefix string) (int, error)
 }
 
 // validKey rejects empty keys, absolute paths, and any traversal so a tenant

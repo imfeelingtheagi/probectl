@@ -66,3 +66,23 @@ func (m *Memory) Snapshot() []Series {
 	copy(out, m.series)
 	return out
 }
+
+// DeleteTenant removes every retained series labeled with the tenant and
+// returns how many points were removed (S-T5 verifiable deletion). The
+// prometheus-mode Writer does not implement this — series deletion there is
+// the documented manual step (admin delete_series API / retention).
+func (m *Memory) DeleteTenant(_ context.Context, tenantID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	kept := m.series[:0]
+	removed := 0
+	for _, s := range m.series {
+		if s.Labels["tenant_id"] == tenantID {
+			removed++
+			continue
+		}
+		kept = append(kept, s)
+	}
+	m.series = kept
+	return removed, nil
+}

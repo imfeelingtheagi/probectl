@@ -3,6 +3,8 @@
 package silo
 
 import (
+	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+
 	"fmt"
 	"sort"
 	"strings"
@@ -19,15 +21,9 @@ import (
 // construction: a new tenant-owned table in a later migration is picked up by
 // the next provision/catch-up with no list to forget to update.
 
-// providerOwned tables carry tenant_id but are NOT tenant-owned: break-glass
-// grants and the S-T3 metering/quota tables are provider-plane data ABOUT
-// tenants (billing stays pooled by design — never copied into silo schemas).
-var providerOwned = map[string]bool{
-	"break_glass_grants": true,
-	"usage_records":      true,
-	"tenant_quotas":      true,
-	"tenant_branding":    true,
-}
+// The provider-owned deny list lives in CORE (internal/tenancy) since S-T5,
+// shared with the tenant-lifecycle engine so silo provisioning and verifiable
+// deletion can never disagree about what counts as tenant data.
 
 // Catalog is the slice of information_schema facts the planner consumes.
 type Catalog struct {
@@ -50,14 +46,10 @@ type Column struct {
 	Default  string // "" = none
 }
 
-// TenantOwned filters and sorts the tenant-owned table set.
+// TenantOwned filters (via the shared core deny list) and sorts the
+// tenant-owned table set.
 func TenantOwned(tables []string) []string {
-	out := make([]string, 0, len(tables))
-	for _, t := range tables {
-		if !providerOwned[t] {
-			out = append(out, t)
-		}
-	}
+	out := tenancy.FilterTenantOwned(tables)
 	sort.Strings(out)
 	return out
 }

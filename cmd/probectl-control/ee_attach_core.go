@@ -12,6 +12,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/control"
 	"github.com/imfeelingtheagi/probectl/internal/license"
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
+	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 )
 
 // attachEE is the core-only no-op twin of the ee attach seam: the
@@ -19,6 +20,7 @@ import (
 // identical across both variants (one binary lineage, two link sets). The
 // editions gate builds this variant in CI to prove core stands alone.
 func attachEE(context.Context, *control.Server, *config.Config, *slog.Logger,
-	*license.Manager, *pgxpool.Pool, *control.LatestResults, flowstore.Store) error {
+	*license.Manager, *pgxpool.Pool, *control.LatestResults, flowstore.Store,
+	*tenantlife.Engine) error {
 	return nil
 }
