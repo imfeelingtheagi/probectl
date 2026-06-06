@@ -504,7 +504,11 @@ func run(cmd string) error {
 		log.Info("isolation: consuming namespaced result lanes", "namespaces", busNamespaces)
 	}
 	g.Go(func() error {
-		return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).WithNamespaces(busNamespaces).WithFairness(fairGate).Run(gctx)
+		return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).
+			WithNamespaces(busNamespaces).
+			WithFairness(fairGate).
+			WithCardinalityCaps(cfg.IngestMaxSeriesPerAgent, cfg.IngestMaxSeriesPerTenant). // U-017
+			Run(gctx)
 	})
 	// Flow pipeline (S38): probectl.flow.events -> enrich -> flow store.
 	g.Go(func() error {

@@ -38,6 +38,9 @@ type Consumer struct {
 	retried      atomic.Uint64 // write attempts beyond the first
 	deadLettered atomic.Uint64 // records routed to the DLQ after exhaustion
 	dropped      atomic.Uint64 // records lost entirely (DLQ publish ALSO failed)
+
+	// card caps per-agent/per-tenant series identities (U-017); always set.
+	card *CardinalityLimiter
 }
 
 // PipelineStats are the consumer's loss-accounting counters (U-019).
@@ -62,8 +65,19 @@ func NewConsumer(b bus.Bus, w tsdb.Writer, group string, log *slog.Logger) *Cons
 		maxRetries: 3,
 		retryBase:  50 * time.Millisecond,
 		sleep:      sleepCtx,
+		card:       NewCardinalityLimiter(0, 0),
 	}
 }
+
+// WithCardinalityCaps overrides the per-agent / per-tenant series caps
+// (U-017); non-positive values keep the defaults.
+func (c *Consumer) WithCardinalityCaps(perAgent, perTenant int) *Consumer {
+	c.card = NewCardinalityLimiter(perAgent, perTenant)
+	return c
+}
+
+// CardinalityStats exposes the series-cap rejection counters.
+func (c *Consumer) CardinalityStats() CardinalityStats { return c.card.Stats() }
 
 func sleepCtx(ctx context.Context, d time.Duration) {
 	t := time.NewTimer(d)
@@ -185,7 +199,19 @@ func (c *Consumer) handle(ctx context.Context, msg bus.Message) error {
 	// unless the ee/billing recorder is installed at the attach seam.
 	usage.Record(r.GetTenantId(), usage.MeterResultsIngested, 1)
 	usage.Record(r.GetTenantId(), usage.MeterIngestBytes, int64(len(msg.Value)))
-	if err := c.writeWithRetry(ctx, ResultToSeries(&r)); err != nil {
+	// Cardinality caps (U-017): NEW series identities past the per-agent /
+	// per-tenant caps are rejected per-series and counted; known identities
+	// keep flowing, other tenants are untouched.
+	series, droppedSeries := c.card.Filter(r.GetTenantId(), r.GetAgentId(), ResultToSeries(&r))
+	if droppedSeries > 0 {
+		c.log.Warn("series rejected by cardinality cap",
+			"tenant_id", r.GetTenantId(), "agent_id", r.GetAgentId(),
+			"rejected", droppedSeries, "rejected_total", c.card.Stats().Dropped)
+	}
+	if len(series) == 0 {
+		return nil
+	}
+	if err := c.writeWithRetry(ctx, series); err != nil {
 		c.deadLetter(ctx, msg, &r, err)
 	}
 	return nil
