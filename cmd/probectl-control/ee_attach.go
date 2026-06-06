@@ -147,7 +147,7 @@ func attachEE(ctx context.Context, srv *control.Server, cfg *config.Config, log 
 
 	// Advanced data governance (S-EE3). The governance feature installs the
 	// per-tenant classification + redaction POLICY onto the core govern seam
-	// (so redacted exports honour per-tenant overrides) and exposes the
+	// (so redacted exports honor per-tenant overrides) and exposes the
 	// composed governance view on the provider plane. Classification +
 	// redaction MECHANISM is core; this is the policy + surface.
 	var governanceCap *provider.Governance

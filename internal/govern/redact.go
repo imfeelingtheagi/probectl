@@ -29,14 +29,14 @@ const (
 // already-masked inputs where it can tell, and never panics on malformed input
 // (it falls back to a generic mask). All hashing routes through internal/crypto
 // (FIPS, guardrail 3).
-func Redact(cat Category, value string, strat Strategy) string {
-	if strat == StrategyNone || value == "" {
+func Redact(cat Category, value string, strategy Strategy) string {
+	if strategy == StrategyNone || value == "" {
 		return value
 	}
-	if strat == StrategyDrop {
+	if strategy == StrategyDrop {
 		return ""
 	}
-	if strat == StrategyHash {
+	if strategy == StrategyHash {
 		sum := crypto.Hash([]byte(value))
 		return "sha256:" + hex.EncodeToString(sum)[:16]
 	}
@@ -134,7 +134,7 @@ func columnCategory(column string) (Category, bool) {
 }
 
 // RedactRow masks the sensitive columns of a decoded row in place under the
-// policy. Only string values are masked (numbers/bools are not categorised);
+// policy. Only string values are masked (numbers/bools are not categorized);
 // a column classified below the policy's RedactFrom is left untouched.
 func RedactRow(pol Policy, row map[string]any) {
 	for col, v := range row {
@@ -142,20 +142,20 @@ func RedactRow(pol Policy, row map[string]any) {
 		if !ok {
 			continue
 		}
-		strat := pol.StrategyFor(cat)
-		if strat == StrategyNone {
+		strategy := pol.StrategyFor(cat)
+		if strategy == StrategyNone {
 			continue
 		}
 		s, ok := v.(string)
 		if !ok {
 			// Non-string sensitive value (e.g. a numeric ASN): drop/keep per
 			// strategy without category-specific masking.
-			if strat == StrategyDrop {
+			if strategy == StrategyDrop {
 				row[col] = nil
 			}
 			continue
 		}
-		row[col] = Redact(cat, s, strat)
+		row[col] = Redact(cat, s, strategy)
 	}
 }
 
