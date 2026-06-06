@@ -1,0 +1,94 @@
+name: security-scan
+
+# U-069: scheduled, EVIDENCED dependency-CVE scanning. Both diligence runs
+# found the CVE posture unverifiable because no scheduled scan left
+# artifacts. This workflow runs weekly (and on demand), uploads every
+# scanner's raw output as a build artifact (the evidence trail), and FAILS
+# on Critical findings — the same failure a PR would hit in ci.yml's
+# dependency-scan, so a new Critical in an unchanged repo still goes red.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # Mondays 05:17 UTC (off the top-of-hour stampede)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: govulncheck ./... (fails on findings)
+        uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
+        with:
+          go-version-input: "1.26"
+          output-format: sarif
+          output-file: govulncheck.sarif
+      - name: Evidence artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: govulncheck-${{ github.run_id }}
+          path: govulncheck.sarif
+      # The sarif mode always exits 0 (it is the evidence pass); the default
+      # text mode is the gate -- same SHA-pinned action, no floating installs.
+      - name: Gate on reachable vulnerabilities
+        uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
+        with:
+          go-version-input: "1.26"
+
+  npm-audit:
+    name: npm audit (web + browser-worker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Audit web (fail on critical)
+        working-directory: web
+        run: |
+          npm audit --json > ../npm-audit-web.json || true
+          npm audit --audit-level=critical
+      - name: Audit browser-worker (fail on critical)
+        if: always()
+        working-directory: browser-worker
+        run: |
+          npm audit --json > ../npm-audit-browser-worker.json || true
+          npm audit --audit-level=critical
+      - name: Evidence artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-audit-${{ github.run_id }}
+          path: npm-audit-*.json
+
+  trivy-fs:
+    name: trivy fs (lockfiles + secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Trivy filesystem scan (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: trivy-fs.json
+          exit-code: "0" # the gate is the second pass; this one is evidence
+      - name: Evidence artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trivy-fs-${{ github.run_id }}
+          path: trivy-fs.json
+      - name: Gate on Critical
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL
+          exit-code: "1"
