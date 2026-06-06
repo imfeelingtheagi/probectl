@@ -3,8 +3,11 @@
 probectl's AI assistant answers a natural-language question — *"why is X slow for
 Y?"* — with a **cited, RBAC-scoped root cause** grounded in the network's own
 signals. It is a primary product surface (PRD §6), not just an API, and it is
-**sovereign-capable**: the default model is an in-process synthesizer that runs
-fully air-gapped, with no network and no phone-home.
+**sovereign-capable**: **the default engine is not an LLM** — it is a
+deterministic, in-process heuristic synthesizer that runs fully air-gapped,
+with no network and no phone-home. Wiring up a real model (local Ollama/vLLM,
+or OpenAI/Anthropic-compatible endpoints) is an explicit opt-in via
+`PROBECTL_AI_MODEL_PROVIDER` (provider table below).
 
 This is the first PR of a design-led, multi-PR sprint: it establishes
 correctness, citations, RBAC scoping, the model abstraction, feedback capture,

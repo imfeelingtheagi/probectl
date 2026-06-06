@@ -33,7 +33,8 @@ boundary** on every record, agent, query, metric, event, and object.
 > analysis, an MCP server, change-aware topology + what-if, a security/threat
 > layer (TLS posture + NDR-lite), cost/SLO/compliance, RUM/carbon/chaos, and the
 > multi-tenant provider/MSP plane (hard isolation, white-label, metering, BYOK,
-> governance) — plus the Enterprise track: FIPS 140-3 mode, multi-region HA,
+> governance) — plus the Enterprise track: a build against the FIPS 140-3-validated
+> Go Cryptographic Module (CMVP #5247), multi-region HA,
 > supportability, and guarded (proposal-only, human-gated) remediation.
 > Compose + Helm are **HTTPS-by-default**. The license is intentionally **`TBD`** —
 > **source-available, not open source (yet)** (the open-core / reseller boundary is
@@ -91,7 +92,9 @@ probectl is organized around the questions operators actually ask at 2 a.m.:
 
 Or just ask the built-in assistant *"why is checkout slow for tenant X?"* — it
 runs the cross-plane correlation and answers with **cited evidence**, scoped to
-exactly what the caller is allowed to see.
+exactly what the caller is allowed to see. (The default engine is a
+**deterministic, air-gapped heuristic** — no LLM is involved or contacted
+unless you explicitly configure one; see the AI row below.)
 
 ## Who it's for
 
@@ -115,20 +118,20 @@ The five observability planes:
 | **BGP / routing** | RouteViews + RIPE RIS ingestion, route/path analysis, RPKI validity, a collective internet-outage view |
 | **Flow analytics** | NetFlow / sFlow / IPFIX into ClickHouse, with per-tenant anomaly detection |
 | **Device telemetry** | SNMP polling + gNMI streaming, folded into the topology graph |
-| **eBPF host / L7** | service map + L7 visibility, observation-only (the Retina model) |
+| **eBPF host / L7** | service map + L7 visibility, observation-only (the Retina model). **Default builds replay recorded fixtures** (no kernel access needed — CI/macOS/demo path); live kernel capture is the separate `-tags ebpf` build on a BTF kernel ([build matrix](docs/ebpf-agent.md)) |
 
 Intelligence, security, and platform layers built across the planes:
 
 | Layer | What it does |
 |---|---|
-| **AI assistant** | cross-plane RCA grounded in correlated incidents, natural-language semantic query, AI test authoring, and an **MCP server** (read-only tools + a proposal-only remediation tool) — all **tenant- then RBAC-scoped**, with a fully air-gapped local-model path |
+| **AI assistant** | cross-plane RCA grounded in correlated incidents, natural-language semantic query, AI test authoring, and an **MCP server** (read-only tools + a proposal-only remediation tool) — all **tenant- then RBAC-scoped**, with a fully air-gapped local-model path. **Default engine: a deterministic in-process heuristic (no LLM)** — connecting a model (local Ollama/vLLM or a cloud provider) is explicit opt-in ([`docs/ai-rca.md`](docs/ai-rca.md)) |
 | **Topology** | a versioned, change-aware dependency graph with **what-if** impact simulation |
 | **Security / threat** | TLS/cert posture + NDR-lite, **confidence-scored detections** (a signal exported to your SIEM — never an inline IPS) |
 | **Cost / SLO** | FinOps egress-cost attribution, an OpenSLO engine, and segmentation/compliance validation with evidence |
 | **Guarded remediation** | the AI **proposes** a fix grounded in RCA + a dry-run; a human **approves**; probectl **never executes** — proposal-only, blast-radius-limited, fully audited |
 | **Multi-tenancy** | tenant is the outermost boundary; **pooled / siloed / hybrid** isolation, selectable per deployment and per tenant |
 | **Provider / MSP plane** | tenant lifecycle, fleet-across-tenants, per-tenant metering + quotas, white-label branding, and audited break-glass (no implicit access to tenant telemetry) |
-| **Sovereignty & crypto** | no phone-home, mTLS/SPIFFE agent identity, envelope encryption, per-tenant **BYOK**, per-tenant export + verifiable erasure, and an optional **FIPS 140-3** build |
+| **Sovereignty & crypto** | no phone-home, mTLS/SPIFFE agent identity, envelope encryption, per-tenant **BYOK**, per-tenant export + verifiable erasure, and an optional build against the **FIPS 140-3-validated Go Cryptographic Module** (CMVP cert **#5247**; probectl itself holds no product-level certificate — see [`docs/hardening.md`](docs/hardening.md)) |
 
 ## How it works
 
@@ -207,7 +210,7 @@ topology, cost/SLO, and single-tenant self-hosting — is **core, and free**.
 Commercial code lives in a **publicly-readable `ee/` tree** (the fence is the
 license + trademark, not source secrecy) and is gated at runtime by an
 **offline-verifiable, signed license** that **never phones home**. **Enterprise**
-adds the FIPS build, BYOK/governance, multi-region HA, and guarded remediation;
+adds the validated-module (FIPS) build, BYOK/governance, multi-region HA, and guarded remediation;
 **Provider/MSP** adds the management plane, hard tenant isolation, metering/billing,
 and white-label. Unlicensed commercial features are simply hidden (no lockware).
 See **[`docs/editions.md`](docs/editions.md)**.

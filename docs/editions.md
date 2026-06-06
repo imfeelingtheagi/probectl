@@ -36,7 +36,9 @@ gating at all** — they are entitlement (support/SLA) tiers on the same core
 binary.
 
 **`fips` is the exception to runtime gating (S-EE1).** The FIPS 140-3 build is
-gated by the **artifact**, not a `lic.Has(fips)` check — there is no runtime
+gated by the **artifact** (the build embedding the FIPS 140-3-validated Go
+Cryptographic Module v1.0.0, CMVP #5247 — see `docs/hardening.md` for the exact
+claim boundary), not a `lic.Has(fips)` check — there is no runtime
 license gate for FIPS anywhere in the binary. The validated distribution
 (`make build-fips`, `GOFIPS140` + the `probectl_fips` tag) is the Enterprise
 deliverable; the `fips` table row documents that entitlement. A running binary

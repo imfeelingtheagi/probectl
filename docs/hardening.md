@@ -23,9 +23,23 @@ module compile in transparently: the FIPS artifact swaps the underlying
 implementations while the `Provider` API and all of its outputs stay byte-for-byte
 identical (proven by the transparent-swap test).
 
-The FIPS artifact is **the Go Cryptographic Module** (the validated module that
-ships with the Go toolchain), selected at build time with `GOFIPS140` and marked
-with the `probectl_fips` build tag.
+The FIPS artifact embeds **the Go Cryptographic Module v1.0.0** — validated
+under FIPS 140-3 as **CMVP certificate #5247** (CAVP algorithm certificate
+A6650; included in Go 1.24+) — selected at build time with `GOFIPS140` and
+marked with the `probectl_fips` build tag.
+
+**Exactly what is and is not certified (read before quoting FIPS to an
+auditor):** the *module* holds the CMVP certificate; **probectl as a product
+holds no CMVP certificate of its own**. The accurate claim is "probectl's FIPS
+artifact builds against and operates the FIPS 140-3-validated Go Cryptographic
+Module v1.0.0 (CMVP #5247), with a power-on self-test asserting the validated
+module is live." Module version, certificate, and security policy:
+the [Go FIPS 140-3 documentation](https://go.dev/doc/security/fips140) and the
+NIST CMVP listing for certificate #5247. **Certification path:** if a
+procurement requires a *product-level* validation (probectl itself listed with
+CMVP), that is a separate vendor engagement with an accredited lab — planned
+only on concrete regulated-buyer demand; until then no probectl-level
+certificate is claimed anywhere.
 
 ```
 make build-fips                 # GOFIPS140=v1.0.0 -tags probectl_fips -> bin/*-fips
