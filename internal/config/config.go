@@ -108,8 +108,14 @@ type Config struct {
 	// lightweight mode (0 = defaults 1h / 256MiB). Oldest-first eviction.
 	TSDBMemoryRetention time.Duration
 	TSDBMemoryMaxBytes  int
-	TSDBMode            string
-	TSDBURL             string
+	// Audit WORM export (U-041): when AuditWORMDir is set, the provider
+	// audit chain is periodically exported as Ed25519-signed segments to
+	// that filesystem object store (mount an object-locked bucket for true
+	// WORM) and chain-verified; gaps alert loudly.
+	AuditWORMDir      string
+	AuditWORMInterval time.Duration
+	TSDBMode          string
+	TSDBURL           string
 
 	// Alerting (S16): how often the engine evaluates enabled rules over the TSDB.
 	AlertEvalInterval time.Duration
@@ -460,6 +466,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		IngestMaxSeriesPerTenant: l.intRange("PROBECTL_INGEST_MAX_SERIES_PER_TENANT", 0, 0, 100_000_000),
 		TSDBMemoryRetention:      l.dur("PROBECTL_TSDB_MEMORY_RETENTION", 0),
 		TSDBMemoryMaxBytes:       l.intRange("PROBECTL_TSDB_MEMORY_MAX_BYTES", 0, 0, 1<<31-1),
+		AuditWORMDir:             l.str("PROBECTL_AUDIT_WORM_DIR", ""),
+		AuditWORMInterval:        l.dur("PROBECTL_AUDIT_WORM_INTERVAL", time.Hour),
 		TSDBMode:                 l.enum("PROBECTL_TSDB_MODE", "memory", "memory", "prometheus"),
 		TSDBURL:                  l.str("PROBECTL_TSDB_URL", ""),
 		PathStoreMode:            l.enum("PROBECTL_PATHSTORE_MODE", "memory", "memory", "clickhouse"),

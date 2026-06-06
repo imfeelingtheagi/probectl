@@ -58,6 +58,8 @@ migrations and exit), `probectl-control version`.
 | `PROBECTL_INGEST_MAX_SERIES_PER_TENANT` | `50000` | U-017: tenant-wide active-series wall (one tenant's explosion never bleeds into others) |
 | `PROBECTL_TSDB_MEMORY_RETENTION` | `1h`     | U-018: lightweight-mode TSDB retention window (arrival-based sweep) |
 | `PROBECTL_TSDB_MEMORY_MAX_BYTES` | `268435456` | U-018: byte wall for the in-memory TSDB; oldest-first eviction, usage + eviction counters exposed |
+| `PROBECTL_AUDIT_WORM_DIR` | (none) | U-041: enable WORM export — the provider audit chain is exported as Ed25519-signed segments into this directory (mount an S3/MinIO **object-lock** bucket for true WORM) and chain-verified each cycle |
+| `PROBECTL_AUDIT_WORM_INTERVAL` | `1h` | export + chain-verify cadence |
 | `PROBECTL_TSDB_MODE`                | `memory`                                                         | time-series writer: `memory` (in-process) \| `prometheus`  |
 | `PROBECTL_TSDB_URL`                 | (none)                                                           | Prometheus/VictoriaMetrics base URL for remote-write (required for `prometheus`) |
 | `PROBECTL_ALERT_EVAL_INTERVAL`      | `30s`                                                            | how often the alerting engine evaluates rules over the TSDB (S16) |

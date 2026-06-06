@@ -38,6 +38,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/incident"
 	"github.com/imfeelingtheagi/probectl/internal/lifecycle"
 	"github.com/imfeelingtheagi/probectl/internal/logging"
+	"github.com/imfeelingtheagi/probectl/internal/objectstore"
 	"github.com/imfeelingtheagi/probectl/internal/opendata"
 	"github.com/imfeelingtheagi/probectl/internal/otel/otlp"
 	"github.com/imfeelingtheagi/probectl/internal/pipeline"
@@ -487,6 +488,20 @@ func run(cmd string) error {
 	}
 	srv.WithTenantLife(lifeEngine)
 	g.Go(func() error { lifeEngine.RunRetention(gctx, 24*time.Hour); return nil })
+	// U-041: WORM export of the provider audit chain — signed segments into
+	// an (object-locked) store, chain-verified every cycle.
+	if cfg.AuditWORMDir != "" {
+		wormStore, werr := objectstore.NewFS(cfg.AuditWORMDir)
+		if werr != nil {
+			return fmt.Errorf("audit worm store: %w", werr)
+		}
+		worm, werr := audit.NewWormExporterPG(db.Pool(), wormStore, log)
+		if werr != nil {
+			return fmt.Errorf("audit worm exporter: %w", werr)
+		}
+		g.Go(func() error { worm.Run(gctx, cfg.AuditWORMInterval); return nil })
+		log.Info("audit WORM export enabled", "dir", cfg.AuditWORMDir, "interval", cfg.AuditWORMInterval.String())
+	}
 	// Tenant lifecycle gate (S-T1): users of suspended/offboarded tenants are
 	// rejected at the API; data and ingestion are untouched.
 	srv.WithTenantStatus(control.NewTenantStatusCache(db.Pool(), 0))

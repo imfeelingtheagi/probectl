@@ -28,6 +28,18 @@ user, dashboard, or service with direct network access to the upstream can
 read ALL tenants' series. Grafana and federation must go through probectl's
 `/prom` endpoints, never the upstream directly.
 
+## 0b. Audit WORM export (U-041)
+
+The audit chains are tamper-evident (hash-chained; RLS grants no
+UPDATE/DELETE), but a database OWNER can still purge rows. Set
+`PROBECTL_AUDIT_WORM_DIR` to a mount backed by an **object-lock bucket**
+(S3 Object Lock / MinIO, compliance mode — the WORM property lives in the
+bucket): the provider audit chain exports hourly as Ed25519-signed segments
+(`worm/audit/provider/segment-*.json` + `.sig` + the public key), and every
+cycle re-verifies signatures, seq continuity, and the cross-segment hash
+chain — a purge or gap logs an unmissable error. Third parties can verify
+segments with nothing but the published key.
+
 ## 1. FIPS 140-3 mode
 
 ### What the FIPS build is
