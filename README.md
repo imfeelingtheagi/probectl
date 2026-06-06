@@ -39,6 +39,72 @@ boundary** on every record, agent, query, metric, event, and object.
 > **source-available, not open source (yet)** (the open-core / reseller boundary is
 > an open decision).
 
+## Why probectl
+
+When something on the network breaks, the symptom and the cause usually live in
+different places. A slow checkout page might be a BGP route flap three networks
+away, a saturated uplink, a DNS timeout, a misbehaving host, or a config change
+that shipped ten minutes ago — and the tools that each see one of those are
+typically five separate products with five separate dashboards. You find out at
+2 a.m., by stitching them together by hand.
+
+probectl collapses that. It pulls every plane — synthetic probes, BGP/routing,
+flow records, device telemetry, and eBPF host/L7 — into **one** tenant-scoped
+control plane, correlates them into a single incident, and lets an AI assistant
+explain the root cause *across* planes instead of leaving you to guess which
+dashboard to open first.
+
+Three choices set it apart:
+
+- **It stays yours.** probectl is self-hosted and **never phones home** — no
+  telemetry beacons, no "call home," nothing. Hosted observability SaaS works by
+  shipping your network data to a vendor's cloud; probectl keeps every byte
+  inside your own infrastructure. For regulated, air-gapped, or
+  sovereignty-conscious operators, that isn't a nice-to-have — it's the
+  requirement.
+- **It's unified and standard.** One **OpenTelemetry-native** model spans all
+  five planes, so a flow record, a probe result, and a BGP event share the same
+  schema and the same query layer — no per-tool silos, and you can export to OTLP
+  or your SIEM without re-instrumenting anything.
+- **It's multi-tenant to the core.** The same binary runs as a single sovereign
+  tenant for one org, or as a hard-isolated, white-labeled, individually-metered
+  platform an MSP self-hosts and resells. **Tenant is the outermost security
+  boundary** on every record — there is no separate enterprise fork to drift out
+  of sync.
+
+## What it answers
+
+probectl is organized around the questions operators actually ask at 2 a.m.:
+
+- *"The Berlin office says the app is slow — is it the network, the path in
+  between, or the server?"* — synthetic probes, ECMP/MPLS-aware path discovery,
+  and flow show you **where** the latency is, not just that it exists.
+- *"Did the 14:03 change cause this?"* — change-aware topology correlates
+  config/deploy events with the symptoms that followed them.
+- *"Why did this prefix go dark — is it us, or the internet?"* — BGP/routing
+  intelligence from RouteViews/RIPE RIS, RPKI validity, and a collective outage
+  view separate a you-problem from an everyone-problem.
+- *"What breaks if I drain this node?"* — the topology **what-if** simulates the
+  blast radius before you touch production.
+- *"Who's saturating this link, and what's it costing?"* — flow analytics plus
+  per-tenant FinOps egress attribution.
+
+Or just ask the built-in assistant *"why is checkout slow for tenant X?"* — it
+runs the cross-plane correlation and answers with **cited evidence**, scoped to
+exactly what the caller is allowed to see.
+
+## Who it's for
+
+- **Regulated & sovereignty-conscious orgs** (finance, healthcare, public sector,
+  defense, critical infrastructure) that need deep network observability but
+  cannot send telemetry to a third-party cloud. You self-host; the deployment
+  *is* your tenant.
+- **MSPs & internal platform teams** serving many customers or business units —
+  self-host once and serve hard-isolated, white-labeled, individually-metered
+  tenants from one control plane.
+- **Network & platform engineers** tired of hand-correlating five dashboards who
+  want a single OTel-native source of truth they actually own.
+
 ## Capabilities
 
 The five observability planes:
@@ -64,7 +130,22 @@ Intelligence, security, and platform layers built across the planes:
 | **Provider / MSP plane** | tenant lifecycle, fleet-across-tenants, per-tenant metering + quotas, white-label branding, and audited break-glass (no implicit access to tenant telemetry) |
 | **Sovereignty & crypto** | no phone-home, mTLS/SPIFFE agent identity, envelope encryption, per-tenant **BYOK**, per-tenant export + verifiable erasure, and an optional **FIPS 140-3** build |
 
-## Architecture
+## How it works
+
+Lightweight **agents** — a single Go binary, each bound to one tenant — run the
+probes and watch the wire, then push results onto a **bus**. The stateless
+**control plane** consumes that stream, persists each signal to the store that
+fits it (Postgres for state, ClickHouse for high-cardinality events,
+Prometheus/VictoriaMetrics for metrics), and continuously builds incidents and a
+versioned topology graph. Every record, query, metric, and message is scoped by
+`tenant_id` **first**, then by your RBAC — so the API, web UI, AI assistant, and
+MCP server all read through the same tenant-then-RBAC boundary, and a query
+cannot cross a tenant line even by mistake.
+
+External intelligence (RouteViews, RIPE RIS/Atlas, RPKI, threat-intel, cloud
+pricing) is fetched **once**, cached, and enriched per tenant; if a feed is
+rate-limited or down, that view degrades gracefully instead of taking the
+platform with it.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
@@ -105,12 +186,19 @@ flowchart TB
     class External ext
 ```
 
-Agents (each bound to one tenant) run probes and push tenant-tagged results onto
-the bus; control-plane consumers persist to the stores and build incidents +
-topology, all scoped by `tenant_id`; the API, UI, AI, and MCP query the unified
-stores **within the caller's tenant first, then RBAC**. The provider plane spans
-tenants for operations only — never for silent data access. Deep-dive diagrams
-live in **[`docs/architecture.md`](docs/architecture.md)**.
+The provider/management plane spans tenants for **operations only** — never for
+silent data access; any access is explicit, time-bounded, tenant-consented, and
+separately audited. Full data-flow and per-subsystem diagrams live in
+**[`docs/architecture.md`](docs/architecture.md)**.
+
+## What probectl is not
+
+It's a **signal layer, not an enforcement layer**. Threat detections are
+confidence-scored and exported to your SIEM — probectl does **not** inline-block
+traffic or act as an IPS. The AI **proposes** remediations; a human approves and
+an operator acts — there is **no autonomous execution**. And it complements,
+rather than replaces, a full APM/distributed-tracing stack or a SIEM/log-analytics
+platform. probectl is honest about its edges by design.
 
 ## Editions
 
@@ -136,7 +224,9 @@ docker compose -f deploy/compose/probectl.yml cp control:/certs/ca.crt ./ca.crt
 curl --cacert ./ca.crt https://localhost:8443/readyz
 ```
 
-The API is HTTPS-only (no plaintext port). Full guide, real certificates, SSO, and
+Once `/readyz` is green, open the UI at `https://localhost:8443`, register an
+agent, and run your first synthetic test — or ask the assistant a question. The
+API is HTTPS-only (no plaintext port). Full guide, real certificates, SSO, and
 the Kubernetes/Helm path: **[`docs/install.md`](docs/install.md)**; day-2
 operation (audit, roles, SSO): **[`docs/admin.md`](docs/admin.md)**.
 
@@ -173,6 +263,9 @@ test/           # integration harness (separate Go module)
 ```
 
 ## Documentation
+
+New here? Start with **Why probectl** and **How it works** above, then the
+install guide. Going deeper:
 
 | Topic | Doc |
 |---|---|
