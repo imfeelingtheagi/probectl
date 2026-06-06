@@ -126,6 +126,28 @@ jobs:
           done
           (cd dist && sha256sum * > checksums.txt)
           ls -la dist
+      # U-006: keyless (Sigstore/Fulcio) signatures over every released binary
+      # and the checksum manifest. The OIDC identity baked into each .pem is
+      # THIS repository's release workflow — verifiers pin it (see
+      # docs/ops/verify-artifacts.md). id-token: write is already granted.
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Sign artifacts (cosign keyless)
+        run: |
+          set -euo pipefail
+          cd dist
+          for f in *; do
+            case "$f" in *.sig|*.pem) continue;; esac
+            cosign sign-blob --yes               --output-signature "${f}.sig"               --output-certificate "${f}.pem"               "$f"
+          done
+      - name: Verify own signatures (the gate proves the release is verifiable)
+        run: |
+          set -euo pipefail
+          cd dist
+          for f in *; do
+            case "$f" in *.sig|*.pem) continue;; esac
+            cosign verify-blob               --certificate "${f}.pem"               --signature "${f}.sig"               --certificate-oidc-issuer "https://token.actions.githubusercontent.com"               --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/release\.yml@refs/tags/"               "$f"
+          done
+          echo "all artifacts verify"
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
