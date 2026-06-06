@@ -45,6 +45,16 @@ runners / macOS laptops can load no eBPF at all. The `-tags ebpf` files are a
 separate, off-by-default compilation unit, so the default `make build` and CI
 need **no eBPF toolchain and no extra dependency**.
 
+## Kernel-matrix CI (U-021)
+
+The `ebpf-kernel-matrix` ci job LOADS and ATTACHES every BPF program on real
+LTS kernels (currently **5.15** and **6.6**, digest-pinned
+`ghcr.io/cilium/ci-kernels` images) under QEMU via `vimto` (`go test -exec`),
+running the live smoke: l4flow tracepoint attach, sslsniff uprobe attach
+(consented, U-003), one full agent flush cycle, with the U-014 digest
+verification on the load path. Bump the matrix when adopting a new LTS; the
+table above documents the runtime capability matrix.
+
 ## Hardened runtime profile (U-052)
 
 Run the agent with the **minimal capability set** and the shipped seccomp

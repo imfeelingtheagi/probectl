@@ -196,6 +196,53 @@ jobs:
       - name: terraform fmt + validate
         run: make terraform-gate
 
+  ebpf-kernel-matrix:
+    name: ebpf-kernel-matrix (${{ matrix.kernel }})
+    # U-021: the BPF programs are LOADED and ATTACHED on real LTS kernels —
+    # not just statically checked. vimto boots each kernel under QEMU (KVM is
+    # available on GitHub runners) with the runner rootfs, and `go test -exec`
+    # runs the live smoke (load, attach tracepoint + uprobes, one agent flush
+    # cycle; the U-014 digest verification runs inherently). Kernel images are
+    # digest-pinned; the runner-side build is the same bpf2go path operators
+    # use (make ebpf-agent). The observe-only static gate runs in test-go.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kernel: "5.15"
+            image: ghcr.io/cilium/ci-kernels:5.15@sha256:11bbf6ada68fdd8850c020b955b84bc16ed6227cdbadbb437da83db6eb02a9d0
+          - kernel: "6.6"
+            image: ghcr.io/cilium/ci-kernels:6.6@sha256:0b7036c12c2a357672a81e7ff7bf02cc67fe06acb2c4b0206e2a15949d2193bd
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Toolchain (clang + bpftool + qemu)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang llvm libbpf-dev linux-tools-common linux-tools-generic qemu-system-x86
+      - name: Generate + compile the BPF objects (the operator build path)
+        run: |
+          set -euo pipefail
+          go get github.com/cilium/ebpf
+          bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/bpf/vmlinux.h
+          (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf)
+          (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf)
+          (cd internal/ebpf && go run ./gendigests .)   # U-014 manifest
+      - name: Cache kernel image
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4 (same pin trivy-action uses)
+        with:
+          path: ~/.cache/vimto
+          key: vimto-kernel-${{ matrix.kernel }}
+      - name: Load + attach on the ${{ matrix.kernel }} kernel (QEMU)
+        run: |
+          set -euo pipefail
+          go install lmb.io/vimto@v0.4.0
+          sudo chmod 0666 /dev/kvm || true
+          go test -tags ebpf -exec "$(go env GOPATH)/bin/vimto -kernel ${{ matrix.image }} --"             -run 'TestLive' -count=1 -v ./internal/ebpf/
+
   cross-tenant-isolation:
     name: cross-tenant-isolation
     # Permanent CI gate — CLAUDE.md §7 guardrail 1. From S2 this proves real
