@@ -106,18 +106,33 @@ func (m mockModel) Synthesize(context.Context, SynthesisInput) (Synthesis, error
 	return m.syn, m.err
 }
 
+// citingModel builds its synthesis FROM the input (so it can cite the real,
+// per-session-random evidence ids — U-037 test double).
+type citingModel struct {
+	build func(SynthesisInput) Synthesis
+}
+
+func (citingModel) Name() string { return "mock" }
+func (m citingModel) Synthesize(_ context.Context, in SynthesisInput) (Synthesis, error) {
+	return m.build(in), nil
+}
+
 // A hallucinated citation (to evidence that was never gathered) must be dropped,
 // and a finding left with no resolving citation must be removed entirely — the
 // adapter-agnostic citation-integrity guarantee.
 func TestAnalyzeDropsHallucinatedCitations(t *testing.T) {
 	fs := fixtureSource{entities: []Row{{"id": "inc-1", "kind": "incident", "plane": "network", "severity": "warning", "title": "real signal"}}}
-	model := mockModel{syn: Synthesis{
-		RootCause:  "something",
-		Confidence: ConfidenceHigh,
-		Findings: []Finding{
-			{Statement: "grounded + hallucinated", Citations: []Citation{{EvidenceID: "E1"}, {EvidenceID: "E999"}}},
-			{Statement: "fully hallucinated", Citations: []Citation{{EvidenceID: "E999"}}},
-		},
+	// Cite the REAL first evidence id (per-session random, U-037) plus a
+	// hallucinated one that can never exist.
+	model := citingModel{build: func(in SynthesisInput) Synthesis {
+		return Synthesis{
+			RootCause:  "something",
+			Confidence: ConfidenceHigh,
+			Findings: []Finding{
+				{Statement: "grounded + hallucinated", Citations: []Citation{{EvidenceID: in.Evidence[0].ID}, {EvidenceID: "E999"}}},
+				{Statement: "fully hallucinated", Citations: []Citation{{EvidenceID: "E999"}}},
+			},
+		}
 	}}
 	a := NewAnalyzer(engineWith(fs), WithModel(model))
 	ans, err := a.Analyze(context.Background(), principal("t", PermEntitiesRead), Question{Text: "what broke?"})
@@ -127,7 +142,7 @@ func TestAnalyzeDropsHallucinatedCitations(t *testing.T) {
 	if len(ans.Findings) != 1 {
 		t.Fatalf("ungrounded finding should be dropped; got %d findings: %+v", len(ans.Findings), ans.Findings)
 	}
-	if len(ans.Findings[0].Citations) != 1 || ans.Findings[0].Citations[0].EvidenceID != "E1" {
+	if len(ans.Findings[0].Citations) != 1 || ans.Findings[0].Citations[0].EvidenceID != ans.Evidence[0].ID {
 		t.Errorf("dangling citation should be dropped, kept=%+v", ans.Findings[0].Citations)
 	}
 	if !citationsResolve(ans) {

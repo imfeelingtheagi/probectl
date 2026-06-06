@@ -2,8 +2,10 @@ package ai
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"sync/atomic"
 	"time"
 
@@ -93,6 +95,9 @@ func (a *Analyzer) Analyze(ctx context.Context, p *auth.Principal, q Question) (
 	// 2. Gather evidence via the engine. Domains the caller cannot read
 	// (ErrForbidden) or that aren't configured (ErrNoSource) are skipped — the
 	// answer is grounded only in what the caller is permitted to see.
+	// Evidence IDs carry a per-session random nonce (U-037): non-sequential,
+	// unguessable — injected telemetry text cannot fabricate a citable ID.
+	idPrefix := sessionIDPrefix()
 	var evidence []Evidence
 	n := 0
 	for _, query := range queries {
@@ -106,7 +111,7 @@ func (a *Analyzer) Analyze(ctx context.Context, p *auth.Principal, q Question) (
 			}
 			return Answer{}, err
 		}
-		evidence = append(evidence, collectEvidence(query.Domain, res.Rows, &n)...)
+		evidence = append(evidence, collectEvidence(query.Domain, res.Rows, idPrefix, &n)...)
 	}
 	if len(evidence) > a.maxEvidence {
 		evidence = evidence[:a.maxEvidence]
@@ -186,4 +191,15 @@ var answerCounter atomic.Uint64
 
 func defaultIDGen() string {
 	return fmt.Sprintf("ans_%d_%d", time.Now().UnixNano(), answerCounter.Add(1))
+}
+
+// sessionIDPrefix returns a short random nonce for one Analyze call's
+// evidence IDs (U-037). On the vanishingly unlikely RNG failure it falls
+// back to a time-derived value — still non-guessable from telemetry text
+// written before the session existed.
+func sessionIDPrefix() string {
+	if b, err := crypto.Random(4); err == nil {
+		return hex.EncodeToString(b)
+	}
+	return fmt.Sprintf("%x", time.Now().UnixNano())
 }

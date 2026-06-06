@@ -3,8 +3,10 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 )
 
@@ -36,8 +38,13 @@ func TestHTTPModelOllamaAirGapped(t *testing.T) {
 // End-to-end through the Analyzer with the local model: citation integrity is
 // still enforced on the model's output (a hallucinated id is dropped).
 func TestAnalyzeWithLocalModelEndToEnd(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		answer := `{"root_cause":"x","confidence":"medium","findings":[{"statement":"s","citations":["E1","E42"]}]}`
+	// The fake model cites the FIRST REAL evidence id it sees in the prompt
+	// (ids are per-session random now, U-037) plus a hallucinated one.
+	idRe := regexp.MustCompile(`E[0-9a-f]+-1\b`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		real := idRe.FindString(string(body))
+		answer := `{"root_cause":"x","confidence":"medium","findings":[{"statement":"s","citations":["` + real + `","E42"]}]}`
 		_ = json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"content": answer}})
 	}))
 	defer srv.Close()

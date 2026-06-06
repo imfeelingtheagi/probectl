@@ -25,13 +25,15 @@ type Evidence struct {
 
 // collectEvidence turns query rows from one domain into citable Evidence,
 // deriving the well-known display/correlation fields from each row when present.
-// nextID is the running evidence counter so IDs are unique across domains.
-func collectEvidence(domain Domain, rows []Row, nextID *int) []Evidence {
+// nextID is the running evidence counter so IDs are unique across domains;
+// idPrefix is the per-session random nonce (U-037) — IDs are NON-SEQUENTIAL
+// across sessions, so telemetry-embedded text cannot guess a citable ID.
+func collectEvidence(domain Domain, rows []Row, idPrefix string, nextID *int) []Evidence {
 	out := make([]Evidence, 0, len(rows))
 	for _, row := range rows {
 		*nextID++
 		e := Evidence{
-			ID:       fmt.Sprintf("E%d", *nextID),
+			ID:       fmt.Sprintf("E%s-%d", idPrefix, *nextID),
 			Domain:   domain,
 			Plane:    strField(row, "plane"),
 			Severity: strField(row, "severity"),
