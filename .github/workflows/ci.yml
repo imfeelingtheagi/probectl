@@ -266,6 +266,12 @@ jobs:
           --health-retries 10
       clickhouse:
         image: clickhouse/clickhouse-server:24.8@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b # digest-pinned (U-061)
+        env:
+          # The entrypoint recreates the `default` user from these (so the
+          # outcome is independent of the base image's stock user config), and
+          # access_management is required for the EnsureRowPolicies DDL (U-026).
+          CLICKHOUSE_PASSWORD: probectl
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
         ports:
           - 8123:8123
         options: >-
@@ -275,8 +281,8 @@ jobs:
           --health-retries 12
     env:
       PROBECTL_DATABASE_URL: postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable
-      PROBECTL_FLOWSTORE_URL: http://localhost:8123
-      PROBECTL_PATHSTORE_URL: http://localhost:8123
+      PROBECTL_FLOWSTORE_URL: http://default:probectl@localhost:8123
+      PROBECTL_PATHSTORE_URL: http://default:probectl@localhost:8123
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -378,7 +384,13 @@ jobs:
         # strands deployed agents and replayable bus history. This gate blocks
         # merge; the exception process is in CONTRIBUTING.md (version a new
         # package, never mutate a published one).
-        run: buf breaking --against '.git#branch=main'
+        #
+        # On a PR checkout `main` is not a local ref, so fetch it into a
+        # dedicated baseline branch (never the checked-out one, so this also
+        # works on push-to-main) and compare the working tree against it.
+        run: |
+          git fetch --no-tags --force origin main:_buf_breaking_base
+          buf breaking --against '.git#branch=_buf_breaking_base'
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
