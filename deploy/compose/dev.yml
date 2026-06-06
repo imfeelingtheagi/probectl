@@ -14,7 +14,7 @@ name: probectl-dev
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16@sha256:4b7183ac05f8ef417db21fd72d71047a4238340c261d3cc3ddb6d579ab5071ae # digest-pinned (U-061)
     environment:
       POSTGRES_USER: probectl
       POSTGRES_PASSWORD: probectl
@@ -36,7 +36,7 @@ services:
   # ALLOW_PLAINTEXT=true) — production kafka requires TLS
   # (PROBECTL_BUS_TLS_ENABLED=true [+ CA/SASL]); plaintext is refused (U-010).
   kafka:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:3.9.0@sha256:fbc7d7c428e3755cf36518d4976596002477e4c052d1f80b5b9eafd06d0fff2f # digest-pinned (U-061)
     ports:
       - "9092:9092"
     environment:
@@ -71,7 +71,7 @@ services:
     networks: [probectl]
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8
+    image: clickhouse/clickhouse-server:24.8@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b # digest-pinned (U-061)
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -94,7 +94,7 @@ services:
     networks: [probectl]
 
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.1.0@sha256:6559acbd5d770b15bb3c954629ce190ac3cbbdb2b7f1c30f0385c4e05104e218 # digest-pinned (U-061)
     ports:
       - "9090:9090"
     command:

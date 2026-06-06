@@ -10,3 +10,17 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  # U-061: keep the digest-pinned images fresh (dependabot updates the
+  # @sha256 and the tag together).
+  - package-ecosystem: docker
+    directory: /deploy/docker
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /browser-worker
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /deploy/compose
+    schedule:
+      interval: weekly

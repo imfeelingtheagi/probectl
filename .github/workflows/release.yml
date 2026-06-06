@@ -126,6 +126,19 @@ jobs:
           done
           (cd dist && sha256sum * > checksums.txt)
           ls -la dist
+      # U-068: publish the SBOM as a real release artifact (SPDX JSON via
+      # syft over the source tree + go.mod/lockfiles). It is written into
+      # dist/ BEFORE the signing loop below, so it ships signed and
+      # self-verified like every other artifact. The container images carry
+      # their own buildx-attested SBOMs (see the images job).
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@8e94d75ddd33f69f691467e42275782e4bfefe84 # v0.20.9
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/probectl_${{ github.ref_name }}_sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: false # released via the dist/* glob, signed
       # U-006: keyless (Sigstore/Fulcio) signatures over every released binary
       # and the checksum manifest. The OIDC identity baked into each .pem is
       # THIS repository's release workflow — verifiers pin it (see
