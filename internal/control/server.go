@@ -14,6 +14,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/ai/author"
 	"github.com/imfeelingtheagi/probectl/internal/auth"
 	"github.com/imfeelingtheagi/probectl/internal/carbon"
+	"github.com/imfeelingtheagi/probectl/internal/cluster"
 	"github.com/imfeelingtheagi/probectl/internal/cmdb"
 	"github.com/imfeelingtheagi/probectl/internal/compliance"
 	"github.com/imfeelingtheagi/probectl/internal/config"
@@ -176,6 +177,11 @@ type Server struct {
 	// guards. Set via WithFairness; nil = no enforcement (small/dev
 	// deployments), self-view reports enforcing=false.
 	fairnessGate *fairness.Gate
+
+	// Cluster manager (S-EE2, multi-region HA): the split-brain write fence +
+	// region/health status. Set via WithCluster; nil = single-region (writes
+	// always allowed, no cluster status).
+	cluster *cluster.Manager
 
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).
@@ -368,6 +374,7 @@ func (s *Server) routes() http.Handler {
 		accessLog,
 		recoverer,
 		s.authenticate,
+		s.writeFence, // S-EE2: fence mutating requests during a failover / split-brain
 	)
 }
 

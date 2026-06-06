@@ -1112,6 +1112,29 @@ console into `tenant_fairness`. Full model: `docs/fairness.md`.
 | `PROBECTL_FAIRNESS_QUERY_CONCURRENCY` | `0` | per-tenant in-flight query cap (429 over it) |
 | `PROBECTL_FAIRNESS_QUERIES_PER_MIN` | `0` | per-tenant query budget (429 over it) |
 
+### Multi-region / active-active HA (S-EE2, core)
+
+Inert unless `PROBECTL_REGION` is set (single-region deployments need none of
+these). The control plane stays stateless and active in every region; the
+split-brain fence pauses API writes during a failover while reads + telemetry
+keep flowing. Full model + the failover runbook: `docs/multi-region.md`,
+`docs/runbooks/region-failover.md`.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `PROBECTL_REGION` | (empty) | this replica's region; empty = single-region (fence inert) |
+| `PROBECTL_REGIONS` | (empty) | comma list of all regions in the deployment |
+| `PROBECTL_DATABASE_URL` | … | the WRITER endpoint (DNS/proxy that resolves to the current primary) |
+| `PROBECTL_DATABASE_READ_URL` | (empty) | optional local read-replica endpoint; empty = reads use the writer |
+| `PROBECTL_REPLICATION_MODE` | `async` | `sync` (RPO 0) or `async` (RPO ≈ lag) — descriptive; configure Postgres to match |
+| `PROBECTL_RESIDENCY` | (empty) | default data-residency region (governance) |
+| `PROBECTL_RPO_SECONDS` | `0` | provisional RPO target (human sign-off) |
+| `PROBECTL_RTO_SECONDS` | `60` | provisional RTO target (human sign-off) |
+
+The writer must be reachable for API writes; `cluster_state` (migration 0032)
+holds the promotion epoch the fence reads. Promotion is `cluster_promote()` in
+the failover runbook.
+
 ### NDR-lite detection (S42)
 
 | Variable | Default | Purpose |

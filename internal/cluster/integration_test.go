@@ -1,0 +1,80 @@
+//go:build integration
+
+package cluster
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/imfeelingtheagi/probectl/internal/store/migrate"
+	"github.com/imfeelingtheagi/probectl/migrations"
+)
+
+// The S-EE2 integration leg (live Postgres): the PGProber reads the REAL
+// pg_is_in_recovery() and the replicated cluster_state row, and cluster_promote
+// bumps the epoch — so the Manager fences a (simulated) stale epoch exactly as
+// the unit suite does, but against the actual schema + function.
+func itPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("PROBECTL_TEST_POSTGRES")
+	if dsn == "" {
+		dsn = "postgres://probectl:probectl@localhost:5432/probectl"
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Skipf("postgres unavailable: %v", err)
+	}
+	if err := pool.Ping(context.Background()); err != nil {
+		t.Skipf("postgres unavailable: %v", err)
+	}
+	if _, err := migrate.New(migrations.FS, nil).Apply(context.Background(), pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return pool
+}
+
+func TestPGProberAndPromotePG(t *testing.T) {
+	pool := itPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	// The primary is not in recovery; the prober reads its epoch + region.
+	p := NewPGProber(pool)
+	before := p.Probe(ctx)
+	if before.Err != nil {
+		t.Fatalf("probe: %v", before.Err)
+	}
+	if before.InRecovery {
+		t.Skip("test database is a replica (in recovery) — promotion test needs a primary")
+	}
+
+	// A promotion bumps the epoch monotonically and records the region.
+	var newEpoch int64
+	if err := pool.QueryRow(ctx, `SELECT cluster_promote($1, $2)`, "us-east", "it-test").Scan(&newEpoch); err != nil {
+		t.Fatalf("cluster_promote: %v", err)
+	}
+	if newEpoch != before.Epoch+1 {
+		t.Fatalf("promote must bump the epoch by 1: %d -> %d", before.Epoch, newEpoch)
+	}
+	after := p.Probe(ctx)
+	if after.Epoch != newEpoch || after.WriterRegion != "us-east" {
+		t.Fatalf("prober must read the promoted epoch/region: %+v", after)
+	}
+
+	// The Manager treats the real primary as usable; a simulated stale probe
+	// (a lower epoch than the high-water mark just observed) is fenced.
+	m := NewManager(Topology{Region: "us-east"}, p, nil)
+	m.Refresh(ctx)
+	if ok, reason := m.WriterUsable(); !ok {
+		t.Fatalf("the real primary must be usable: %s", reason)
+	}
+	stale := &fakeProbe{p: Probe{InRecovery: false, Epoch: newEpoch - 1, WriterRegion: "old"}}
+	m2 := NewManager(Topology{Region: "us-east"}, stale, p) // reader=real primary sets the high-water
+	m2.Refresh(ctx)
+	if ok, _ := m2.WriterUsable(); ok {
+		t.Fatal("a writer on a lower epoch than the replica's must be fenced (split-brain)")
+	}
+}

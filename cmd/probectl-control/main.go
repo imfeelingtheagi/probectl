@@ -29,6 +29,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/alert"
 	"github.com/imfeelingtheagi/probectl/internal/audit"
 	"github.com/imfeelingtheagi/probectl/internal/bus"
+	"github.com/imfeelingtheagi/probectl/internal/cluster"
 	"github.com/imfeelingtheagi/probectl/internal/config"
 	"github.com/imfeelingtheagi/probectl/internal/control"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
@@ -137,6 +138,12 @@ func run(cmd string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
+	// Multi-region (S-EE2): an optional local read replica for read locality.
+	// Empty PROBECTL_DATABASE_READ_URL = reads stay on the writer.
+	if err := db.WithReadReplica(context.Background(), cfg.DatabaseReadURL,
+		cfg.DatabaseMaxConns, cfg.DatabaseMinConns, cfg.DatabaseConnTimeout); err != nil {
+		return err
+	}
 
 	switch cmd {
 	case "migrate":
@@ -421,6 +428,29 @@ func run(cmd string) error {
 	srv.WithFairness(fairGate)
 	// Fairness accounting as per-tenant TSDB series (Grafana-federable).
 	g.Go(func() error { fairness.RunMetrics(gctx, tsdbWriter, fairGate, 30*time.Second, log); return nil })
+
+	// Multi-region / active-active HA (S-EE2). Inert unless PROBECTL_REGION is
+	// set: a single-region deployment keeps writes always-allowed and omits
+	// cluster status. With a region configured, the split-brain fence probes
+	// the writer (and the read replica, if any) and pauses API writes during a
+	// failover while reads + telemetry keep flowing.
+	if cfg.Region != "" {
+		topo := cluster.Topology{
+			Region: cfg.Region, Regions: cfg.Regions, Residency: cfg.Residency,
+			ReplicationMode: cluster.ReplicationMode(cfg.ReplicationMode),
+			RPOSeconds:      cfg.RPOSeconds, RTOSeconds: cfg.RTOSeconds,
+		}
+		var readProbe cluster.Prober
+		if db.ReadPool() != db.Pool() {
+			readProbe = cluster.NewPGProber(db.ReadPool())
+		}
+		clusterMgr := cluster.NewManager(topo, cluster.NewPGProber(db.Pool()), readProbe)
+		srv.WithCluster(clusterMgr)
+		g.Go(func() error { clusterMgr.Run(gctx, 5*time.Second); return nil })
+		g.Go(func() error { cluster.RunMetrics(gctx, tsdbWriter, clusterMgr, 30*time.Second, log); return nil })
+		log.Info("multi-region HA active (S-EE2)", "region", cfg.Region,
+			"regions", cfg.Regions, "replication", cfg.ReplicationMode, "read_replica", readProbe != nil)
+	}
 	// Per-tenant lifecycle (S-T5, core): export / retention / verifiable
 	// erasure with attestation. The object store is agent-side (browser
 	// artifacts), so the control plane's engine runs without one — recorded

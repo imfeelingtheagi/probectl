@@ -118,6 +118,7 @@ awk -v mod="${MODULE}" '
     floor["ee/tenantkeys"]           = 65
     floor["internal/tenantcrypto"]   = 80
     floor["internal/fairness"]       = 70
+    floor["internal/cluster"]        = 70
     # The core branding seam (S-T4): validation + seam + normalization are
     # fully unit-tested.
     floor["internal/branding"]       = 80

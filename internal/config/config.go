@@ -27,9 +27,20 @@ type Config struct {
 
 	// Database.
 	DatabaseURL         string
+	DatabaseReadURL     string // optional read-replica endpoint (S-EE2); empty = reads use the writer
 	DatabaseMaxConns    int32
 	DatabaseMinConns    int32
 	DatabaseConnTimeout time.Duration
+
+	// Multi-region / HA (S-EE2). All optional; a single-region deployment
+	// leaves Region empty and the cluster layer is inert (writes always
+	// allowed). Region is THIS replica's region; Regions is the full set.
+	Region          string
+	Regions         []string
+	Residency       string  // default data-residency region (governance)
+	ReplicationMode string  // sync | async (descriptive; sets achievable RPO)
+	RPOSeconds      float64 // provisional target (human sign-off)
+	RTOSeconds      float64 // provisional target (human sign-off)
 
 	// Migrations.
 	MigrateOnBoot bool
@@ -359,8 +370,15 @@ func Load(getenv func(string) string) (*Config, error) {
 		IdleTimeout:         l.dur("PROBECTL_HTTP_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:     l.dur("PROBECTL_SHUTDOWN_TIMEOUT", 15*time.Second),
 		DatabaseURL:         l.str("PROBECTL_DATABASE_URL", "postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable"),
+		DatabaseReadURL:     l.str("PROBECTL_DATABASE_READ_URL", ""),
 		DatabaseMaxConns:    int32(l.intRange("PROBECTL_DATABASE_MAX_CONNS", 10, 1, 1000)),
 		DatabaseMinConns:    int32(l.intRange("PROBECTL_DATABASE_MIN_CONNS", 0, 0, 1000)),
+		Region:              l.str("PROBECTL_REGION", ""),
+		Regions:             l.list("PROBECTL_REGIONS"),
+		Residency:           l.str("PROBECTL_RESIDENCY", ""),
+		ReplicationMode:     l.enum("PROBECTL_REPLICATION_MODE", "async", "async", "sync"),
+		RPOSeconds:          l.float("PROBECTL_RPO_SECONDS", 0),
+		RTOSeconds:          l.float("PROBECTL_RTO_SECONDS", 60),
 		DatabaseConnTimeout: l.dur("PROBECTL_DATABASE_CONNECT_TIMEOUT", 5*time.Second),
 		MigrateOnBoot:       l.boolean("PROBECTL_MIGRATE_ON_BOOT", false),
 		LogLevel:            l.enum("PROBECTL_LOG_LEVEL", "info", "debug", "info", "warn", "error"),
