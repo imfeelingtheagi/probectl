@@ -37,15 +37,25 @@ also refuses to pass through as plaintext.
 
 ## Key hierarchy
 
-```
-managed mode:  deployment master KEK (PROBECTL_ENVELOPE_KEY)
-                 └─ wraps each tenant's KEK (random 32B, stored wrapped in tenant_keys)
-                      └─ encrypts that tenant's values (AES-GCM via internal/crypto)
+```mermaid
+flowchart TD
+    subgraph managed["managed mode"]
+        direction TB
+        M1["deployment master KEK<br/>(PROBECTL_ENVELOPE_KEY)"]
+        M2["each tenant's KEK<br/>(random 32B, stored wrapped in tenant_keys)"]
+        M3["that tenant's values<br/>(AES-GCM via internal/crypto)"]
+        M1 -->|wraps| M2 -->|encrypts| M3
+    end
 
-byok mode:     customer's secret manager (Vault / CyberArk / cloud KMS, via S41 refs)
-                 └─ holds the tenant KEK (base64, exactly 32 bytes); probectl stores
-                    ONLY the reference (e.g. vault:kv/tenants/acme#kek) and resolves
-                    it at use time — the material is never persisted by probectl
+    subgraph byok["byok mode"]
+        direction TB
+        B1["customer's secret manager<br/>(Vault / CyberArk / cloud KMS, via S41 refs)"]
+        B2["tenant KEK<br/>(base64, exactly 32 bytes)"]
+        B3["that tenant's values"]
+        B1 -->|holds| B2 -->|encrypts| B3
+    end
+
+    REF["probectl stores ONLY the reference<br/>(e.g. vault:kv/tenants/acme#kek) and resolves it<br/>at use time — the material is never persisted"] -.-> B2
 ```
 
 A tenant's first seal **auto-provisions** a managed v1 key. The AAD binds

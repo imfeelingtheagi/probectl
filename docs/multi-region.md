@@ -21,15 +21,27 @@ failover **runbooks + support** are the Enterprise entitlement (`ha_support`).
 
 ## Topology
 
-```
-            ┌──────────── Region A (writer) ────────────┐   ┌──────── Region B (standby) ────────┐
-   agents → │ control/ingest replicas (active)          │   │ control/ingest replicas (active)   │ ← agents
-   (geo-DNS)│   writer pool  → Postgres PRIMARY ─────────┼─▶─┼─ streaming replication → REPLICA   │
-            │   read pool    → local replica (optional)  │   │   read pool → local REPLICA        │
-            └────────────────────────────────────────────┘   └────────────────────────────────────┘
-                         ▲                                              │
-                         └────────── writer endpoint (DNS / proxy) ─────┘
-                                     re-pointed on failover
+```mermaid
+flowchart LR
+    agentsA["agents<br/>(geo-DNS)"] --> CA
+    agentsB["agents"] --> CB
+
+    subgraph RA["Region A — writer (active)"]
+        CA["control / ingest replicas"]
+        PGA[("Postgres PRIMARY")]
+        CA -->|writer pool| PGA
+        CA -.->|read pool| RLA[("local replica (optional)")]
+    end
+
+    subgraph RB["Region B — standby (active ingest)"]
+        CB["control / ingest replicas"]
+        RLB[("Postgres REPLICA")]
+        CB -->|read pool| RLB
+    end
+
+    CB -->|"writes → writer endpoint (DNS / proxy)"| PGA
+    PGA ==>|streaming replication| RLB
+    PGA -. "on failover: endpoint re-points; B's REPLICA is promoted to PRIMARY" .-> RLB
 ```
 
 - **Regional ingest:** agents connect to the nearest region (geo-DNS / their

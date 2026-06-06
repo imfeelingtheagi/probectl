@@ -79,22 +79,22 @@ The feature follows the editions seam pattern: a **core** model + interface, an
 | `propose_remediation` MCP tool (proposal-only) | `internal/ai/mcp` | core seam, backed by the ee service |
 | `/v1/remediation/*` routes + Admin card | `internal/control`, `web/` | core seam (404 hidden when unlicensed) |
 
-```
- RCA (S24) ─┐
-            ├─▶ propose  (AI via MCP tool, or a human)  ──▶  state = proposed   ──┐
- what-if ───┘     │ dry-run = read-only S43 topology simulation                   │
- (S43)            │ (EXECUTES NOTHING; sizes blast radius)                         │
-                  ▼                                                                 ▼
-            remediation_proposals (tenant-RLS)                         human review queue (Admin)
-                  ▲                                                                 │
-                  │  approve / reject  ── requires remediation.approve ─────────────┘
-                  │       · approvals master-switch must be ON (else 409)
-                  │       · blast radius ≤ limit, and known (else 409, audited)
-                  ▼
-            audit stream (propose / approve / reject / approve_blocked)
-                  │
-                  └─▶  probectl STOPS HERE.  An operator carries the change out
-                       in their own tooling.  probectl never touches the network.
+```mermaid
+flowchart TD
+    RCA["RCA (S24)"] --> PROP
+    WHATIF["topology what-if (S43)<br/>read-only dry-run — EXECUTES NOTHING,<br/>sizes the blast radius"] --> PROP
+    PROP["propose<br/>(AI via the MCP tool, or a human)"] --> STORE[("remediation_proposals<br/>state = proposed · tenant-RLS")]
+    STORE --> QUEUE["human review queue (Admin)"]
+    QUEUE -->|"approve / reject<br/>requires remediation.approve"| GATE{"approvals ON?<br/>blast radius known & ≤ limit?"}
+    GATE -->|no| BLOCKED["409 — blocked<br/>(fail closed, audited)"]
+    GATE -->|yes| DECIDED["state = approved | rejected"]
+    PROP -.-> AUDIT[["audit stream<br/>propose / approve / reject / approve_blocked"]]
+    BLOCKED -.-> AUDIT
+    DECIDED -.-> AUDIT
+    DECIDED --> STOP["probectl STOPS HERE.<br/>An operator carries the change out in their own tooling —<br/>probectl never touches the network."]
+
+    classDef stop fill:#3a1414,stroke:#a33,color:#fff;
+    class STOP stop;
 ```
 
 ## Dry-run (blast radius)
