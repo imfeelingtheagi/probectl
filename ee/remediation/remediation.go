@@ -10,10 +10,10 @@ package remediation
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/imfeelingtheagi/probectl/internal/logging"
 	rem "github.com/imfeelingtheagi/probectl/internal/remediation"
 )
 
@@ -164,10 +164,12 @@ func (s *Service) record(ctx context.Context, tenantID, actor, action, target st
 		return
 	}
 	if err := s.audit(ctx, tenantID, actor, action, target, data); err != nil {
-		// Audit failures must not silently lose the decision trail; surface via
-		// a wrapped error on the caller path is overkill here (the decision is
-		// already persisted), so we annotate the data — the caller logs.
-		_ = fmt.Errorf("remediation audit: %w", err)
+		// The decision itself is already persisted, but a lost audit entry on
+		// the remediation trail must never be silent (guardrails 7/8): log it
+		// at ERROR with full attribution via the request-scoped logger.
+		logging.FromContext(ctx).Error("remediation audit write failed",
+			"error", err, "tenant_id", tenantID, "actor", actor,
+			"action", action, "target", target)
 	}
 }
 

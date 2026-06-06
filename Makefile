@@ -213,6 +213,7 @@ lint-go: ## gofmt check + go vet + golangci-lint + crypto-import guard + edition
 	golangci-lint run
 	./scripts/check_crypto_imports.sh
 	SELFTEST=1 ./scripts/check_editions_imports.sh
+	./scripts/check_swallowed_errors.sh
 
 .PHONY: lint-python
 lint-python: ## Lint the Python analyzer (ruff + black --check).
