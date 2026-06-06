@@ -199,6 +199,29 @@ func ForceTenant(sel Selector, tenant string) Selector {
 	return out
 }
 
+// TenantScoped reports the tenant a selector is pinned to: it requires
+// EXACTLY ONE tenant_id matcher, with the "=" operator and a non-empty
+// value (the shape ForceTenant produces). Anything else — no matcher, a
+// regex/negative matcher, duplicates — is not tenant-scoped (U-025).
+func (s Selector) TenantScoped() (string, bool) {
+	tenant := ""
+	n := 0
+	for _, m := range s.Matchers {
+		if m.Name != TenantLabel {
+			continue
+		}
+		n++
+		if m.Op != "=" || m.Value == "" {
+			return "", false
+		}
+		tenant = m.Value
+	}
+	if n != 1 {
+		return "", false
+	}
+	return tenant, true
+}
+
 // String reconstructs the canonical selector from the parsed form (escaped,
 // sorted matchers). Only this reconstruction — never raw caller input — is
 // forwarded to an upstream TSDB.

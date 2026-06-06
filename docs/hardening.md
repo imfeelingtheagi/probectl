@@ -13,6 +13,21 @@ and auditable.
 
 ---
 
+## 0. Prometheus-mode deployment restriction (U-025)
+
+In `tsdb=prometheus` mode the upstream Prometheus/VictoriaMetrics has **no
+server-side tenancy** — probectl's query proxy is the boundary. Two layers
+enforce it in code: every parsed selector is tenant-forced
+(`promapi.ForceTenant` strips caller `tenant_id` matchers and pins the
+authenticated tenant) and the upstream forwarder itself **refuses** any
+selector not pinned to exactly one tenant (`ErrUnscopedUpstreamQuery`).
+
+**Hard deployment restriction:** the upstream TSDB must be reachable ONLY by
+the probectl control plane (network policy / private listener / mTLS). Any
+user, dashboard, or service with direct network access to the upstream can
+read ALL tenants' series. Grafana and federation must go through probectl's
+`/prom` endpoints, never the upstream directly.
+
 ## 1. FIPS 140-3 mode
 
 ### What the FIPS build is

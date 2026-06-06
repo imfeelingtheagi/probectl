@@ -2,6 +2,7 @@ package promapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,23 @@ import (
 
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 )
+
+// ErrUnscopedUpstreamQuery refuses any forward whose selector is not pinned
+// to exactly one tenant (U-025): the upstream boundary itself enforces the
+// tenant label, so a caller that forgets ForceTenant gets a refusal, never a
+// cross-tenant read.
+var ErrUnscopedUpstreamQuery = errors.New(
+	"promapi: refusing to forward a selector without a single tenant_id pin (U-025)")
+
+// requireScoped validates every selector before anything reaches the wire.
+func requireScoped(sels ...Selector) error {
+	for _, sel := range sels {
+		if _, ok := sel.TenantScoped(); !ok {
+			return ErrUnscopedUpstreamQuery
+		}
+	}
+	return nil
+}
 
 // Upstream forwards CANONICAL (parsed, tenant-forced, reconstructed) selector
 // queries to the backing Prometheus/VictoriaMetrics when probectl runs in
@@ -61,6 +79,9 @@ func (u *Upstream) get(ctx context.Context, path string, params url.Values) (Res
 
 // QueryInstant forwards an instant query for sel at time at.
 func (u *Upstream) QueryInstant(ctx context.Context, sel Selector, at time.Time) (Result, error) {
+	if err := requireScoped(sel); err != nil {
+		return Result{}, err
+	}
 	p := url.Values{}
 	p.Set("query", sel.String())
 	p.Set("time", formatTime(at))
@@ -69,6 +90,9 @@ func (u *Upstream) QueryInstant(ctx context.Context, sel Selector, at time.Time)
 
 // QueryRange forwards a range query for sel over [start, end] at step.
 func (u *Upstream) QueryRange(ctx context.Context, sel Selector, start, end time.Time, step string) (Result, error) {
+	if err := requireScoped(sel); err != nil {
+		return Result{}, err
+	}
 	p := url.Values{}
 	p.Set("query", sel.String())
 	p.Set("start", formatTime(start))
@@ -82,6 +106,9 @@ func (u *Upstream) QueryRange(ctx context.Context, sel Selector, start, end time
 
 // Series forwards a series-metadata query.
 func (u *Upstream) Series(ctx context.Context, sels []Selector, start, end time.Time) (Result, error) {
+	if err := requireScoped(sels...); err != nil {
+		return Result{}, err
+	}
 	p := url.Values{}
 	for _, sel := range sels {
 		p.Add("match[]", sel.String())
@@ -93,6 +120,9 @@ func (u *Upstream) Series(ctx context.Context, sels []Selector, start, end time.
 
 // LabelNames forwards a label-names query scoped by sels.
 func (u *Upstream) LabelNames(ctx context.Context, sels []Selector, start, end time.Time) (Result, error) {
+	if err := requireScoped(sels...); err != nil {
+		return Result{}, err
+	}
 	p := url.Values{}
 	for _, sel := range sels {
 		p.Add("match[]", sel.String())
@@ -104,6 +134,9 @@ func (u *Upstream) LabelNames(ctx context.Context, sels []Selector, start, end t
 
 // LabelValues forwards a label-values query for name scoped by sels.
 func (u *Upstream) LabelValues(ctx context.Context, name string, sels []Selector, start, end time.Time) (Result, error) {
+	if err := requireScoped(sels...); err != nil {
+		return Result{}, err
+	}
 	p := url.Values{}
 	for _, sel := range sels {
 		p.Add("match[]", sel.String())
