@@ -35,10 +35,14 @@ Scheduled: `deploy/backup/` — a compose overlay for host cron and k8s
 CronJob examples (digest-pinned images, secret-sourced credentials).
 Suggested cadence: nightly, retain 7 daily + 4 weekly; stagger PG and CH.
 
-ClickHouse prerequisite: the server must allow the backup path —
+ClickHouse prerequisites: the server must (1) allow the backup path —
 `deploy/compose/clickhouse-backups.xml` (mounted by the dev stack) shows the
 `<backups><allowed_path>` drop-in; mount the equivalent plus a `/backups`
-volume in production.
+volume in production — and (2) be able to WRITE that volume as the clickhouse
+user (uid 101). A fresh volume mounts root-owned: the dev/compose scripts
+`chmod 1777 /backups` via a best-effort root exec; in Kubernetes set the
+ClickHouse server pod's `securityContext.fsGroup: 101` (or pre-chown the
+PVC).
 
 At larger tiers, move Postgres to pgBackRest/WAL archiving for PITR and
 ClickHouse to incremental `BACKUP … SETTINGS base_backup = …`; the scripts

@@ -1,7 +1,9 @@
 # U-030: nightly ClickHouse-native backup (example — see README.md).
 # The BACKUP statement writes server-side: the ClickHouse pod must mount a
-# backups volume at /backups and allow it via config.d (the
-# deploy/compose/clickhouse-backups.xml drop-in shows the shape).
+# backups volume at /backups, allow it via config.d (the
+# deploy/compose/clickhouse-backups.xml drop-in shows the shape), and make
+# that volume writable by the clickhouse user — set the ClickHouse server
+# pod's securityContext.fsGroup: 101 (or pre-chown the PVC).
 apiVersion: batch/v1
 kind: CronJob
 metadata:

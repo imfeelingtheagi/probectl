@@ -22,6 +22,13 @@ network. Schedule them from the host's crontab:
 Artifacts land in the `backups` volume; copy them off-box (the restore
 scripts take the off-box file) and prune to your retention.
 
+**ClickHouse backups disk must be writable by the clickhouse user (uid
+101).** A freshly created volume mounts root-owned: the dev/compose scripts
+fix this with a best-effort root `chmod 1777 /backups`; in Kubernetes set
+the **ClickHouse server pod's** `securityContext.fsGroup: 101` (or pre-chown
+the PVC) so the `BACKUP`/`RESTORE` statements — which write server-side —
+can create their files and lock.
+
 ## Kubernetes (CronJob)
 
 `k8s-cronjob-postgres.yaml` and `k8s-cronjob-clickhouse.yaml` are standalone

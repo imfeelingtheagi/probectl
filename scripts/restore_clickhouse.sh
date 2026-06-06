@@ -31,6 +31,12 @@ ch() {
 BASE="restore-$(basename "${ZIP}")"
 docker compose -f "${COMPOSE_FILE}" cp "${ZIP}" "${CH_SERVICE}:/backups/${BASE}"
 
+# The ClickHouse server (uid 101) must be able to write its lock in /backups
+# and READ the artifact docker cp just placed there as root (see the backup
+# script's note; managed prod uses the pod's fsGroup instead).
+docker compose -f "${COMPOSE_FILE}" exec -u 0 -T "${CH_SERVICE}" \
+  sh -c "mkdir -p /backups && chmod 1777 /backups && chmod a+r '/backups/${BASE}'" 2>/dev/null || true
+
 ch "DROP DATABASE IF EXISTS ${CH_DB} SYNC"
 ch "RESTORE DATABASE ${CH_DB} FROM File('/backups/${BASE}')" > /dev/null
 

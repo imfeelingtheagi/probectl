@@ -29,6 +29,15 @@ ch() {
     clickhouse-client --user "${CH_USER}" --password "${CH_PASSWORD}" --query "$1"
 }
 
+# A fresh backups volume mounts root-owned, but the ClickHouse server runs as
+# the clickhouse user (uid 101) and must write the backup + its lock file.
+# Best-effort make it writable via a root exec on the dev/compose stack; this
+# no-ops where exec-as-root is unavailable, and managed production sets the
+# ClickHouse pod's securityContext.fsGroup to the clickhouse gid instead
+# (see deploy/backup/README.md).
+docker compose -f "${COMPOSE_FILE}" exec -u 0 -T "${CH_SERVICE}" \
+  sh -c 'mkdir -p /backups && chmod 1777 /backups' 2>/dev/null || true
+
 ch "BACKUP DATABASE ${CH_DB} TO File('/backups/${NAME}')" > /dev/null
 
 docker compose -f "${COMPOSE_FILE}" cp "${CH_SERVICE}:/backups/${NAME}" "${OUT_DIR}/${NAME}"
