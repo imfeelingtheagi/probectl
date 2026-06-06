@@ -379,7 +379,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		WriteTimeout:        l.dur("PROBECTL_HTTP_WRITE_TIMEOUT", 15*time.Second),
 		IdleTimeout:         l.dur("PROBECTL_HTTP_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:     l.dur("PROBECTL_SHUTDOWN_TIMEOUT", 15*time.Second),
-		DatabaseURL:         l.str("PROBECTL_DATABASE_URL", "postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable"),
+		DatabaseURL:         l.str("PROBECTL_DATABASE_URL", "postgres://probectl:probectl@localhost:5432/probectl?sslmode=require"),
 		DatabaseReadURL:     l.str("PROBECTL_DATABASE_READ_URL", ""),
 		DatabaseMaxConns:    int32(l.intRange("PROBECTL_DATABASE_MAX_CONNS", 10, 1, 1000)),
 		DatabaseMinConns:    int32(l.intRange("PROBECTL_DATABASE_MIN_CONNS", 0, 0, 1000)),

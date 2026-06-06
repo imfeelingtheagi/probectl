@@ -18,12 +18,26 @@ name: probectl
 services:
   postgres:
     image: postgres:16
+    depends_on:
+      certgen:
+        condition: service_completed_successfully
     environment:
       POSTGRES_USER: probectl
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-probectl}
       POSTGRES_DB: probectl
+    # TLS on the Postgres listener (U-039): reuse the certgen-provisioned cert
+    # (sslmode=require encrypts without verifying, so the self-signed quickstart
+    # cert works; operators with a CA-issued cert get it automatically). The
+    # key is install'ed postgres-owned 0600 as the server requires.
+    command: >
+      bash -c "install -o postgres -g postgres -m 600 /certs/tls.key /var/lib/postgresql/server.key
+      && install -o postgres -g postgres -m 644 /certs/tls.crt /var/lib/postgresql/server.crt
+      && exec docker-entrypoint.sh postgres -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/server.crt
+      -c ssl_key_file=/var/lib/postgresql/server.key"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - certs:/certs:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U probectl -d probectl"]
       interval: 5s
@@ -61,7 +75,8 @@ services:
       PROBECTL_TLS_CERT_FILE: /certs/tls.crt
       PROBECTL_TLS_KEY_FILE: /certs/tls.key
       PROBECTL_HSTS_ENABLED: "true"
-      PROBECTL_DATABASE_URL: postgres://probectl:${POSTGRES_PASSWORD:-probectl}@postgres:5432/probectl?sslmode=disable
+      # sslmode=require (U-039): encrypted to the in-network Postgres above.
+      PROBECTL_DATABASE_URL: postgres://probectl:${POSTGRES_PASSWORD:-probectl}@postgres:5432/probectl?sslmode=require
       PROBECTL_MIGRATE_ON_BOOT: "true"
       # Envelope KEK for at-rest secret encryption. Generate: openssl rand -base64 32
       PROBECTL_ENVELOPE_KEY: ${PROBECTL_ENVELOPE_KEY:-}

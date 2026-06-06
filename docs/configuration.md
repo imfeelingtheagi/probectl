@@ -26,7 +26,7 @@ migrations and exit), `probectl-control version`.
 | `PROBECTL_HTTP_WRITE_TIMEOUT`       | `15s`                                                              | HTTP write timeout                           |
 | `PROBECTL_HTTP_IDLE_TIMEOUT`        | `60s`                                                              | HTTP idle (keep-alive) timeout               |
 | `PROBECTL_SHUTDOWN_TIMEOUT`         | `15s`                                                              | graceful-shutdown drain timeout              |
-| `PROBECTL_DATABASE_URL`             | `postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable`    | PostgreSQL DSN (`sslmode` controls TLS)      |
+| `PROBECTL_DATABASE_URL`             | `postgres://probectl:probectl@localhost:5432/probectl?sslmode=require`    | PostgreSQL DSN; `sslmode=require` is the default (U-039). Dev-only: a local source-dev stack without TLS may explicitly append `sslmode=disable` to its own DSN |
 | `PROBECTL_DATABASE_MAX_CONNS`       | `10`                                                               | max pool connections (1–1000)                |
 | `PROBECTL_DATABASE_MIN_CONNS`       | `0`                                                                | min pool connections                         |
 | `PROBECTL_DATABASE_CONNECT_TIMEOUT` | `5s`                                                              | per-connection connect timeout               |
