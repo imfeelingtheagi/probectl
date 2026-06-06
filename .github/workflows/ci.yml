@@ -313,11 +313,12 @@ jobs:
           github_token: ${{ github.token }}
       - name: buf lint
         run: buf lint
-      - name: buf breaking (additive-only vs main)
-        # Best-effort: a no-op when main has no proto yet; enforces additive-only
-        # once the schema is on main.
+      - name: buf breaking (additive-only vs main — BLOCKING, U-056)
+        # The proto schema is the agent/bus wire contract: a breaking change
+        # strands deployed agents and replayable bus history. This gate blocks
+        # merge; the exception process is in CONTRIBUTING.md (version a new
+        # package, never mutate a published one).
         run: buf breaking --against '.git#branch=main'
-        continue-on-error: true
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}

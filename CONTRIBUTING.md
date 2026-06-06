@@ -42,6 +42,11 @@ self-observable; and the security guardrails (`CLAUDE.md §7`) hold.
   any data-path change (`make test-isolation`).
 - **No phone-home**, no secrets in code, crypto only through `internal/crypto`,
   TLS on every listener, audit everything. See `CLAUDE.md §7`.
+- **Proto schemas are append-only** — the `buf breaking` CI gate blocks merge
+  (U-056). Exception process: an incompatible change ships as a NEW versioned
+  package (`probectl.<domain>.v2`) next to the old one; never mutate a
+  published message. Overriding the gate for a field that provably never
+  shipped in a release requires an explicit maintainer sign-off in the PR.
 
 ## Local development
 
