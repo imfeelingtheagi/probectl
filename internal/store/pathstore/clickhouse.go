@@ -17,6 +17,7 @@ import (
 
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/path"
+	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
 // tenant_id is the partition key so a tenant's path data is physically separated
@@ -41,16 +42,32 @@ type ClickHouse struct {
 	client *http.Client
 }
 
-// NewClickHouse connects to a ClickHouse HTTP endpoint and ensures the schema.
+// chMigrations is the pathstore's versioned ClickHouse schema (U-046),
+// applied through internal/store/chmigrate with a server-side ledger.
+// Shipped versions are immutable — schema changes are NEW versions with
+// idempotent (IF NOT EXISTS / additive) statements.
+func chMigrations() []chmigrate.Migration {
+	return []chmigrate.Migration{
+		{Version: 1, Name: "create_path_tables", Statements: []string{createHops, createLinks}},
+	}
+}
+
+// chExec adapts the store's HTTP client to the chmigrate runner.
+type chExec struct{ c *ClickHouse }
+
+func (e chExec) Exec(ctx context.Context, sql string) error { return e.c.exec(ctx, sql, nil) }
+func (e chExec) Query(ctx context.Context, sql string) ([]map[string]any, error) {
+	return e.c.query(ctx, sql)
+}
+
+// NewClickHouse connects to a ClickHouse HTTP endpoint and ensures the schema
+// via versioned, ledger-recorded migrations (U-046).
 func NewClickHouse(rawURL string) (*ClickHouse, error) {
 	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: &http.Client{Timeout: 30 * time.Second}}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := c.exec(ctx, createHops, nil); err != nil {
-		return nil, fmt.Errorf("pathstore: create hops table: %w", err)
-	}
-	if err := c.exec(ctx, createLinks, nil); err != nil {
-		return nil, fmt.Errorf("pathstore: create links table: %w", err)
+	if _, err := chmigrate.Apply(ctx, chExec{c}, "pathstore", chMigrations(), nil); err != nil {
+		return nil, fmt.Errorf("pathstore: migrate: %w", err)
 	}
 	return c, nil
 }

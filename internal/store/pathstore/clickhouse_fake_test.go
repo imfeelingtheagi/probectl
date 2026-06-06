@@ -86,7 +86,7 @@ func newFakeCH(t *testing.T) (*fakeCH, *ClickHouse) {
 func TestClickHouseRefusesUnscopedOperations(t *testing.T) {
 	f, ch := newFakeCH(t)
 	ctx := context.Background()
-	before := f.count() // the two CREATE TABLEs from connect
+	before := f.count() // the connect-time migration traffic (U-046)
 
 	if err := ch.Save(ctx, "", samplePath()); !errors.Is(err, ErrNoTenant) {
 		t.Fatalf("Save without tenant = %v, want ErrNoTenant", err)

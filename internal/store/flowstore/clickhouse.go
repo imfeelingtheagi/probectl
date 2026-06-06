@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
 // tenant_id leads both the partition and the ORDER BY so tenant-scoped reads
@@ -73,12 +75,32 @@ type ClickHouse struct {
 
 // NewClickHouse connects, ensures the shared schema, and (when retentionDays
 // > 0) applies the delete-TTL — idempotently, so repeated starts are safe.
+// chMigrations is the flowstore's versioned ClickHouse schema (U-046),
+// applied through internal/store/chmigrate with a server-side ledger.
+// Shipped versions are immutable — schema changes are NEW versions with
+// idempotent (IF NOT EXISTS / additive) statements.
+func chMigrations() []chmigrate.Migration {
+	return []chmigrate.Migration{
+		{Version: 1, Name: "create_flows", Statements: []string{createFlowsDDL(sharedFlowsTable)}},
+	}
+}
+
+// chExec adapts the store's HTTP client (pooled base) to the chmigrate runner.
+type chExec struct{ c *ClickHouse }
+
+func (e chExec) Exec(ctx context.Context, sql string) error { return e.c.exec(ctx, "", sql, nil) }
+func (e chExec) Query(ctx context.Context, sql string) ([]map[string]any, error) {
+	return e.c.query(ctx, "", sql)
+}
+
 func NewClickHouse(rawURL string, retentionDays int) (*ClickHouse, error) {
 	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: &http.Client{Timeout: 30 * time.Second}}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := c.exec(ctx, "", createFlowsDDL(sharedFlowsTable), nil); err != nil {
-		return nil, fmt.Errorf("flowstore: create table: %w", err)
+	// Versioned, ledger-recorded schema (U-046). The retention TTL below
+	// stays a runtime ALTER: it is per-deployment configuration, not schema.
+	if _, err := chmigrate.Apply(ctx, chExec{c}, "flowstore", chMigrations(), nil); err != nil {
+		return nil, fmt.Errorf("flowstore: migrate: %w", err)
 	}
 	if retentionDays > 0 {
 		ttl := fmt.Sprintf("ALTER TABLE %s MODIFY TTL toDateTime(ts) + INTERVAL %d DAY DELETE", sharedFlowsTable, retentionDays)

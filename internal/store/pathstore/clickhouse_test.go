@@ -11,8 +11,8 @@ import (
 )
 
 // TestClickHouseHTTPStore exercises the ClickHouse HTTP adapter against a fake
-// endpoint: it must POST the schema DDL on connect and JSONEachRow inserts on
-// Save, tenant-tagged.
+// endpoint: connect runs the versioned migrations (ledger DDL → schema DDL →
+// ledger record, U-046) and Save POSTs tenant-tagged JSONEachRow inserts.
 func TestClickHouseHTTPStore(t *testing.T) {
 	var mu sync.Mutex
 	var queries, bodies []string
@@ -30,30 +30,43 @@ func TestClickHouseHTTPStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(queries) != 2 || !strings.Contains(queries[0], "CREATE TABLE") || !strings.Contains(queries[0], "probectl_path_hops") {
-		t.Fatalf("schema DDL = %v", queries)
+	find := func(substr string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		for i, q := range queries {
+			if strings.Contains(q, substr) {
+				return i
+			}
+		}
+		return -1
 	}
-	if !strings.Contains(queries[1], "probectl_path_links") {
-		t.Errorf("links DDL missing: %v", queries[1])
+	ledger := find("CREATE TABLE IF NOT EXISTS probectl_ch_migrations")
+	hops := find("CREATE TABLE IF NOT EXISTS probectl_path_hops")
+	links := find("CREATE TABLE IF NOT EXISTS probectl_path_links")
+	record := find("INSERT INTO probectl_ch_migrations")
+	if ledger == -1 || hops == -1 || links == -1 || record == -1 {
+		t.Fatalf("connect must run ledger DDL, schema DDL and the ledger record, got %v", queries)
+	}
+	if !(ledger < hops && hops < links && links < record) {
+		t.Fatalf("migration order wrong (ledger=%d hops=%d links=%d record=%d)", ledger, hops, links, record)
 	}
 
 	if err := ch.Save(context.Background(), "tenant-x", samplePath()); err != nil {
 		t.Fatal(err)
 	}
-	if len(queries) != 4 {
-		t.Fatalf("after save, %d queries, want 4: %v", len(queries), queries)
+	hi := find("INSERT INTO probectl_path_hops")
+	li := find("INSERT INTO probectl_path_links")
+	if hi == -1 || li == -1 || hi > li {
+		t.Fatalf("save must insert hops then links, got %v", queries)
 	}
-	if !strings.Contains(queries[2], "INSERT INTO probectl_path_hops") || !strings.Contains(queries[2], "JSONEachRow") {
-		t.Errorf("hops insert query = %q", queries[2])
+	if !strings.Contains(queries[hi], "JSONEachRow") {
+		t.Errorf("hops insert query = %q", queries[hi])
 	}
-	if !strings.Contains(bodies[2], "tenant-x") || !strings.Contains(bodies[2], "10.0.0.1") || !strings.Contains(bodies[2], "16001") {
-		t.Errorf("hops body missing rows: %q", bodies[2])
+	if !strings.Contains(bodies[hi], "tenant-x") || !strings.Contains(bodies[hi], "10.0.0.1") || !strings.Contains(bodies[hi], "16001") {
+		t.Errorf("hops body missing rows: %q", bodies[hi])
 	}
-	if !strings.Contains(queries[3], "INSERT INTO probectl_path_links") {
-		t.Errorf("links insert query = %q", queries[3])
-	}
-	if !strings.Contains(bodies[3], `"from_ip":"10.0.0.1"`) || !strings.Contains(bodies[3], `"to_ip":"8.8.8.8"`) {
-		t.Errorf("links body = %q", bodies[3])
+	if !strings.Contains(bodies[li], `"from_ip":"10.0.0.1"`) || !strings.Contains(bodies[li], `"to_ip":"8.8.8.8"`) {
+		t.Errorf("links body = %q", bodies[li])
 	}
 }
 
