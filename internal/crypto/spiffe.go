@@ -35,7 +35,11 @@ func (id SPIFFEID) String() string {
 	return fmt.Sprintf("spiffe://%s/tenant/%s/agent/%s", id.TrustDomain, id.TenantID, id.AgentID)
 }
 
-// ParseSPIFFEID parses a probectl agent SPIFFE URI.
+// ParseSPIFFEID parses a probectl agent SPIFFE URI. The trust domain is
+// PINNED (U-011): an ID under any domain other than TrustDomain is rejected,
+// so a syntactically valid SVID from a foreign SPIFFE deployment can never
+// parse into a probectl identity — this is the central choke point every
+// verify/derivation path (server peer identity, agent self-identity) uses.
 func ParseSPIFFEID(uri string) (SPIFFEID, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -43,6 +47,9 @@ func ParseSPIFFEID(uri string) (SPIFFEID, error) {
 	}
 	if u.Scheme != "spiffe" {
 		return SPIFFEID{}, fmt.Errorf("crypto: not a spiffe id: %q", uri)
+	}
+	if u.Host != TrustDomain {
+		return SPIFFEID{}, fmt.Errorf("crypto: foreign spiffe trust domain %q (pinned to %q)", u.Host, TrustDomain)
 	}
 	parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
 	if len(parts) != 4 || parts[0] != "tenant" || parts[2] != "agent" {

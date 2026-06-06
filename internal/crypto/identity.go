@@ -39,8 +39,14 @@ type RotatingIdentity struct {
 const DefaultIdentityCheckInterval = 10 * time.Second
 
 // NewRotatingIdentity loads the initial pair (failing closed if invalid) and
-// returns the reload-aware identity. spiffePrefix "" disables the URI check.
+// returns the reload-aware identity. The SPIFFE URI pin is REQUIRED (U-011):
+// spiffePrefix "" applies the default trust-domain pin
+// ("spiffe://" + TrustDomain + "/") rather than disabling the check, so no
+// caller can construct an unpinned identity.
 func NewRotatingIdentity(certFile, keyFile, spiffePrefix string) (*RotatingIdentity, error) {
+	if spiffePrefix == "" {
+		spiffePrefix = "spiffe://" + TrustDomain + "/"
+	}
 	ri := &RotatingIdentity{
 		certFile: certFile, keyFile: keyFile, spiffe: spiffePrefix,
 		interval: DefaultIdentityCheckInterval,
@@ -155,5 +161,6 @@ func ServerMTLSConfigRotating(certFile, keyFile, caFile, spiffePrefix string) (*
 	cfg.GetCertificate = ri.GetCertificate
 	cfg.ClientCAs = pool
 	cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	cfg.VerifyPeerCertificate = requirePinnedTrustDomain
 	return cfg, ri, nil
 }

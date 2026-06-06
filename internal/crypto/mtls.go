@@ -22,7 +22,26 @@ func ServerMTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 	}
 	cfg.ClientCAs = pool
 	cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	cfg.VerifyPeerCertificate = requirePinnedTrustDomain
 	return cfg, nil
+}
+
+// requirePinnedTrustDomain is a server-side VerifyPeerCertificate hook
+// (U-011): after CA validation, the client leaf must carry a SPIFFE URI in
+// the pinned trust domain — a valid-chain certificate from a FOREIGN trust
+// domain is refused at the handshake, before any request is read.
+func requirePinnedTrustDomain(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	if len(rawCerts) == 0 {
+		return errors.New("crypto: no client certificate")
+	}
+	leaf, err := x509.ParseCertificate(rawCerts[0])
+	if err != nil {
+		return fmt.Errorf("crypto: parse client leaf: %w", err)
+	}
+	if _, err := SPIFFEIDFromCert(leaf); err != nil {
+		return fmt.Errorf("crypto: client identity rejected: %w", err)
+	}
+	return nil
 }
 
 // ClientMTLSConfig builds a client TLS config presenting a client certificate and
