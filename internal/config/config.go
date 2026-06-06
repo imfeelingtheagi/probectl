@@ -104,12 +104,18 @@ type Config struct {
 	// fail-closed) or "dev" (trusted-header dev principal with all permissions
 	// — an EXPLICIT opt-in for local evaluation; the control plane logs a loud
 	// startup warning; never in prod).
-	AuthMode         string
-	SessionTTL       time.Duration
-	OIDCIssuer       string
-	OIDCClientID     string
-	OIDCClientSecret string
-	OIDCRedirectURL  string
+	AuthMode   string
+	SessionTTL time.Duration
+	// Auth brute-force guard (U-024): failures per window before a lockout,
+	// the window, and the base lockout (doubles per consecutive lockout,
+	// capped at 1h). Zero values use the limiter's safe defaults (5 / 1m / 1m).
+	AuthRateMaxFailures int
+	AuthRateWindow      time.Duration
+	AuthRateLockout     time.Duration
+	OIDCIssuer          string
+	OIDCClientID        string
+	OIDCClientSecret    string
+	OIDCRedirectURL     string
 
 	// Path store (S10/S11): where discovered network paths are persisted and
 	// served. memory (default) or clickhouse (a ClickHouse HTTP URL).
@@ -424,6 +430,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		IncidentWindow:      l.dur("PROBECTL_INCIDENT_WINDOW", 10*time.Minute),
 		AuthMode:            l.enum("PROBECTL_AUTH_MODE", "session", "dev", "session"),
 		SessionTTL:          l.dur("PROBECTL_SESSION_TTL", 12*time.Hour),
+		AuthRateMaxFailures: l.intRange("PROBECTL_AUTH_RATE_MAX_FAILURES", 5, 1, 1000),
+		AuthRateWindow:      l.dur("PROBECTL_AUTH_RATE_WINDOW", time.Minute),
+		AuthRateLockout:     l.dur("PROBECTL_AUTH_RATE_LOCKOUT", time.Minute),
 		OIDCIssuer:          l.str("PROBECTL_OIDC_ISSUER", ""),
 		OIDCClientID:        l.str("PROBECTL_OIDC_CLIENT_ID", ""),
 		OIDCClientSecret:    l.str("PROBECTL_OIDC_CLIENT_SECRET", ""),

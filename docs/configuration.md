@@ -51,6 +51,9 @@ migrations and exit), `probectl-control version`.
 | `PROBECTL_INCIDENT_WINDOW`          | `10m`                                                            | time window within which related signals correlate into one incident (S17) |
 | `PROBECTL_AUTH_MODE`                | `session`                                                          | identity mode (S18): `session` (real OIDC SSO + session cookies) \| `dev` (trusted-header dev principal — never in production) |
 | `PROBECTL_SESSION_TTL`              | `12h`                                                            | server-side session lifetime (S18)                         |
+| `PROBECTL_AUTH_RATE_MAX_FAILURES`   | `5`         | auth brute-force guard (U-024): failures per window before lockout |
+| `PROBECTL_AUTH_RATE_WINDOW`         | `1m`        | failure-counting window for the auth throttle |
+| `PROBECTL_AUTH_RATE_LOCKOUT`        | `1m`        | base lockout; doubles per consecutive lockout, capped at 1h; lockouts are audited |
 | `PROBECTL_OIDC_ISSUER`              | (none)                                                           | OIDC issuer URL; SSO discovery is performed against it (S18) |
 | `PROBECTL_OIDC_CLIENT_ID`          | (none)                                                           | OIDC client ID registered with the IdP (S18)               |
 | `PROBECTL_OIDC_CLIENT_SECRET`      | (none)                                                           | OIDC client secret (kept out of logs/URLs; S18)            |

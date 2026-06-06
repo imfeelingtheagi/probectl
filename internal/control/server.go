@@ -60,6 +60,8 @@ type Server struct {
 	sessions  *auth.Manager
 	authn     *auth.Authenticator
 	providers auth.ProviderFactory
+	// authLimiter throttles the auth endpoints per IP + per account (U-024).
+	authLimiter *auth.Limiter
 
 	// AI assistant (S24). The RCA analyzer over the S23 query engine; always set
 	// (built-in air-gapped model + incidents evidence when a pool is present).
@@ -269,6 +271,7 @@ func New(cfg *config.Config, log *slog.Logger, pinger store.Pinger, pool *pgxpoo
 	// Identity & access (S18). The SSO provider factory is always present; the
 	// session manager + authenticator need a DB (nil in operational-only tests).
 	s.providers = newOIDCFactory(cfg)
+	s.authLimiter = s.newAuthLimiter(cfg)
 	if pool != nil {
 		s.sessions = auth.NewManager(store.NewSessions(pool), cfg.SessionTTL, cfg.TLSEnabled())
 		s.authn = auth.NewAuthenticator(s.sessions, permLoader{pool: pool})
@@ -313,8 +316,8 @@ func (s *Server) routes() http.Handler {
 
 	// SSO login endpoints (S18) — public: they establish the session that the
 	// rest of the API requires.
-	mux.Handle("GET /auth/login", apiHandler(s.handleLogin))
-	mux.Handle("GET /auth/callback", apiHandler(s.handleCallback))
+	mux.Handle("GET /auth/login", apiHandler(s.throttleAuth(s.handleLogin)))
+	mux.Handle("GET /auth/callback", apiHandler(s.throttleAuth(s.handleCallback)))
 	mux.Handle("POST /auth/logout", apiHandler(s.handleLogout))
 
 	// Change-event ingest (S29) — NOT session-authenticated: it authenticates each

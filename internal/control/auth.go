@@ -319,6 +319,11 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 	if ident.Email == "" {
 		return apierror.Unauthorized("identity provider returned no email")
 	}
+	// Per-account throttle (U-024): a locked account is refused even with a
+	// successful IdP exchange; later failures below count against it.
+	if err := s.checkAccountThrottle(w, tid.String(), ident.Email); err != nil {
+		return err
+	}
 
 	var user *store.User
 	err = tenancy.InTenant(tenancy.WithTenant(r.Context(), tid), s.pool, func(ctx context.Context, sc tenancy.Scope) error {
@@ -340,6 +345,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 		return e
 	})
 	if err != nil {
+		s.authLimiter.Fail(acctKey(tid.String(), ident.Email))
 		return err
 	}
 
@@ -352,6 +358,9 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// Successful login ends both backoff chains (U-024).
+	s.authLimiter.Success("ip:" + clientIP(r))
+	s.authLimiter.Success(acctKey(tid.String(), ident.Email))
 	s.clearOAuthCookie(w, oauthStateCookie)
 	s.clearOAuthCookie(w, oauthTenantCookie)
 	s.sessions.SetCookie(w, token)
