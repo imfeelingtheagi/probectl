@@ -57,6 +57,34 @@ under-noise p95 and inflation ratio, plus the hard correctness verdict
 | _pending_ | L | _reference hardware TBD_ | — | — | — | — |
 | _pending_ | XL | _reference hardware TBD_ | — | — | — | — |
 
+## The FULL-STACK load gate (U-005)
+
+The in-process gate above excludes the real transports (see the honesty
+notes). The full-stack harness (`internal/perf/fullstack.go`) closes that
+gap with the SAME tier profiles and SLOs: synthetic agents publish through
+**real Kafka** (the async producer), the **production consumer** (retry/DLQ
++ cardinality caps) remote-writes into a **real Prometheus**, and the run is
+confirmed back OUT of the store with tenant-scoped PromQL — completeness,
+per-tenant scoping, and query latency. Each run namespaces its tenants, and
+the gate fails on any SLO violation, incomplete ingest, or scoping error.
+
+- **CI (every pass):** the `load-smoke` job — S tier at 5% scale against the
+  dev compose stack (`make load-test-smoke`). Proves the harness, not the
+  platform.
+- **Reference hardware (human-scheduled):** `make compose-up && make
+  load-test TIER=L` (then `XL`). The test logs a `RESULT ROW` line — commit
+  it below and flip the SLO labels above from PROVISIONAL once both tiers
+  pass.
+
+| Date | Tier | Hardware | Throughput (results/s) | Publish p95 | Query p95 | Series confirmed | Verdict |
+|---|---|---|---|---|---|---|---|
+| _pending human run_ | L | _reference hardware TBD_ | — | — | — | — | — |
+| _pending human run_ | XL | _reference hardware TBD_ | — | — | — | — | — |
+
+Run against a fresh stack (`make compose-down && make compose-up`): the
+consumer reads its topic from the start, and a persistent Prometheus keeps
+prior runs' series (the namespace isolates correctness, not disk).
+
 The pooled-Postgres side of multi-tenant isolation under load (RLS cost,
 per-tenant query p95) remains covered by the S18a `perf-smoke` integration
 job (`DrivePooled`); the S-T7 fairness sprint extends it per the plan.

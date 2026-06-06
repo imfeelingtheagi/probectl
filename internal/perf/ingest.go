@@ -32,6 +32,10 @@ type IngestConfig struct {
 	ResultsPerTest  int
 	Producers       int
 	SettleTimeout   time.Duration
+	// Namespace, when set, prefixes every tenant id ("<ns>-tenant-0000").
+	// The full-stack gate (U-005) uses it to isolate one run's series in a
+	// persistent store; the in-process harness leaves it empty.
+	Namespace string
 }
 
 // TotalResults is the number of results the scenario drives.
@@ -99,36 +103,9 @@ func DriveIngest(ctx context.Context, b bus.Bus, w tsdb.Writer, confirmed func()
 
 	ids := buildIdentities(cfg)
 
-	var (
-		pubLat    Latencies
-		published atomic.Int64
-		firstErr  atomic.Value
-	)
+	var pubLat Latencies
 	start := time.Now()
-
-	var wg sync.WaitGroup
-	for p := 0; p < cfg.Producers; p++ {
-		lo, hi := chunk(len(ids), cfg.Producers, p)
-		wg.Add(1)
-		go func(ids []identity) {
-			defer wg.Done()
-			for _, id := range ids {
-				payload, err := proto.Marshal(buildResult(id))
-				if err != nil {
-					firstErr.CompareAndSwap(nil, err)
-					return
-				}
-				t0 := time.Now()
-				if err := b.Publish(cctx, bus.NetworkResultsTopic, []byte(id.tenant), payload); err != nil {
-					firstErr.CompareAndSwap(nil, err)
-					return
-				}
-				pubLat.Record(time.Since(t0))
-				published.Add(1)
-			}
-		}(ids[lo:hi])
-	}
-	wg.Wait()
+	published, pubErr := publishIdentities(cctx, b, ids, cfg.Producers, &pubLat)
 
 	// Wait for the consumer to drain the bus into the store.
 	deadline := time.Now().Add(cfg.SettleTimeout)
@@ -139,14 +116,14 @@ func DriveIngest(ctx context.Context, b bus.Bus, w tsdb.Writer, confirmed func()
 	cancel()
 	<-consumerDone
 
-	if e := firstErr.Load(); e != nil {
-		return IngestReport{}, e.(error)
+	if pubErr != nil {
+		return IngestReport{}, pubErr
 	}
 
 	got := confirmed()
 	rep := IngestReport{
 		Config:         cfg,
-		Published:      int(published.Load()),
+		Published:      published,
 		SeriesWritten:  got,
 		Elapsed:        elapsed,
 		PublishLatency: pubLat.Summary(),
@@ -160,13 +137,54 @@ func DriveIngest(ctx context.Context, b bus.Bus, w tsdb.Writer, confirmed func()
 	return rep, nil
 }
 
+// publishIdentities marshals and publishes one result per identity across
+// `producers` concurrent workers, recording per-publish latency. It returns
+// the count published and the first error encountered (workers stop on it).
+func publishIdentities(ctx context.Context, b bus.Bus, ids []identity, producers int, lat *Latencies) (int, error) {
+	var (
+		published atomic.Int64
+		firstErr  atomic.Value
+		wg        sync.WaitGroup
+	)
+	for p := 0; p < producers; p++ {
+		lo, hi := chunk(len(ids), producers, p)
+		wg.Add(1)
+		go func(ids []identity) {
+			defer wg.Done()
+			for _, id := range ids {
+				payload, err := proto.Marshal(buildResult(id))
+				if err != nil {
+					firstErr.CompareAndSwap(nil, err)
+					return
+				}
+				t0 := time.Now()
+				if err := b.Publish(ctx, bus.NetworkResultsTopic, []byte(id.tenant), payload); err != nil {
+					firstErr.CompareAndSwap(nil, err)
+					return
+				}
+				lat.Record(time.Since(t0))
+				published.Add(1)
+			}
+		}(ids[lo:hi])
+	}
+	wg.Wait()
+	if e := firstErr.Load(); e != nil {
+		return int(published.Load()), e.(error)
+	}
+	return int(published.Load()), nil
+}
+
 // buildIdentities expands the scenario into one identity per result. The
 // (tenant, agent, server) tuple repeats ResultsPerTest times, modeling a test
 // that runs repeatedly — distinct timestamps, same label set.
 func buildIdentities(c IngestConfig) []identity {
 	ids := make([]identity, 0, c.TotalResults())
+	prefix := ""
+	if c.Namespace != "" {
+		prefix = c.Namespace + "-"
+	}
 	for t := 0; t < c.Tenants; t++ {
-		tenant := fmt.Sprintf("tenant-%04d", t)
+		tenant := fmt.Sprintf("%stenant-%04d", prefix, t)
 		for a := 0; a < c.AgentsPerTenant; a++ {
 			agent := fmt.Sprintf("agent-%04d-%04d", t, a)
 			for m := 0; m < c.TestsPerAgent; m++ {

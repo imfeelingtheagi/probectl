@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +106,46 @@ func (p *Prometheus) DeleteTenant(ctx context.Context, tenantID string) (int, er
 		return 0, fmt.Errorf("tsdb: series remain after delete_series (verification failed)")
 	}
 	return 0, nil
+}
+
+// Count runs an instant PromQL query and returns its single scalar/vector
+// value (0 when the result is empty). The full-stack load gate (U-005) uses
+// it to confirm ingested series and to time tenant-scoped queries.
+func (p *Prometheus) Count(ctx context.Context, promql string) (float64, error) {
+	base := strings.TrimSuffix(p.url, "/api/v1/write")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		base+"/api/v1/query?query="+url.QueryEscape(promql), nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("tsdb: instant query: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("tsdb: instant query status %d: %s", resp.StatusCode, body)
+	}
+	var out struct {
+		Data struct {
+			Result []struct {
+				Value []any `json:"value"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return 0, fmt.Errorf("tsdb: instant query decode: %w", err)
+	}
+	if len(out.Data.Result) == 0 || len(out.Data.Result[0].Value) < 2 {
+		return 0, nil
+	}
+	str, _ := out.Data.Result[0].Value[1].(string)
+	v, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		return 0, fmt.Errorf("tsdb: instant query value %q: %w", str, err)
+	}
+	return v, nil
 }
 
 // Write remote-writes the series.

@@ -372,6 +372,24 @@ jobs:
       - name: Load/perf smoke (ingest baseline + pooled multi-tenant)
         run: make perf-smoke
 
+  load-smoke:
+    name: load-smoke
+    # U-005: the FULL-STACK load gate's S-tier smoke — synthetic agents through
+    # real Kafka, the production consumer (retry/DLQ + cardinality caps), real
+    # Prometheus remote-write, and tenant-scoped PromQL back out. Proves the
+    # harness on every pass; the L/XL run is `make load-test TIER=L|XL` on
+    # reference hardware (human-scheduled), results in docs/scale-gate.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Boot Kafka + Prometheus (dev compose subset)
+        run: docker compose -f deploy/compose/dev.yml up -d --wait kafka prometheus
+      - name: S-tier full-stack load smoke
+        run: make load-test-smoke
+
   proto:
     name: proto
     runs-on: ubuntu-latest

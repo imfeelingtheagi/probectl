@@ -185,6 +185,20 @@ scale-gate: ## The S48 L/XL scale gate at FULL scale (reference hardware): make 
 	PROBECTL_SCALE=1 PROBECTL_SCALE_TIER=$(or $(TIER),L) \
 		$(GO) test -count=1 -v -timeout 30m -run '^TestScaleGateCI$$' ./internal/perf/
 
+.PHONY: load-test-smoke
+load-test-smoke: ## U-005 S-tier FULL-STACK load smoke (real Kafka + Prometheus; make compose-up first or the ci load-smoke job).
+	PROBECTL_TEST_KAFKA=$(or $(PROBECTL_TEST_KAFKA),localhost:9092) \
+	PROBECTL_PROM_URL=$(or $(PROBECTL_PROM_URL),http://localhost:9090) \
+	PROBECTL_SCALE_TIER=S \
+		$(GO) test -tags=integration -count=1 -v -timeout 12m -run '^TestFullStackLoadGate$$' ./internal/perf/
+
+.PHONY: load-test
+load-test: ## U-005 full-stack L/XL load gate on reference hardware: make load-test TIER=L (commit the result row to docs/scale-gate.md).
+	PROBECTL_TEST_KAFKA=$(or $(PROBECTL_TEST_KAFKA),localhost:9092) \
+	PROBECTL_PROM_URL=$(or $(PROBECTL_PROM_URL),http://localhost:9090) \
+	PROBECTL_SCALE=1 PROBECTL_SCALE_TIER=$(or $(TIER),L) \
+		$(GO) test -tags=integration -count=1 -v -timeout 60m -run '^TestFullStackLoadGate$$' ./internal/perf/
+
 .PHONY: perf-smoke
 perf-smoke: ## Load/perf smoke (S18a): ingest baseline (no DB) + pooled multi-tenant (needs Postgres).
 	# Run without -race: this measures throughput/latency, and race instrumentation
