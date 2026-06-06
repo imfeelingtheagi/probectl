@@ -108,6 +108,10 @@ func buildModel(cfg *config.Config, log *slog.Logger) ai.ModelAdapter {
 		Model:    cfg.AIModelName,
 		Token:    cfg.AIModelToken,
 		Timeout:  cfg.AIModelTimeout,
+		Redaction: &ai.RedactionPolicy{ // C8: pre-egress masking knobs
+			MaskIPs:       cfg.AIRedactIPs,
+			MaskHostnames: cfg.AIRedactHostnames,
+		},
 	})
 	if err != nil {
 		log.Warn("ai model adapter unavailable; using the built-in air-gapped synthesizer", "error", err)

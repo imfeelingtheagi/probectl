@@ -41,6 +41,7 @@ type HTTPModel struct {
 	token    string
 	client   *http.Client
 	remote   bool // non-loopback endpoint: calls LEAVE the host (U-013)
+	redact   RedactionPolicy
 }
 
 // HTTPModelConfig configures an HTTPModel.
@@ -50,6 +51,9 @@ type HTTPModelConfig struct {
 	Model    string        // model name (e.g. "llama3.1", "gpt-4o-mini")
 	Token    string        // bearer / API key (optional for a local Ollama)
 	Timeout  time.Duration // per-request timeout (default 60s)
+	// Redaction is applied to prompt content before any REMOTE call (C8);
+	// nil = DefaultRedaction. Loopback endpoints are never redacted.
+	Redaction *RedactionPolicy
 }
 
 // NewHTTPModel builds a remote model adapter. It fails closed when a remote
@@ -70,6 +74,10 @@ func NewHTTPModel(cfg HTTPModelConfig) (*HTTPModel, error) {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
+	redaction := DefaultRedaction
+	if cfg.Redaction != nil {
+		redaction = *cfg.Redaction
+	}
 	return &HTTPModel{
 		kind:     cfg.Kind,
 		endpoint: strings.TrimRight(u.String(), "/"),
@@ -77,6 +85,7 @@ func NewHTTPModel(cfg HTTPModelConfig) (*HTTPModel, error) {
 		token:    cfg.Token,
 		client:   crypto.HardenedHTTPClient(timeout),
 		remote:   !isLoopbackHost(u.Hostname()),
+		redact:   redaction,
 	}, nil
 }
 
@@ -99,6 +108,9 @@ func (m *HTTPModel) Name() string {
 // the seam other AI tasks reuse — e.g. test authoring (S26) — without coupling to
 // the RCA-specific Synthesize prompt/parsing.
 func (m *HTTPModel) Complete(ctx context.Context, system, user string) (string, error) {
+	if m.remote {
+		user = redactText(user, m.redact) // C8: nothing un-redacted leaves
+	}
 	return m.chat(ctx, system, user)
 }
 
@@ -117,6 +129,12 @@ type synthDTO struct {
 // Synthesize sends the question + evidence to the model and maps its JSON answer
 // onto a Synthesis. The pipeline (rca.go) then drops any unresolved citation.
 func (m *HTTPModel) Synthesize(ctx context.Context, in SynthesisInput) (Synthesis, error) {
+	if m.remote {
+		// C8 (U-013): mask IPs (configurable), hostnames (per policy) and
+		// secrets (always) BEFORE the prompt leaves the network. The local
+		// loopback path skips this entirely — sovereignty unchanged.
+		in = redactSynthesisInput(in, m.redact)
+	}
 	content, err := m.chat(ctx, systemPrompt, userPrompt(in))
 	if err != nil {
 		return Synthesis{}, err

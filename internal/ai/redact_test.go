@@ -1,0 +1,151 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// C8 (U-013) table-driven redaction: IPs, v6, secrets, hostnames-per-policy.
+func TestRedactText(t *testing.T) {
+	def := DefaultRedaction
+	hosts := RedactionPolicy{MaskIPs: true, MaskHostnames: true}
+	cases := []struct {
+		name string
+		in   string
+		pol  RedactionPolicy
+		gone []string // must NOT appear after redaction
+		kept []string // must still appear
+	}{
+		{"ipv4", "loss between 10.1.2.3 and 192.168.7.9/24 rose", def,
+			[]string{"10.1.2.3", "192.168.7.9"}, []string{"loss between", "rose"}},
+		{"ipv6", "edge 2001:db8::1 to fe80::aa:bb degraded", def,
+			[]string{"2001:db8::1", "fe80::aa:bb"}, []string{"edge", "degraded"}},
+		{"mapped v4", "peer ::ffff:10.0.0.7 flapped", def,
+			[]string{"10.0.0.7"}, []string{"peer", "flapped"}},
+		{"bearer", "header Authorization: Bearer sk-live-abcdef123456789 leaked", def,
+			[]string{"sk-live-abcdef123456789"}, []string{"header"}},
+		{"kv secret", "config api_key=AKxyzSECRET9 password: hunter22 ok", def,
+			[]string{"AKxyzSECRET9", "hunter22"}, []string{"config", "ok"}},
+		{"aws key id", "found AKIAIOSFODNN7EXAMPLE in env", def,
+			[]string{"AKIAIOSFODNN7EXAMPLE"}, []string{"found", "in env"}},
+		{"pem block", "cert -----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY----- end", def,
+			[]string{"MIIE"}, []string{"cert", "end"}},
+		{"hostnames kept by default", "db-1.internal.example.com slow", def,
+			nil, []string{"db-1.internal.example.com", "slow"}},
+		{"hostnames masked per policy", "db-1.internal.example.com slow", hosts,
+			[]string{"db-1.internal.example.com"}, []string{"slow"}},
+		{"ips off", "10.1.2.3 reachable", RedactionPolicy{MaskIPs: false},
+			nil, []string{"10.1.2.3", "reachable"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := redactText(tc.in, tc.pol)
+			for _, g := range tc.gone {
+				if strings.Contains(got, g) {
+					t.Errorf("%q still contains %q", got, g)
+				}
+			}
+			for _, k := range tc.kept {
+				if !strings.Contains(got, k) {
+					t.Errorf("%q lost %q", got, k)
+				}
+			}
+		})
+	}
+}
+
+// Stable masking: the same value yields the same token (correlation survives).
+func TestRedactionTokensAreStable(t *testing.T) {
+	a := redactText("from 10.0.0.1 to 10.0.0.2 and back to 10.0.0.1", DefaultRedaction)
+	first := redactText("10.0.0.1", DefaultRedaction)
+	if strings.Count(a, first) != 2 {
+		t.Fatalf("same IP should map to the same token twice: %q (token %q)", a, first)
+	}
+}
+
+// The evidence passed to the analyzer is never mutated — redaction operates
+// on a deep copy (the local pipeline keeps raw values for citations).
+func TestRedactSynthesisInputDoesNotMutate(t *testing.T) {
+	in := SynthesisInput{
+		Question: "why is 10.0.0.1 slow?",
+		Evidence: []Evidence{{ID: "E1", Title: "loss at 10.0.0.1", Summary: "token=abc123secret"}},
+	}
+	out := redactSynthesisInput(in, DefaultRedaction)
+	if strings.Contains(out.Question, "10.0.0.1") || strings.Contains(out.Evidence[0].Title, "10.0.0.1") {
+		t.Fatal("redacted copy still has the IP")
+	}
+	if !strings.Contains(in.Question, "10.0.0.1") || !strings.Contains(in.Evidence[0].Title, "10.0.0.1") ||
+		!strings.Contains(in.Evidence[0].Summary, "abc123secret") {
+		t.Fatal("original input was mutated")
+	}
+}
+
+// capturePrompt runs an httptest OpenAI-shaped server and returns whatever
+// user-message content the model receives.
+func capturePrompt(t *testing.T, m *HTTPModel) string {
+	t.Helper()
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.Unmarshal(body, &req)
+		for _, msg := range req.Messages {
+			if msg.Role == "user" {
+				got = msg.Content
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{
+				"content": `{"root_cause":"x","confidence":"low","insufficient_evidence":false,"findings":[{"statement":"s","citations":["E1"]}]}`,
+			}}},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	m.endpoint = srv.URL
+	if _, err := m.Synthesize(context.Background(), SynthesisInput{
+		Question: "why is 10.9.8.7 slow?",
+		Evidence: []Evidence{{ID: "E1", Title: "loss at 10.9.8.7", Summary: "password=supersecret1"}},
+	}); err != nil {
+		t.Fatalf("synthesize: %v", err)
+	}
+	return got
+}
+
+// Remote path: the wire prompt is masked. Local (loopback) path: untouched —
+// the sovereignty regression guard.
+func TestRemotePromptRedactedLocalUntouched(t *testing.T) {
+	remote, err := NewHTTPModel(HTTPModelConfig{Kind: KindOpenAI, Endpoint: "http://127.0.0.1:1", Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote.remote = true // force the remote classification onto the test server
+	prompt := capturePrompt(t, remote)
+	if strings.Contains(prompt, "10.9.8.7") || strings.Contains(prompt, "supersecret1") {
+		t.Fatalf("remote prompt leaked raw values: %q", prompt)
+	}
+	if !strings.Contains(prompt, "E1") {
+		t.Fatalf("remote prompt lost evidence ids: %q", prompt)
+	}
+
+	local, err := NewHTTPModel(HTTPModelConfig{Kind: KindOpenAI, Endpoint: "http://127.0.0.1:1", Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local.remote {
+		t.Fatal("loopback endpoint classified remote")
+	}
+	prompt = capturePrompt(t, local)
+	if !strings.Contains(prompt, "10.9.8.7") || !strings.Contains(prompt, "password=supersecret1") {
+		t.Fatalf("LOCAL path must be untouched, got %q", prompt)
+	}
+}

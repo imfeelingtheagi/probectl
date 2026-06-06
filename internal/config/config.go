@@ -175,6 +175,11 @@ type Config struct {
 	AIModelToken    string
 	AIModelTimeout  time.Duration
 	AIMaxEvidence   int
+	// AIRedactIPs / AIRedactHostnames (U-013/C8): the pre-egress redaction
+	// pass for REMOTE models — IPs masked by default, hostnames per policy;
+	// obvious secrets are always masked. Local paths are never redacted.
+	AIRedactIPs       bool
+	AIRedactHostnames bool
 	// AIEgressAck (U-013): a REMOTE (non-loopback) model endpoint sends
 	// tenant telemetry off-network. The operator must acknowledge that
 	// explicitly — the server refuses to start otherwise. Loopback local
@@ -475,6 +480,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		AIModelTimeout:      l.dur("PROBECTL_AI_MODEL_TIMEOUT", 60*time.Second),
 		AIMaxEvidence:       l.intRange("PROBECTL_AI_MAX_EVIDENCE", 50, 1, 1000),
 		AIEgressAck:         l.str("PROBECTL_AI_EGRESS_ACK", ""),
+		AIRedactIPs:         l.boolean("PROBECTL_AI_REDACT_IPS", true),
+		AIRedactHostnames:   l.boolean("PROBECTL_AI_REDACT_HOSTNAMES", false),
 		MCPHTTPAddr:         l.str("PROBECTL_MCP_HTTP_ADDR", ""),
 		MCPTLSCertFile:      l.str("PROBECTL_MCP_TLS_CERT_FILE", ""),
 		MCPTLSKeyFile:       l.str("PROBECTL_MCP_TLS_KEY_FILE", ""),
