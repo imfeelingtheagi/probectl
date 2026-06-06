@@ -13,6 +13,7 @@ import (
 	"github.com/klauspost/compress/snappy"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	prompb "github.com/imfeelingtheagi/probectl/internal/gen/prometheus/v1"
 )
 
@@ -26,11 +27,13 @@ type Prometheus struct {
 }
 
 // NewPrometheus returns a remote-write writer targeting the base URL (e.g.
-// http://localhost:9090).
+// http://localhost:9090). Egress uses the hardened TLS client (U-036): an
+// https endpoint gets the TLS 1.2+/AEAD-only/always-verified policy from
+// internal/crypto; a plain-http loopback dev endpoint is unaffected.
 func NewPrometheus(url string) *Prometheus {
 	return &Prometheus{
 		url:    strings.TrimRight(url, "/") + "/api/v1/write",
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: crypto.HardenedHTTPClient(30 * time.Second),
 	}
 }
 
