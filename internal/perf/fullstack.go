@@ -26,6 +26,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/twmb/franz-go/pkg/kgo"
+
 	"github.com/imfeelingtheagi/probectl/internal/bus"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/logging"
@@ -222,7 +224,13 @@ func RunFullStackGate(ctx context.Context, tier Tier, scale float64, targets Ful
 		return FullStackReport{}, fmt.Errorf("perf: full-stack gate needs Kafka brokers and a Prometheus URL")
 	}
 
-	b, err := bus.NewKafka(targets.Brokers, 0)
+	// The gate runs against a FRESH stack whose results topic does not exist
+	// yet, and franz-go's default metadata requests forbid topic creation —
+	// every record then fails with unknown-topic after retries (the first
+	// load-smoke run: published=8 produced=0 produce_fail=8). Production
+	// topics are operator-provisioned; the harness provisions its own via
+	// the broker's auto-create on first produce.
+	b, err := bus.NewKafka(targets.Brokers, 0, kgo.AllowAutoTopicCreation())
 	if err != nil {
 		return FullStackReport{}, fmt.Errorf("perf: full-stack kafka: %w", err)
 	}
