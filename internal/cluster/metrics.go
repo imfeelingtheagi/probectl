@@ -8,7 +8,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 )
 
-// WriteSeries snapshots the cluster state into the TSDB as region-labelled
+// WriteSeries snapshots the cluster state into the TSDB as region-labeled
 // series (probectl observes probectl): multi-region health is visible in the
 // same Grafana/federate surfaces as everything else. Every series carries the
 // replica's region label so a global dashboard can break down by region.

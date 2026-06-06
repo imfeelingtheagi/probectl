@@ -8,7 +8,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 )
 
-// TestWriteSeries: cluster accounting lands in the TSDB as region-labelled
+// TestWriteSeries: cluster accounting lands in the TSDB as region-labeled
 // series — the multi-region observability leg.
 func TestWriteSeries(t *testing.T) {
 	w := tsdb.NewMemory()

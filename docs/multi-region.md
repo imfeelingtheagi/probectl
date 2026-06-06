@@ -117,7 +117,7 @@ globally.
   a failover; `writes_usable:false` tells operators/automation writes paused.
 - **Metrics:** `probectl_cluster_writes_usable`, `probectl_cluster_writer_role`
   (writer=1 / reader=0 / stale=-1 / unknown=-2 — alert on `< 1`),
-  `probectl_cluster_epoch`, `probectl_cluster_replica_lag_seconds`, all labelled
+  `probectl_cluster_epoch`, `probectl_cluster_replica_lag_seconds`, all labeled
   by `region`.
 - **Failover:** see `docs/runbooks/region-failover.md`.
 - **Config:** see `docs/configuration.md` → "Multi-region / HA".
