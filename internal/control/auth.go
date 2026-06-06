@@ -25,6 +25,7 @@ const (
 	permTestRead           = "test.read"
 	permTestWrite          = "test.write"
 	permTestAllowPrivate   = "test.allow_private"
+	permTestInsecureTLS    = "test.insecure_tls"
 	permAgentRead          = "agent.read"
 	permAgentWrite         = "agent.write"
 	permAlertRead          = "alert.read"
@@ -52,7 +53,7 @@ const (
 // allPermissionKeys is the full catalog — granted to the dev-mode principal so
 // local/dev (and the existing /v1 integration tests) run without a real IdP.
 var allPermissionKeys = []string{
-	permTestRead, permTestWrite, permTestAllowPrivate,
+	permTestRead, permTestWrite, permTestAllowPrivate, permTestInsecureTLS,
 	permAgentRead, permAgentWrite,
 	permAlertRead, permAlertWrite,
 	permIncidentRead, permIncidentWrite,

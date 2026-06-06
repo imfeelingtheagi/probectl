@@ -212,8 +212,10 @@ func (s *Server) handleCreateTest(w http.ResponseWriter, r *http.Request) error 
 		}
 		created = t
 		data := map[string]any{"name": t.Name, "type": t.Type}
-		if in.Params[canary.AllowPrivateParam] == "true" {
-			data[canary.AllowPrivateParam] = true // U-002: the override is explicit in the audit trail
+		for param := range privilegedTestParams {
+			if in.Params[param] == "true" {
+				data[param] = true // U-002/U-040: privileged overrides are explicit in the audit trail
+			}
 		}
 		return s.recordAudit(ctx, sc, r, "test.create", t.ID, data)
 	}); err != nil {
@@ -259,8 +261,10 @@ func (s *Server) handleUpdateTest(w http.ResponseWriter, r *http.Request) error 
 		}
 		t = x
 		data := map[string]any{"name": t.Name}
-		if in.Params[canary.AllowPrivateParam] == "true" {
-			data[canary.AllowPrivateParam] = true // U-002
+		for param := range privilegedTestParams {
+			if in.Params[param] == "true" {
+				data[param] = true // U-002/U-040
+			}
 		}
 		return s.recordAudit(ctx, sc, r, "test.update", id, data)
 	}); err != nil {
@@ -270,18 +274,27 @@ func (s *Server) handleUpdateTest(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-// guardAllowPrivate gates the SSRF-guard override (U-002): setting
-// allow_private_targets=true on a test is tenant-scoped by construction
-// (the test row is RLS-scoped), requires the admin-seeded
-// test.allow_private permission, and is recorded explicitly in the audit
-// entry by the callers.
+// privilegedTestParams maps deny-by-default test params to the admin-seeded
+// permission required to set them. Both are tenant-scoped by construction
+// (the test row is RLS-scoped) and recorded explicitly in the audit entry by
+// the callers: allow_private_targets (U-002, SSRF-guard override) and
+// insecure_skip_verify (U-040, disables canary TLS verification).
+var privilegedTestParams = map[string]string{
+	canary.AllowPrivateParam: permTestAllowPrivate,
+	"insecure_skip_verify":   permTestInsecureTLS,
+}
+
+// guardAllowPrivate enforces the privileged-param permissions (deny by
+// default: no principal, or a principal without the permission, is refused).
 func (s *Server) guardAllowPrivate(r *http.Request, params map[string]string) error {
-	if params[canary.AllowPrivateParam] != "true" {
-		return nil
-	}
 	p := auth.PrincipalFrom(r.Context())
-	if p == nil || !p.Has(permTestAllowPrivate) {
-		return apierror.Forbidden("setting " + canary.AllowPrivateParam + " requires permission: " + permTestAllowPrivate)
+	for param, perm := range privilegedTestParams {
+		if params[param] != "true" {
+			continue
+		}
+		if p == nil || !p.Has(perm) {
+			return apierror.Forbidden("setting " + param + " requires permission: " + perm)
+		}
 	}
 	return nil
 }

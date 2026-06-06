@@ -291,7 +291,7 @@ breakdown** and captures **TLS handshake details** for the TLS-posture plane
 | `method` | `GET`, `HEAD`, `POST`, … | `GET` | request method |
 | `expect_status` | codes / classes / ranges | `2xx,3xx` | which statuses count as available |
 | `follow_redirects` | `true` \| `false` | `true` | follow 3xx redirects |
-| `insecure_skip_verify` | `true` \| `false` | `false` | capture TLS but don't fail on an invalid cert |
+| `insecure_skip_verify` | `true` \| `false` | `false` | capture TLS but don't fail on an invalid cert. **Deny-by-default (U-040):** requires the admin-only `test.insecure_tls` permission and is flagged in the `test.create`/`test.update` audit entry |
 | `ca_file` | path to a PEM bundle | — | extra trust anchor (private/internal CA) |
 | `body` | string | — | request body (e.g. for `POST`) |
 | `max_body_bytes` | integer | `10485760` | cap bytes read per probe (10 MiB) |
