@@ -47,7 +47,7 @@ func TestClickHouseHTTPStore(t *testing.T) {
 	if ledger == -1 || hops == -1 || links == -1 || record == -1 {
 		t.Fatalf("connect must run ledger DDL, schema DDL and the ledger record, got %v", queries)
 	}
-	if !(ledger < hops && hops < links && links < record) {
+	if ledger >= hops || hops >= links || links >= record {
 		t.Fatalf("migration order wrong (ledger=%d hops=%d links=%d record=%d)", ledger, hops, links, record)
 	}
 
