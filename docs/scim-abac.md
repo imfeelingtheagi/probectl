@@ -15,6 +15,7 @@ and only the token's hash is stored. All provisioning is then tenant-scoped (RLS
 so one tenant's IdP can never touch another's directory.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   IDP["IdP (Okta / Entra)"] -->|"Bearer <scim-token> (TLS)"| AUTH["scim auth\nhash → tenant (pre-tenant)"]
   AUTH -->|"verified"| OPS["/scim/v2/Users + /Groups\n(tenant-scoped, RLS)"]
@@ -66,6 +67,7 @@ grant; ABAC **narrows** it with tenant-scoped attribute policies (it never widen
 access beyond RBAC). The model is **deny-override**.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart TD
   REQ["request → resolved principal\n(tenant, permissions, attributes)"] --> T{"tenant boundary"}
   T -->|ok| RBAC{"RBAC: has permission?"}

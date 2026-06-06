@@ -80,6 +80,7 @@ The feature follows the editions seam pattern: a **core** model + interface, an
 | `/v1/remediation/*` routes + Admin card | `internal/control`, `web/` | core seam (404 hidden when unlicensed) |
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart TD
     RCA["RCA (S24)"] --> PROP
     WHATIF["topology what-if (S43)<br/>read-only dry-run — EXECUTES NOTHING,<br/>sizes the blast radius"] --> PROP

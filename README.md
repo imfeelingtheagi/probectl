@@ -5,7 +5,6 @@
 | |_) | | | (_) | |_) |  __/ (__| |_| |
 | .__/|_|  \___/|_.__/ \___|\___|\__|_|
 |_|        see everything · send nothing
-           ctl your network
 ```
 
 [![CI](https://github.com/imfeelingtheagi/probectl/actions/workflows/ci.yml/badge.svg)](https://github.com/imfeelingtheagi/probectl/actions/workflows/ci.yml)
@@ -68,6 +67,7 @@ Intelligence, security, and platform layers built across the planes:
 ## Architecture
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart TB
     Provider["Provider / Management Plane — MSP operators (distinct privilege domain)<br/>tenant lifecycle · fleet-across-tenants · metering/billing · white-label<br/>audited break-glass (no implicit tenant-data access)"]
 
@@ -90,6 +90,19 @@ flowchart TB
     Subsys -->|queries, tenant-first| Stores
     External -.->|ingest once, scope per tenant| Analyzer
     External -.->|cached| Subsys
+
+    classDef prov fill:#26215C,stroke:#7F77DD,color:#CECBF6
+    classDef agent fill:#042C53,stroke:#378ADD,color:#B5D4F4
+    classDef analyzer fill:#04342C,stroke:#1D9E75,color:#9FE1CB
+    classDef bus fill:#412402,stroke:#EF9F27,color:#FAC775
+    classDef store fill:#173404,stroke:#639922,color:#C0DD97
+    classDef ext fill:#2C2C2A,stroke:#888780,color:#D3D1C7
+    class Provider prov
+    class Agents agent
+    class Analyzer analyzer
+    class Bus bus
+    class Stores store
+    class External ext
 ```
 
 Agents (each bound to one tenant) run probes and push tenant-tagged results onto

@@ -9,6 +9,7 @@ subsystems land; the canonical **tenant-scoped data model** is documented here i
 ## Shape
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart TB
     Provider["Provider / Management Plane — MSP operators (distinct privilege domain)<br/>tenant lifecycle · fleet-across-tenants · metering/billing · white-label<br/>audited break-glass (no implicit tenant-data access)"]
 
@@ -279,6 +280,7 @@ possible-leak** detection and **RPKI** (RFC 6811) validation, and emits
 `probectl.bgp.events`.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
     RV["RouteViews / RIS<br/>bulk MRT (HTTP)"] --> MRT["mrt.py<br/>streaming parser"]
     RL["RIS Live<br/>websocket (JSON)"] --> RIS["rislive.py<br/>reconnecting client"]
@@ -326,6 +328,7 @@ any measurement fleet. It is a **pluggable** framework: each `Source` implements
 enabled source and merges the result.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
     subgraph Sources["Sources (each a plugin with provenance + AUP)"]
         Cymru["Team Cymru<br/>IP→ASN (DNS)"]
@@ -368,6 +371,7 @@ notifications to **webhook** and **email** channels. Rules are tenant-owned and
 CRUD'd via `/v1/alerts`.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
     TSDB["TSDB<br/>probectl_probe_* series"] --> SRC["MetricSource<br/>(tenant-scoped, latest per series)"]
     RULES["/v1/alerts<br/>rule store (RLS)"] --> EVAL["Evaluator<br/>tick every PROBECTL_ALERT_EVAL_INTERVAL"]
@@ -413,6 +417,7 @@ network.
 group into a single **Incident** with a coherent, time-ordered **timeline**.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
     AL["alert engine<br/>(fired/resolved)"] -->|signalFromAlert| COR["Correlator<br/>time + target/prefix proximity"]
     BG["probectl.bgp.events<br/>(bus consumer)"] -->|signalFromBGPEvent| COR
@@ -452,6 +457,7 @@ overlays attach as additional signal planes onto the same model.
 boundary** — resolve the **tenant first**, then check RBAC — on every `/v1` path.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart TD
     subgraph Login
       U["browser"] -->|GET /auth/login| LOGIN["handleLogin<br/>state cookie + redirect"]
@@ -501,6 +507,7 @@ path; the recorded numbers + thresholds live in
 [`perf-baseline.md`](perf-baseline.md).
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
     subgraph Ingest["DriveIngest (no services)"]
       P["producers<br/>build + marshal results"] -->|publish, keyed by tenant| BUS["bus (memory)<br/>probectl.network.results"]

@@ -14,6 +14,7 @@ evidence reads, the proposal/gating affordance).
 ## The pipeline
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   Q["NL question<br/>(+ optional subject)"] --> P["Planner<br/>(deterministic probectl code)"]
   P -->|"typed S23 queries"| E["S23 query engine<br/>tenant FIRST, then RBAC"]

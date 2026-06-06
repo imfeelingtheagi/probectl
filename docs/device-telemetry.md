@@ -7,6 +7,7 @@ to the bus; the control plane lands the samples in the TSDB where alerts, the
 AI query engine, and dashboards see them like every other series.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   D[switches / routers] -- "SNMP v2c/v3 (poll)" --> A[probectl-device-agent]
   D -- "gNMI Subscribe (stream, TLS)" --> A

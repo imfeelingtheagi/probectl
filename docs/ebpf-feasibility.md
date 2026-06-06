@@ -95,6 +95,7 @@ CO-RE ("Compile Once – Run Everywhere") compiles the program once against BTF 
 The proof attaches to the **`sock:inet_sock_set_state` tracepoint** (stable kernel ABI; carries the 5-tuple + state directly, so no fragile CO-RE struct-field reads are needed for the common path), filters TCP→`ESTABLISHED`, and emits `{pid, comm, saddr, daddr, sport, dport, family, state}` to a ring buffer. Userspace reads the ring buffer and folds events into directed **service edges**.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   K["kernel: TCP state machine"] -->|"tracepoint sock/inet_sock_set_state"| P["eBPF prog (CO-RE)"]
   P -->|"5-tuple + pid/comm"| RB["BPF_MAP_TYPE_RINGBUF"]

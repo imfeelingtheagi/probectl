@@ -91,6 +91,7 @@ views is never called an outage. Synthetic degraded = ≥50% failures over ≥2
 samples for the host (web-facing types: http/https/browser).
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   B[browser SDK<br/>consent-gated, path-only] -->|POST /ingest/rum| H[beacon ingest<br/>key→tenant, redact, cap, rate-limit]
   H -->|canonical Result| T[(probectl.rum.events)]

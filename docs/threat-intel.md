@@ -24,6 +24,7 @@ a match lands on a **tenant-scoped** incident record, so the tenant boundary is
 enforced where the match lands (PRD §3).
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   subgraph feeds["Public threat-intel feeds (read-only, over TLS)"]
     SH["Spamhaus DROP\n(CIDR)"]

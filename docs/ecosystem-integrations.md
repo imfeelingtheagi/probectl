@@ -5,6 +5,7 @@ replace it: Grafana queries probectl directly, Prometheus federates from or
 remote-writes into it, and incidents/assets correlate to ServiceNow CIs.
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
 flowchart LR
   G[Grafana] -- "Prometheus datasource API\n/v1/grafana/api/v1/*" --> P[probectl control plane]
   Prom[Prometheus] -- "scrape /v1/prometheus/federate" --> P
