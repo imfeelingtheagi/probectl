@@ -22,10 +22,11 @@ import (
 // Server is the control-plane's agent-transport gRPC server. All connections are
 // mTLS; non-mTLS clients are rejected at the TLS layer.
 type Server struct {
-	grpc   *grpc.Server
-	log    *slog.Logger
-	cancel context.CancelFunc
-	svc    *service
+	grpc        *grpc.Server
+	log         *slog.Logger
+	cancel      context.CancelFunc
+	svc         *service
+	revocations *crypto.RevocationList
 }
 
 // New builds the agent-transport server with mTLS from the given cert/key/CA
@@ -34,7 +35,12 @@ type Server struct {
 // publishing. broker coordinates agent-to-agent sessions; a nil broker disables
 // coordination (PollCoordination returns no task).
 func New(certFile, keyFile, caFile string, pool *pgxpool.Pool, b bus.Bus, broker *a2a.Broker, log *slog.Logger) (*Server, error) {
-	tlsConfig, err := crypto.ServerMTLSConfig(certFile, keyFile, caFile)
+	// The registry-driven revocation deny-list is checked at the handshake
+	// (U-038): a compromised agent cert is refused before its short-lived cert
+	// expires. Starts empty (no effect); the control plane refreshes it from
+	// the agent registry via RevocationList().
+	revocations := crypto.NewRevocationList()
+	tlsConfig, err := crypto.ServerMTLSConfigRevocable(certFile, keyFile, caFile, revocations)
 	if err != nil {
 		return nil, fmt.Errorf("agent transport tls: %w", err)
 	}
@@ -47,8 +53,14 @@ func New(certFile, keyFile, caFile string, pool *pgxpool.Pool, b bus.Bus, broker
 	}
 	gs := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
 	agentv1.RegisterAgentServiceServer(gs, svc)
-	return &Server{grpc: gs, log: log, cancel: cancel, svc: svc}, nil
+	return &Server{grpc: gs, log: log, cancel: cancel, svc: svc, revocations: revocations}, nil
 }
+
+// RevocationList is the registry-driven mTLS deny-list (U-038). The control
+// plane refreshes it from the agent registry (Replace) when an operator
+// revokes an agent; a revoked serial or SPIFFE id is then refused at the
+// handshake on every subsequent connection — no wait for cert expiry.
+func (s *Server) RevocationList() *crypto.RevocationList { return s.revocations }
 
 // WithVersionPolicy sets the agent↔control version-skew policy (S34). The default
 // is the N/N-1 window with no explicit floor. Returns the server for chaining.
