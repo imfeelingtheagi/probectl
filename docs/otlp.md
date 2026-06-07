@@ -24,6 +24,27 @@ What "OTel-native" means here, precisely:
   language must scope OTel-native claims to metrics + conventions — this is
   the authoritative wording.
 
+## Token rotation & revocation (U-076/U-077)
+
+Bearer tokens map to tenants (`PROBECTL_OTLP_TOKENS=token=tenant,...`).
+Comparison is **constant-time over a SHA-256 of the token** — the
+authenticator keeps only the hash, never the plaintext, and checks every
+configured token without an early exit, so neither a near-miss nor the
+matching token's position leaks through timing (`internal/otel/otlp/auth.go`).
+
+**Rotate** without downtime by running two tokens during the migration:
+add the new token to `PROBECTL_OTLP_TOKENS` (both are now valid), repoint
+each OTLP sender at the new token, then remove the old token from the env
+and restart the receiver. Multiple concurrently-valid tokens and optional
+per-token expiry are first-class in the authenticator (`Add`).
+
+**Revoke** a leaked token immediately by dropping it from
+`PROBECTL_OTLP_TOKENS` and restarting (the env-config path); the
+authenticator's in-process `Revoke` provides the same effect for an
+admin-driven path. A revoked or expired token fails closed
+(`Unauthenticated`/`401`). The active-token count is exposed for rotation
+visibility.
+
 ## Receiver — inbound, TLS-only, authenticated, tenant-scoped
 
 The receiver is an **inbound surface** and is treated as one (CLAUDE.md §7

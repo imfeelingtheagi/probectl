@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 )
 
 // ErrUnauthenticated is returned by an Authenticator for a missing/invalid token.
@@ -19,32 +23,112 @@ type Authenticator interface {
 	Authenticate(token string) (tenant string, err error)
 }
 
-// TokenAuthenticator maps static bearer tokens to tenants (PROBECTL_OTLP_TOKENS).
-// Tokens are bearer secrets carried over TLS; production may additionally use
-// mTLS / SPIFFE identity (the transport already requires TLS).
+// tokenEntry holds the SHA-256 of a bearer secret (never the plaintext after
+// construction), its tenant, and rotation state.
+type tokenEntry struct {
+	hash    []byte // crypto.Hash(secret) — fixed 32 bytes for constant-time compare
+	tenant  string
+	expires time.Time // zero = never
+	revoked bool
+}
+
+func (e tokenEntry) live(now time.Time) bool {
+	return !e.revoked && (e.expires.IsZero() || now.Before(e.expires))
+}
+
+// TokenAuthenticator resolves OTLP bearer tokens to tenants (PROBECTL_OTLP_TOKENS).
+// Comparison is CONSTANT-TIME over a hash of the token (U-076), and the set
+// supports rotation — multiple concurrently-valid tokens, optional per-token
+// expiry, and revocation (U-077). Tokens are bearer secrets carried over TLS;
+// production may additionally use mTLS / SPIFFE identity.
 type TokenAuthenticator struct {
-	tokens map[string]string
+	mu      sync.RWMutex
+	entries []tokenEntry
+	now     func() time.Time
 }
 
 // NewTokenAuthenticator builds an authenticator from token→tenant pairs (empty
-// keys/values are dropped).
+// keys/values dropped). Config-loaded tokens have no expiry; rotate by Add-ing
+// a new token then Revoke-ing the old.
 func NewTokenAuthenticator(tokenToTenant map[string]string) *TokenAuthenticator {
-	cp := make(map[string]string, len(tokenToTenant))
-	for k, v := range tokenToTenant {
-		if k != "" && v != "" {
-			cp[k] = v
+	a := &TokenAuthenticator{now: time.Now}
+	for tok, tenant := range tokenToTenant {
+		if tok != "" && tenant != "" {
+			a.entries = append(a.entries, tokenEntry{hash: crypto.Hash([]byte(tok)), tenant: tenant})
 		}
 	}
-	return &TokenAuthenticator{tokens: cp}
+	return a
 }
 
-// Authenticate resolves a token to its tenant, failing closed.
+// Add registers an additional valid token (rotation): both old and new are
+// accepted until the old is revoked. expires of zero means no expiry.
+func (a *TokenAuthenticator) Add(token, tenant string, expires time.Time) {
+	if token == "" || tenant == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.entries = append(a.entries, tokenEntry{hash: crypto.Hash([]byte(token)), tenant: tenant, expires: expires})
+}
+
+// Revoke marks every entry for token as revoked (immediate). Returns whether
+// any matched. This is the in-process revocation path; the env-config path is
+// to drop the token from PROBECTL_OTLP_TOKENS and reload (docs/otlp.md).
+func (a *TokenAuthenticator) Revoke(token string) bool {
+	if token == "" {
+		return false
+	}
+	h := crypto.Hash([]byte(token))
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	revoked := false
+	for i := range a.entries {
+		if crypto.ConstantTimeEqual(h, a.entries[i].hash) {
+			a.entries[i].revoked = true
+			revoked = true
+		}
+	}
+	return revoked
+}
+
+// ActiveTokens counts currently-valid (unexpired, unrevoked) tokens — for the
+// operator's rotation visibility (surfaced via diagnostics).
+func (a *TokenAuthenticator) ActiveTokens() int {
+	now := a.now()
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	n := 0
+	for _, e := range a.entries {
+		if e.live(now) {
+			n++
+		}
+	}
+	return n
+}
+
+// Authenticate resolves a token to its tenant, failing closed. The secret
+// comparison is constant-time and checks EVERY entry (no early exit), so
+// neither match position nor a near-miss leaks through timing.
 func (a *TokenAuthenticator) Authenticate(token string) (string, error) {
 	if token == "" {
 		return "", ErrUnauthenticated
 	}
-	if t, ok := a.tokens[token]; ok {
-		return t, nil
+	h := crypto.Hash([]byte(token))
+	now := a.now()
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	tenant := ""
+	matched := 0
+	for _, e := range a.entries {
+		// Constant-time secret compare on EVERY entry (no early exit), so
+		// neither match position nor a near-miss leaks through timing.
+		if crypto.ConstantTimeEqual(h, e.hash) && e.live(now) {
+			tenant = e.tenant
+			matched = 1
+		}
+	}
+	if matched == 1 {
+		return tenant, nil
 	}
 	return "", ErrUnauthenticated
 }
