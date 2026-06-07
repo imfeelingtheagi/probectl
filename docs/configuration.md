@@ -705,6 +705,7 @@ anomalies):
 | `PROBECTL_FLOWSTORE_URL`          | (none)   | ClickHouse HTTP(S) endpoint (required in clickhouse mode)            |
 | `PROBECTL_FLOWSTORE_TENANT_SCOPING` | `false` | TENANT-102: attach a per-request tenant custom setting to ClickHouse reads so a reader row policy constrains the query path at the DB (needs server-side `custom_settings_prefixes=SQL_` + a reader user) |
 | `PROBECTL_FLOWSTORE_READER_USER` | (none) | TENANT-102: the ClickHouse reader user the setting-scoped row policy is installed on at boot |
+| `PROBECTL_AGENT_IDENTITY_SERVER` | (none) | Sprint 11: control-plane HTTPS base URL enabling automatic SVID rotation (the agent rotates its mTLS identity at ~2/3 lifetime via /enroll/agent/rotate); also `identity.server` in the agent YAML. See docs/agent/enrollment.md |
 | `PROBECTL_ENVELOPE_KEY_FILE` | (none) | SEC-002: path to the at-rest KEK file — loaded, or GENERATED+persisted (0600) on first boot; explicit `PROBECTL_ENVELOPE_KEY` wins. Shipped compose sets it on the `controldata` volume |
 | `PROBECTL_STORAGE_ENCRYPTION_ATTESTED` | `false` | COMPLY-004: operator attestation that bulk-store volumes are encrypted below the host (cloud-volume encryption invisible to preflight) — logged, downgrades the preflight warning |
 | `PROBECTL_REQUIRE_AT_REST_ENCRYPTION` | `false` | TENANT-106: FATAL at startup if no envelope key is resolvable (refuse plaintext at-rest) instead of silent passthrough |

@@ -1,0 +1,334 @@
+// Package enroll is the agent trust root (Sprint 11 — WIRE-002/RED-002/
+// TENANT-103/ARCH-004; ADR docs/adr/agent-enrollment.md): one-time,
+// tenant-scoped join tokens bootstrap a CSR-based issuance of short-lived
+// SPIFFE SVIDs from the repo-managed root→intermediate agent CA. The Sprint 4
+// server-side tenant binding now reads identities THIS package issued.
+//
+// Security posture, stated:
+//   - the TOKEN names the tenant — an agent can never request one;
+//   - tokens are single-use (atomic consume), short-lived, stored as hashes;
+//   - the agent's private key never leaves the agent (CSR);
+//   - the server controls SAN/EKU/TTL — CSR-requested extensions are ignored;
+//   - rotation requires proof of the CURRENT identity (chain + possession)
+//     and never changes it;
+//   - every issued serial is recorded (Sprint 12 revocation feeds from it).
+package enroll
+
+import (
+	"context"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
+	"github.com/imfeelingtheagi/probectl/internal/store"
+	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/internal/tenantcrypto"
+)
+
+const (
+	// DefaultLeafTTL bounds stolen-key exposure (ADR decision 2).
+	DefaultLeafTTL = 24 * time.Hour
+	// DefaultTokenTTL bounds stolen-token exposure (ADR decision 1).
+	DefaultTokenTTL = time.Hour
+
+	rootCN  = "probectl agent root"
+	interCN = "probectl agent issuing"
+
+	// caSealScope/caSealAAD bind the sealed intermediate key to its purpose —
+	// a deployment-global secret, sealed like every other secret at rest.
+	caSealScope = "deployment"
+	caSealAAD   = "agent-ca-intermediate"
+)
+
+// Refusals. ErrInvalidToken is deliberately uninformative (replay, expiry,
+// revocation, and unknown all look identical to the caller).
+var (
+	ErrInvalidToken  = errors.New("enroll: invalid enrollment token")
+	ErrBadCSR        = errors.New("enroll: invalid CSR")
+	ErrNotOurs       = errors.New("enroll: certificate was not issued by this deployment (fail closed)")
+	ErrIdentityFixed = errors.New("enroll: rotation cannot change identity")
+)
+
+// Service issues and rotates agent SVIDs.
+type Service struct {
+	pool    *pgxpool.Pool
+	ca      *crypto.CA // the issuing intermediate (unsealed in memory only)
+	rootPEM []byte
+	leafTTL time.Duration
+	log     *slog.Logger
+	now     func() time.Time
+}
+
+// InitCA generates the hierarchy ONCE: root (10y) → intermediate (1y). The
+// intermediate key is sealed via tenantcrypto before storage; the ROOT key is
+// returned to the caller for offline custody and never persisted. Refuses to
+// overwrite an existing hierarchy.
+func InitCA(ctx context.Context, pool *pgxpool.Pool) (rootKeyPEM []byte, err error) {
+	cas := store.NewAgentCA(pool)
+	if _, _, err := cas.Load(ctx, "root"); err == nil {
+		return nil, fmt.Errorf("enroll: agent CA already initialized (refusing to overwrite the trust root)")
+	} else if !errors.Is(err, store.ErrAgentCANotInitialized) {
+		return nil, err
+	}
+	root, err := crypto.GenerateRootCA(rootCN, 10*365*24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	inter, err := root.IssueIntermediate(interCN, 365*24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	interKey, err := inter.KeyPEM()
+	if err != nil {
+		return nil, err
+	}
+	sealed, err := tenantcrypto.Seal(ctx, caSealScope, interKey, []byte(caSealAAD))
+	if err != nil {
+		return nil, fmt.Errorf("enroll: seal intermediate key: %w", err)
+	}
+	if err := cas.Save(ctx, "root", string(root.CertPEM()), ""); err != nil {
+		return nil, err
+	}
+	if err := cas.Save(ctx, "intermediate", string(inter.CertPEM()), sealed); err != nil {
+		return nil, err
+	}
+	rootKey, err := root.KeyPEM()
+	if err != nil {
+		return nil, err
+	}
+	return rootKey, nil
+}
+
+// Load builds the service from the persisted hierarchy (unsealing the
+// intermediate key through tenantcrypto). store.ErrAgentCANotInitialized
+// tells the caller enrollment is not configured yet.
+func Load(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) (*Service, error) {
+	cas := store.NewAgentCA(pool)
+	rootCert, _, err := cas.Load(ctx, "root")
+	if err != nil {
+		return nil, err
+	}
+	interCert, sealedKey, err := cas.Load(ctx, "intermediate")
+	if err != nil {
+		return nil, err
+	}
+	if sealedKey == "" {
+		return nil, fmt.Errorf("enroll: intermediate key missing (re-run agent-ca init)")
+	}
+	interKey, err := tenantcrypto.Open(ctx, caSealScope, sealedKey, []byte(caSealAAD))
+	if err != nil {
+		return nil, fmt.Errorf("enroll: unseal intermediate key (is the envelope key configured?): %w", err)
+	}
+	ca, err := crypto.LoadCA([]byte(interCert), interKey)
+	if err != nil {
+		return nil, err
+	}
+	if log == nil {
+		log = slog.Default()
+	}
+	return &Service{pool: pool, ca: ca, rootPEM: []byte(rootCert),
+		leafTTL: DefaultLeafTTL, log: log, now: time.Now}, nil
+}
+
+// WithLeafTTL overrides the SVID TTL (tests; config).
+func (s *Service) WithLeafTTL(ttl time.Duration) *Service {
+	if ttl > 0 {
+		s.leafTTL = ttl
+	}
+	return s
+}
+
+// Bundle is the trust bundle transports verify against (root + intermediate).
+func (s *Service) Bundle() []byte {
+	return append(append([]byte{}, s.rootPEM...), s.ca.CertPEM()...)
+}
+
+// MintToken creates a one-time join token for a tenant (operator path,
+// audited by the caller). Returns the DISPLAY token — shown once, never
+// stored (only its hash is).
+func (s *Service) MintToken(ctx context.Context, tenantID, agentID, name, createdBy string, ttl time.Duration) (display, id string, err error) {
+	if ttl <= 0 {
+		ttl = DefaultTokenTTL
+	}
+	raw, err := crypto.Random(32)
+	if err != nil {
+		return "", "", err
+	}
+	display = "pjt_" + hex.EncodeToString(raw)
+	id, err = store.NewEnrollTokens(s.pool).Create(ctx, tenantID, agentID, name, createdBy,
+		crypto.Hash([]byte(display)), ttl)
+	if err != nil {
+		return "", "", err
+	}
+	return display, id, nil
+}
+
+// EnrollRequest is the pre-identity bootstrap call.
+type EnrollRequest struct {
+	Token    string `json:"token"`
+	CSRPEM   string `json:"csr_pem"`
+	Hostname string `json:"hostname"`
+	Version  string `json:"version"`
+	// Attestor reserves the cloud-IID/OIDC extension seam (ADR decision 1).
+	// Only "join-token" (or empty) is implemented.
+	Attestor string `json:"attestor,omitempty"`
+}
+
+// Identity is an issued SVID + its trust context.
+type Identity struct {
+	CertPEM  string    `json:"cert_pem"`  // leaf + intermediate (chain)
+	CABundle string    `json:"ca_bundle"` // root + intermediate (trust anchors)
+	SPIFFEID string    `json:"spiffe_id"`
+	TenantID string    `json:"tenant_id"`
+	AgentID  string    `json:"agent_id"`
+	Serial   string    `json:"serial"`
+	NotAfter time.Time `json:"not_after"`
+}
+
+// Enroll consumes a join token and issues the first SVID. The tenant comes
+// ONLY from the token; the agent id comes from the token's pin or is
+// assigned here. The agent is registered in the tenant's registry, so the
+// Sprint 4 binding immediately vouches for the pair.
+func (s *Service) Enroll(ctx context.Context, req EnrollRequest) (*Identity, error) {
+	if req.Attestor != "" && req.Attestor != "join-token" {
+		return nil, fmt.Errorf("enroll: attestor %q not supported (join-token only; see ADR)", req.Attestor)
+	}
+	if !strings.HasPrefix(req.Token, "pjt_") {
+		return nil, ErrInvalidToken
+	}
+	hostname := strings.TrimSpace(req.Hostname)
+
+	tenantID, pinned, err := store.NewEnrollTokens(s.pool).Consume(ctx, crypto.Hash([]byte(req.Token)), hostname)
+	if err != nil {
+		if errors.Is(err, store.ErrEnrollTokenInvalid) {
+			return nil, ErrInvalidToken
+		}
+		return nil, err
+	}
+	agentID := pinned
+	if agentID == "" {
+		r, err := crypto.Random(6)
+		if err != nil {
+			return nil, err
+		}
+		agentID = "agent-" + hex.EncodeToString(r)
+	}
+	return s.issue(ctx, tenantID, agentID, hostname, req.Version, req.CSRPEM, "" /* first issuance */)
+}
+
+// RotateRequest re-issues an identity over proof of the CURRENT one: the
+// presented cert must chain to OUR hierarchy, be time-valid, have an issued
+// serial on record, and the CSR must be signed by the presented cert's key
+// (possession). Identity never changes on rotation.
+type RotateRequest struct {
+	CertPEM  string `json:"cert_pem"` // the CURRENT leaf
+	CSRPEM   string `json:"csr_pem"`  // for the NEW key
+	ProofHex string `json:"proof"`    // hex ECDSA sig over CSRPEM by the CURRENT key
+}
+
+// Rotate verifies the current identity and issues a fresh SVID for it.
+func (s *Service) Rotate(ctx context.Context, req RotateRequest) (*Identity, error) {
+	block, _ := pem.Decode([]byte(req.CertPEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, ErrNotOurs
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, ErrNotOurs
+	}
+	// Chain: leaf → intermediate → root, time-valid, client-auth.
+	roots, inters := x509.NewCertPool(), x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(s.rootPEM) {
+		return nil, fmt.Errorf("enroll: root bundle unreadable")
+	}
+	inters.AddCert(s.ca.Cert())
+	if _, err := cert.Verify(x509.VerifyOptions{
+		Roots: roots, Intermediates: inters, CurrentTime: s.now(),
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}); err != nil {
+		return nil, ErrNotOurs
+	}
+	id, err := crypto.SPIFFEIDFromCert(cert)
+	if err != nil {
+		return nil, ErrNotOurs
+	}
+	// Possession: the CSR for the NEW key is signed by the CURRENT key.
+	proof, err := hex.DecodeString(req.ProofHex)
+	if err != nil || crypto.ECDSAVerifyCert(cert, []byte(req.CSRPEM), proof) != nil {
+		return nil, fmt.Errorf("enroll: rotation proof invalid (fail closed)")
+	}
+	// Provenance: the serial must be one WE issued for this identity.
+	oldSerial := cert.SerialNumber.Text(16)
+	err = tenancy.InTenant(tenancy.WithTenant(ctx, tenancy.ID(id.TenantID)), s.pool,
+		func(ctx context.Context, _ tenancy.Scope) error {
+			known, kerr := store.NewAgentIdentities(s.pool).KnownSerial(ctx, id.TenantID, id.AgentID, oldSerial)
+			if kerr != nil {
+				return kerr
+			}
+			if !known {
+				return ErrNotOurs
+			}
+			return nil
+		})
+	if err != nil {
+		if errors.Is(err, ErrNotOurs) {
+			return nil, ErrNotOurs
+		}
+		return nil, err
+	}
+	return s.issue(ctx, id.TenantID, id.AgentID, cert.Subject.CommonName, "", req.CSRPEM, oldSerial)
+}
+
+// issue signs the CSR for (tenant, agent), records the identity, and (on
+// first issuance) registers the agent so the Sprint 4 binding vouches for it.
+func (s *Service) issue(ctx context.Context, tenantID, agentID, hostname, version, csrPEM, rotatedFrom string) (*Identity, error) {
+	spiffe := crypto.AgentSPIFFEID(tenantID, agentID)
+	leafPEM, serial, err := s.ca.SignCSR([]byte(csrPEM), spiffe, s.leafTTL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBadCSR, err)
+	}
+	serialHex := serial.Text(16)
+	notAfter := s.now().Add(s.leafTTL)
+
+	err = tenancy.InTenant(tenancy.WithTenant(ctx, tenancy.ID(tenantID)), s.pool,
+		func(ctx context.Context, sc tenancy.Scope) error {
+			if err := store.NewAgentIdentities(s.pool).Record(ctx, tenantID, agentID, spiffe, serialHex, notAfter, rotatedFrom); err != nil {
+				return err
+			}
+			if rotatedFrom == "" {
+				name := hostname
+				if name == "" {
+					name = agentID
+				}
+				if _, err := (store.Agents{}).Register(ctx, sc, agentID, name, hostname, version, spiffe, nil); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	action := "enrolled"
+	if rotatedFrom != "" {
+		action = "rotated"
+	}
+	s.log.Info("agent SVID "+action,
+		"tenant_id", tenantID, "agent_id", agentID, "serial", serialHex,
+		"not_after", notAfter.UTC().Format(time.RFC3339), "rotated_from", rotatedFrom)
+
+	chain := append(append([]byte{}, leafPEM...), s.ca.CertPEM()...)
+	return &Identity{
+		CertPEM: string(chain), CABundle: string(s.Bundle()),
+		SPIFFEID: spiffe, TenantID: tenantID, AgentID: agentID,
+		Serial: serialHex, NotAfter: notAfter,
+	}, nil
+}

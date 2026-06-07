@@ -33,10 +33,24 @@ func (d Duration) Std() time.Duration { return time.Duration(d) }
 type Config struct {
 	ControlPlane ControlPlaneConfig `yaml:"control_plane"`
 	TLS          TLSConfig          `yaml:"tls"`
+	Identity     IdentityConfig     `yaml:"identity"`
 	Agent        Meta               `yaml:"agent"`
 	Buffer       BufferConfig       `yaml:"buffer"`
 	Canaries     []CanaryConfig     `yaml:"canaries"`
 	A2A          A2AConfig          `yaml:"a2a"`
+}
+
+// IdentityConfig wires automatic SVID rotation (Sprint 11): when Server is
+// set, the runtime rotates the TLS material in place at ~2/3 of the leaf
+// lifetime via POST /enroll/agent/rotate, proving the current identity. The
+// files come from `probectl-agent enroll`; ClientMTLSConfigRotating hot-reads
+// the swap, so rotation never restarts the agent.
+type IdentityConfig struct {
+	// Server is the control-plane HTTPS base URL (https://host:8443). Empty
+	// disables automatic rotation (operator-managed certs keep working).
+	Server string `yaml:"server"`
+	// AutoRotate defaults true when Server is set; set false to only enroll.
+	AutoRotate *bool `yaml:"auto_rotate"`
 }
 
 // A2AConfig controls participation in brokered agent-to-agent tests. When
@@ -113,6 +127,7 @@ func (c *Config) applyEnv() {
 	}
 	override("PROBECTL_AGENT_GRPC_ADDR", &c.ControlPlane.GRPCAddr)
 	override("PROBECTL_AGENT_TLS_CERT_FILE", &c.TLS.CertFile)
+	override("PROBECTL_AGENT_IDENTITY_SERVER", &c.Identity.Server)
 	override("PROBECTL_AGENT_TLS_KEY_FILE", &c.TLS.KeyFile)
 	override("PROBECTL_AGENT_TLS_CA_FILE", &c.TLS.CAFile)
 	override("PROBECTL_AGENT_BUFFER_DIR", &c.Buffer.Dir)

@@ -9,6 +9,30 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 11: agent enrollment & SVID issuance — the trust root is now
+  repo-managed (WIRE-002, RED-002, TENANT-103, ARCH-004; ADR
+  founder-approved before code, docs/adr/agent-enrollment.md). One-time
+  tenant-scoped join tokens (hash-at-rest, atomic single-use consume,
+  1h expiry, revocable) bootstrap CSR-based issuance of 24h SPIFFE
+  SVIDs from a root→intermediate→leaf hierarchy: the root key is shown
+  once at `agent-ca init` for offline custody and never persisted; the
+  issuing intermediate is sealed at rest via tenantcrypto. The SERVER
+  sets the SPIFFE tenant claim from the TOKEN — an agent cannot request
+  a tenant. Rotation proves the current identity (chain to our
+  hierarchy + key-possession signature over the new CSR + issued-serial
+  provenance) and can never change it; the agent runtime auto-rotates
+  at 2/3 lifetime with hot-reloaded mTLS material (no restart). Mint
+  surfaces: POST /v1/agents/enroll-tokens (admin RBAC, audited) +
+  `probectl-control enroll-token`; bootstrap surface mounts OFF /v1
+  (`/enroll/agent[/rotate]`), per-IP throttled, with `--ca-pin`
+  first-contact server authentication (mismatch refuses, no TOFU). The
+  Sprint 4 tenant binding now vouches for repo-issued identities only;
+  every serial is recorded for Sprint 12 revocation feeding.
+  Integration tests: happy path, replay rejection, wrong-tenant
+  impossibility (incl. cross-tenant registry invisibility), rotation,
+  foreign-CA + bad-proof rejection; client tests: pin mismatch, 0600
+  identity dir, rotation-due policy; docs/agent/enrollment.md.
+
 - Sprint 10: residual hardening (SEC-006/007/008, OPS-003/010). SSRF
   guard denies the full 0.0.0.0/8 "this network" block (Linux routes
   0.x.y.z to localhost) incl. v4-mapped smuggles, with per-range table

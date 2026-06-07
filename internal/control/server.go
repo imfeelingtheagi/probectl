@@ -23,6 +23,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/cost"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/endpoint"
+	"github.com/imfeelingtheagi/probectl/internal/enroll"
 	"github.com/imfeelingtheagi/probectl/internal/fairness"
 	"github.com/imfeelingtheagi/probectl/internal/license"
 	"github.com/imfeelingtheagi/probectl/internal/notify"
@@ -64,6 +65,8 @@ type Server struct {
 	providers auth.ProviderFactory
 	// authLimiter throttles the auth endpoints per IP + per account (U-024).
 	authLimiter *auth.Limiter
+	// enrollSvc issues agent SVIDs (Sprint 11); nil = enrollment unconfigured.
+	enrollSvc *enroll.Service
 
 	// AI assistant (S24). The RCA analyzer over the S23 query engine; always set
 	// (built-in air-gapped model + incidents evidence when a pool is present).
@@ -341,6 +344,14 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /auth/login", s.throttleAuth(s.handleLogin))
 	mux.Handle("GET /auth/callback", s.throttleAuth(s.handleCallback))
 	mux.Handle("POST /auth/logout", apiHandler(s.handleLogout))
+
+	// Agent enrollment (Sprint 11) — PRE-IDENTITY by design, so it mounts
+	// OFF /v1 (the /v1 surface ≡ the RBAC'd route table; this is a bootstrap
+	// surface like /auth): /enroll/agent is authenticated by the one-time
+	// join token, /enroll/agent/rotate by proof of the current SVID. Both
+	// ride the U-024 per-IP throttle.
+	mux.Handle("POST /enroll/agent", s.throttleAuth(s.handleAgentEnroll))
+	mux.Handle("POST /enroll/agent/rotate", s.throttleAuth(s.handleAgentRotate))
 
 	// Change-event ingest (S29) — NOT session-authenticated: it authenticates each
 	// delivery itself by verifying the provider's HMAC/token signature, then binds

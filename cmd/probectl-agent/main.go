@@ -29,6 +29,14 @@ func main() {
 		case "version", "-version", "--version":
 			fmt.Println("probectl-agent", version.Get())
 			return
+		case "enroll":
+			// Sprint 11 (ADR docs/adr/agent-enrollment.md): redeem a one-time
+			// join token for a tenant-bound SVID and write the identity dir.
+			if err := runEnroll(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "probectl-agent enroll:", err)
+				os.Exit(1)
+			}
+			return
 		}
 	}
 	if err := run(); err != nil {
@@ -82,6 +90,13 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// Automatic SVID rotation (Sprint 11): rotate the on-disk identity at
+	// ~2/3 of its lifetime; the mTLS client hot-reloads the swap.
+	if cfg.Identity.Server != "" && (cfg.Identity.AutoRotate == nil || *cfg.Identity.AutoRotate) {
+		go agent.RotationLoop(ctx, log, cfg.Identity.Server,
+			cfg.TLS.CertFile, cfg.TLS.KeyFile, cfg.TLS.CAFile, 0)
+		log.Info("automatic SVID rotation enabled", "server", cfg.Identity.Server)
+	}
 	return a.Run(ctx)
 }
 

@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -34,6 +35,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/control"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/endpoint"
+	"github.com/imfeelingtheagi/probectl/internal/enroll"
 	"github.com/imfeelingtheagi/probectl/internal/fairness"
 	"github.com/imfeelingtheagi/probectl/internal/incident"
 	"github.com/imfeelingtheagi/probectl/internal/lifecycle"
@@ -86,10 +88,10 @@ func run(cmd string) error {
 		// Sprint 8 (SEC-002/COMPLY-004): deployment self-check — envelope key
 		// + operator storage-encryption duties (docs/hardening.md).
 		return runPreflight(os.Args[2:])
-	case "serve", "migrate", "mcp-stdio", "mcp-token", "scim-token":
+	case "serve", "migrate", "mcp-stdio", "mcp-token", "scim-token", "agent-ca", "enroll-token":
 		// fall through to the configured path below
 	default:
-		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | gen-cert | support-bundle | preflight | version)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | agent-ca | enroll-token | gen-cert | support-bundle | preflight | version)", cmd)
 	}
 
 	cfg, err := config.LoadFromEnv()
@@ -204,6 +206,14 @@ func run(cmd string) error {
 		return runMCPStdio(cfg, log, db)
 	case "mcp-token":
 		return runMCPToken(log, db, os.Args[2:])
+	case "agent-ca":
+		// Sprint 11: `agent-ca init` generates the enrollment hierarchy once.
+		if len(os.Args) < 3 || os.Args[2] != "init" {
+			return fmt.Errorf("usage: probectl-control agent-ca init")
+		}
+		return runAgentCAInit(context.Background(), db)
+	case "enroll-token":
+		return runEnrollToken(context.Background(), cfg, db, os.Args[2:])
 	case "scim-token":
 		return runSCIMToken(log, db, os.Args[2:])
 	}
@@ -454,6 +464,19 @@ func run(cmd string) error {
 	// test-result views; served at /v1/results/latest.
 	latestResults := control.NewLatestResults(0)
 
+	// Agent enrollment (Sprint 11): load the issuance service when the CA
+	// hierarchy exists; otherwise the enroll routes answer 503 with the init
+	// instruction (no silent half-configured trust root).
+	enrollSvc, enrollErr := enroll.Load(context.Background(), db.Pool(), log)
+	switch {
+	case enrollErr == nil:
+		log.Info("agent enrollment enabled (SVID issuance active)", "leaf_ttl", enroll.DefaultLeafTTL.String())
+	case errors.Is(enrollErr, store.ErrAgentCANotInitialized):
+		log.Info("agent enrollment not configured (run: probectl-control agent-ca init)")
+	default:
+		return fmt.Errorf("load agent enrollment service: %w", enrollErr)
+	}
+
 	srv := control.New(cfg, log, db, db.Pool(), pathStore, nil).
 		WithDispatcher(dispatcher).
 		WithFlowStore(flowStore).
@@ -469,6 +492,9 @@ func run(cmd string) error {
 		WithCarbon(carbonEngine)      // energy/carbon estimates at /v1/carbon (S48)
 	if sloOn {
 		srv.WithSLO(sloEngine) // SLO statuses at /v1/slos + what-if impact (S45)
+	}
+	if enrollSvc != nil {
+		srv.SetEnrollService(enrollSvc)
 	}
 	if complianceOn {
 		srv.WithCompliance(complianceEngine) // verdicts + evidence at /v1/compliance (S46)

@@ -1,0 +1,235 @@
+//go:build integration
+
+// Sprint 11 acceptance (ADR docs/adr/agent-enrollment.md): enrollment
+// happy-path, token replay rejection, wrong-tenant impossibility, rotation —
+// against real Postgres (the CI integration job provides it; skips locally).
+package enroll_test
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
+	"github.com/imfeelingtheagi/probectl/internal/enroll"
+	"github.com/imfeelingtheagi/probectl/internal/pipeline"
+	"github.com/imfeelingtheagi/probectl/internal/store"
+	"github.com/imfeelingtheagi/probectl/internal/store/migrate"
+	"github.com/imfeelingtheagi/probectl/internal/tenancy"
+	"github.com/imfeelingtheagi/probectl/migrations"
+)
+
+func dsn() string {
+	if v := os.Getenv("PROBECTL_DATABASE_URL"); v != "" {
+		return v
+	}
+	return "postgres://probectl@localhost:5432/postgres?sslmode=disable" // dev-only fallback (CI sets TLS, OPS-010)
+}
+
+func setup(ctx context.Context, t *testing.T) (*pgxpool.Pool, *enroll.Service, string) {
+	t.Helper()
+	pool, err := pgxpool.New(ctx, dsn())
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		t.Skipf("no database available: %v", err)
+	}
+	if _, err := migrate.New(migrations.FS, nil).Apply(ctx, pool); err != nil {
+		pool.Close()
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	// Init the hierarchy once per database (idempotent across test runs).
+	if _, err := enroll.InitCA(ctx, pool); err != nil && !strings.Contains(err.Error(), "already initialized") {
+		t.Fatalf("init CA: %v", err)
+	}
+	svc, err := enroll.Load(ctx, pool, nil)
+	if err != nil {
+		t.Fatalf("load enrollment service: %v", err)
+	}
+
+	tn, err := store.NewTenants(pool).Create(ctx, fmt.Sprintf("enr-%d", time.Now().UnixNano()), "Enroll T")
+	if err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	return pool, svc, tn.ID
+}
+
+func TestEnrollHappyPathIssuesTenantBoundSVID(t *testing.T) {
+	ctx := context.Background()
+	pool, svc, tenantID := setup(ctx, t)
+
+	display, _, err := svc.MintToken(ctx, tenantID, "", "ci", "test", time.Hour)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	csr, _, err := crypto.CreateCSR("host-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr), Hostname: "host-a", Version: "v1"})
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+
+	// The SVID is bound to the TOKEN's tenant — SPIFFE id carries tenant+agent.
+	if id.TenantID != tenantID {
+		t.Fatalf("identity tenant = %s, want the token's %s", id.TenantID, tenantID)
+	}
+	wantPrefix := "spiffe://probectl/tenant/" + tenantID + "/agent/"
+	if !strings.HasPrefix(id.SPIFFEID, wantPrefix) {
+		t.Fatalf("spiffe id %q does not bind the tenant", id.SPIFFEID)
+	}
+
+	// The Sprint 4 binding now vouches for the pair (a REAL, repo-issued identity).
+	binding := pipeline.NewRegistryBinding(pool)
+	if err := binding.Verify(ctx, tenantID, id.AgentID); err != nil {
+		t.Fatalf("S4 binding must vouch for the enrolled agent: %v", err)
+	}
+	// And refuses the same agent under ANOTHER tenant (wrong-tenant rejection).
+	other, err := store.NewTenants(pool).Create(ctx, fmt.Sprintf("enr-o-%d", time.Now().UnixNano()), "Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := binding.Verify(ctx, other.ID, id.AgentID); err == nil {
+		t.Fatal("S4 binding vouched for the agent under a foreign tenant")
+	}
+}
+
+func TestEnrollTokenReplayRejected(t *testing.T) {
+	ctx := context.Background()
+	_, svc, tenantID := setup(ctx, t)
+
+	display, _, err := svc.MintToken(ctx, tenantID, "", "", "test", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr, _, _ := crypto.CreateCSR("host-b")
+	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr)}); err != nil {
+		t.Fatalf("first use: %v", err)
+	}
+	// REPLAY: the same token a second time must be refused, uninformatively.
+	csr2, _, _ := crypto.CreateCSR("host-c")
+	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr2)}); err == nil {
+		t.Fatal("token replay was accepted (single-use violated)")
+	}
+	// Unknown/garbage tokens are equally refused.
+	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: "pjt_deadbeef", CSRPEM: string(csr2)}); err == nil {
+		t.Fatal("unknown token accepted")
+	}
+}
+
+func TestRotationKeepsIdentityAndRecordsNewSerial(t *testing.T) {
+	ctx := context.Background()
+	pool, svc, tenantID := setup(ctx, t)
+	_ = pool
+
+	display, _, err := svc.MintToken(ctx, tenantID, "agent-rot", "", "test", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr1, key1, _ := crypto.CreateCSR("host-r")
+	first, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr1)})
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+
+	// Rotate: new key, proof signed by the CURRENT key.
+	csr2, _, _ := crypto.CreateCSR("host-r")
+	proof, err := crypto.ECDSASignPEM(key1, csr2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := svc.Rotate(ctx, enroll.RotateRequest{
+		CertPEM: leafOnly(first.CertPEM), CSRPEM: string(csr2), ProofHex: fmt.Sprintf("%x", proof)})
+	if err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	if second.SPIFFEID != first.SPIFFEID || second.TenantID != first.TenantID || second.AgentID != first.AgentID {
+		t.Fatalf("rotation changed identity: %+v -> %+v", first, second)
+	}
+	if second.Serial == first.Serial {
+		t.Fatal("rotation did not issue a new serial")
+	}
+
+	// A FOREIGN cert (different hierarchy) must be refused.
+	foreignCA, _ := crypto.GenerateRootCA("evil root", time.Hour)
+	foreignInter, _ := foreignCA.IssueIntermediate("evil inter", time.Hour)
+	fcsr, fkey, _ := crypto.CreateCSR("evil")
+	fleaf, _, err := foreignInter.SignCSR(fcsr, "spiffe://probectl/tenant/"+tenantID+"/agent/agent-rot", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fcsr2, _, _ := crypto.CreateCSR("evil2")
+	fproof, _ := crypto.ECDSASignPEM(fkey, fcsr2)
+	if _, err := svc.Rotate(ctx, enroll.RotateRequest{
+		CertPEM: string(fleaf), CSRPEM: string(fcsr2), ProofHex: fmt.Sprintf("%x", fproof)}); err == nil {
+		t.Fatal("rotation accepted a certificate from a FOREIGN CA")
+	}
+
+	// A bad possession proof must be refused even with OUR cert.
+	csr3, _, _ := crypto.CreateCSR("host-r")
+	if _, err := svc.Rotate(ctx, enroll.RotateRequest{
+		CertPEM: leafOnly(second.CertPEM), CSRPEM: string(csr3), ProofHex: "deadbeef"}); err == nil {
+		t.Fatal("rotation accepted a bad possession proof")
+	}
+}
+
+// TestWrongTenantCannotBeRequested: the tenant comes ONLY from the token —
+// there is no request field to even attempt a cross-tenant enrollment, and a
+// token minted for tenant A can never yield tenant B.
+func TestWrongTenantCannotBeRequested(t *testing.T) {
+	ctx := context.Background()
+	pool, svc, tenantA := setup(ctx, t)
+
+	tnB, err := store.NewTenants(pool).Create(ctx, fmt.Sprintf("enr-b-%d", time.Now().UnixNano()), "B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	display, _, err := svc.MintToken(ctx, tenantA, "", "", "test", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr, _, _ := crypto.CreateCSR("host-w")
+	id, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.TenantID != tenantA || id.TenantID == tnB.ID {
+		t.Fatalf("token for tenant A yielded tenant %s", id.TenantID)
+	}
+	// The issued agent exists ONLY in A's registry partition (RLS-scoped).
+	err = tenancy.InTenant(tenancy.WithTenant(ctx, tenancy.ID(tnB.ID)), pool,
+		func(ctx context.Context, sc tenancy.Scope) error {
+			a, gerr := (store.Agents{}).Get(ctx, sc, id.AgentID)
+			if gerr != nil {
+				return gerr
+			}
+			if a != nil {
+				t.Fatal("enrolled agent visible in tenant B's registry (CROSS-TENANT LEAK)")
+			}
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// leafOnly strips the chain down to the first certificate block (Rotate
+// parses the leaf; clients send the leaf).
+func leafOnly(chainPEM string) string {
+	const end = "-----END CERTIFICATE-----"
+	i := strings.Index(chainPEM, end)
+	if i < 0 {
+		return chainPEM
+	}
+	return chainPEM[:i+len(end)] + "\n"
+}
