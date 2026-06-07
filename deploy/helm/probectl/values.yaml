@@ -75,9 +75,11 @@ ingress:
   # or pre-create the secret. HTTPS-by-default requires this to be set.
   tlsSecretName: probectl-tls
   hstsMaxAge: 31536000
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  # Extra annotations merged into the Ingress. The TLS-redirect + HSTS
+  # annotations are HARDCODED in the template (secure-by-default) — do not
+  # repeat them here: duplicate map keys are invalid YAML and the
+  # kubeconform gate rejects the render.
+  annotations: {}
     # cert-manager.io/cluster-issuer: letsencrypt-prod
 
 resources:
