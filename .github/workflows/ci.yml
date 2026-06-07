@@ -477,6 +477,8 @@ jobs:
           fetch-depth: 0
       - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1.50.0
         with:
+          # U-059: pin the buf BINARY too (the action defaults to latest).
+          version: 1.50.0
           github_token: ${{ github.token }}
       - name: buf lint
         run: buf lint
@@ -495,10 +497,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Install codegen plugins
+      - name: Install codegen plugins (pinned — U-059)
+        # Versions MUST match the committed internal/gen headers; the diff
+        # check below fails on any drift (generated-code poisoning guard:
+        # plugins are checksum-verified via the Go module sum database, and
+        # the output must reproduce the reviewed, committed tree exactly).
         run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Verify generated code is current
         run: |
@@ -545,7 +551,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: govulncheck (Go dependencies)
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - name: Trivy filesystem scan (vulns + secrets)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

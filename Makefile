@@ -35,6 +35,12 @@ COMPOSE_DEV    := deploy/compose/dev.yml
 
 # Pinned tool versions.
 GOLANGCI_LINT_VERSION ?= v2.12.2
+# Codegen + scanner pins (U-059): match the committed internal/gen headers —
+# bump these together with a regenerated tree; floating versions are banned.
+BUF_VERSION ?= v1.50.0
+PROTOC_GEN_GO_VERSION ?= v1.36.11
+PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
+GOVULNCHECK_VERSION ?= v1.1.4
 
 # ---- meta ----------------------------------------------------------------
 .PHONY: help
@@ -255,9 +261,9 @@ proto: ## Lint and generate Go (+ gRPC) from protobuf via buf.
 
 .PHONY: proto-tools
 proto-tools: ## Install protobuf codegen tools (buf + Go plugins) into GOPATH/bin.
-	$(GO) install github.com/bufbuild/buf/cmd/buf@latest
-	$(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	$(GO) install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	$(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	$(GO) install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
 
 # ---- migrate -------------------------------------------------------------
 .PHONY: migrate
@@ -267,7 +273,7 @@ migrate: ## Apply DB migrations against PROBECTL_DATABASE_URL.
 # ---- security ------------------------------------------------------------
 .PHONY: vuln
 vuln: ## Scan Go dependencies for known vulnerabilities (govulncheck).
-	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 # ---- containers / dev stack ---------------------------------------------
 .PHONY: images
@@ -304,8 +310,10 @@ compose-down: ## Stop and remove the local dev stack.
 # ---- housekeeping --------------------------------------------------------
 .PHONY: tools
 tools: ## Install pinned dev tools (golangci-lint) into GOPATH/bin.
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-		| sh -s -- -b $$($(GO) env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
+	# U-060: installed as a Go module at a pinned version — every artifact is
+	# checksum-verified against the Go module sum database (no curl-pipe from
+	# a floating HEAD install script).
+	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 .PHONY: clean
 clean: ## Remove build output.
