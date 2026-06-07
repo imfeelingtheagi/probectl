@@ -31,7 +31,7 @@ the status with the commit hash rather than deleting the row.
 | RED-003 / EBPF-001/002 | sslsniff TLS capture is host-wide once consented (no per-process allowlist); redaction is post-capture | OPEN — consent gate (C13) limits exposure today | eng | Sprint 18 |
 | WIRE-006 | No application-layer replay/freshness protection on ingestion (mTLS limits the attacker to a compromised agent) | OPEN | eng | Sprint 12 |
 | ARCH-002 / SEC-005 / TENANT-108 | ClickHouse reached via raw HTTP with string-escaped queries (`chStr`) — injection hardening is manual | OPEN | eng | Sprint 7 (driver + bound params) |
-| TENANT-102 (residual) | CH row policies exist (`flowstore/clickhouse.go:229`) but the service account is policy-exempt — app compromise = cross-tenant read | OPEN | eng | Sprint 5 |
+| TENANT-102 | CH service account was policy-exempt — app compromise = cross-tenant read | **CLOSED (Sprint 5)** — opt-in per-request setting scoping + reader row policy (fail-closed when unset); split reader/writer documented (`docs/security/tenant-isolation.md`). Residual by design: the write/service account stays read-capable for ingest+migrations until the reader split is enabled | eng | done (operator-enabled) |
 | CODE-002 | Ignored `json.Unmarshal` errors on ABAC/audit/store reads (`store/abac.go:27,30` is fail-open-ish under deny-override) | OPEN | eng | Sprint 2 (next) |
 | CODE-006 | Committed test private key | **CLOSED (Sprint 1, 425143b)** — key deleted, runtime keygen via internal/crypto, gitleaks secret-scan gate | eng | done |
 | SCALE-010 | `probectl.otlp.metrics` topic has no consumer — externally-ingested OTLP either drops or the topic is dead code | OPEN | eng | Sprint 16 |

@@ -64,6 +64,12 @@ type Config struct {
 	// owners from S18. EnvelopeKey is a base64-encoded 32-byte KEK.
 	EnvelopeKey   string
 	EnvelopeKeyID string
+	// RequireAtRestEncryption (TENANT-106) makes keyless passthrough a FATAL
+	// startup error instead of a silent plaintext degrade: when true, the
+	// control plane refuses to run without a resolvable envelope key (or the
+	// licensed per-tenant keyring). Off by default (keyless dev); set in the
+	// hardened/regulated profiles.
+	RequireAtRestEncryption bool
 
 	// Agent transport (gRPC). Enabled when the address and all three TLS files
 	// are set; the transport is mTLS-only (never plaintext).
@@ -168,6 +174,13 @@ type Config struct {
 	FlowStoreURL      string
 	FlowRetentionDays int
 	FlowEnrichASN     bool
+	// FlowCHTenantScoping (TENANT-102) attaches a per-request tenant custom
+	// setting to ClickHouse reads so a reader row policy can constrain the
+	// query path at the DB. Requires server-side custom_settings_prefixes=SQL_
+	// and a reader user; off by default. FlowCHReaderUser names that user (the
+	// setting-scoped row policy is installed on it at boot).
+	FlowCHTenantScoping bool
+	FlowCHReaderUser    string
 
 	// CMDB integration (S40): read-only CI correlation. CMDBProvider "" keeps
 	// the feature off; "servicenow" requires CMDBURL (https, or http loopback
@@ -459,6 +472,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		TLSKeyFile:               l.str("PROBECTL_TLS_KEY_FILE", ""),
 		EnvelopeKey:              l.str("PROBECTL_ENVELOPE_KEY", ""),
 		EnvelopeKeyID:            l.str("PROBECTL_ENVELOPE_KEY_ID", "dev"),
+		RequireAtRestEncryption:  l.boolean("PROBECTL_REQUIRE_AT_REST_ENCRYPTION", false),
 		AgentGRPCAddr:            l.str("PROBECTL_AGENT_GRPC_ADDR", ""),
 		AgentSkewWindow:          l.intRange("PROBECTL_AGENT_SKEW_WINDOW", 1, 0, 100),
 		AgentMinVersion:          l.str("PROBECTL_AGENT_MIN_VERSION", ""),
@@ -492,6 +506,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		FlowStoreURL:             l.str("PROBECTL_FLOWSTORE_URL", ""),
 		FlowRetentionDays:        l.intRange("PROBECTL_FLOW_RETENTION_DAYS", 0, 0, 3650),
 		FlowEnrichASN:            l.boolean("PROBECTL_FLOW_ENRICH_ASN", false),
+		FlowCHTenantScoping:      l.boolean("PROBECTL_FLOWSTORE_TENANT_SCOPING", false),
+		FlowCHReaderUser:         l.str("PROBECTL_FLOWSTORE_READER_USER", ""),
 		CMDBProvider:             l.enum("PROBECTL_CMDB_PROVIDER", "", "", "servicenow"),
 		CMDBURL:                  l.str("PROBECTL_CMDB_URL", ""),
 		CMDBSecret:               l.str("PROBECTL_CMDB_SECRET", ""),

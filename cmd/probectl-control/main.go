@@ -115,6 +115,11 @@ func run(cmd string) error {
 			return fmt.Errorf("envelope sealer: %w", err)
 		}
 		tenantcrypto.SetPrimary(sealer)
+	} else if cfg.RequireAtRestEncryption {
+		// TENANT-106: fail closed — refuse to start rather than silently write
+		// tenant secrets in plaintext when encryption is required.
+		return fmt.Errorf("PROBECTL_REQUIRE_AT_REST_ENCRYPTION is set but no envelope key is resolvable " +
+			"(set PROBECTL_ENVELOPE_KEY, or the licensed per-tenant keyring) — refusing to start with plaintext at-rest storage")
 	}
 	// mcp-stdio uses stdout for its JSON-RPC channel, so its logs go to stderr.
 	logOut := os.Stdout
@@ -186,6 +191,14 @@ func run(cmd string) error {
 		}
 	}
 
+	// TENANT-104: verify the RLS posture before serving — the app role must be
+	// non-super, non-bypassrls, and every tenant table must FORCE row security.
+	// Fail closed: a deployment where RLS is silently off must not run.
+	if err := tenancy.AssertIsolationPosture(context.Background(), db.Pool()); err != nil {
+		return fmt.Errorf("tenant isolation self-check failed: %w", err)
+	}
+	log.Info("tenant isolation posture verified (RLS forced, app role non-bypass)")
+
 	log.Info("starting probectl-control", "version", version.Get().Version, "config", cfg)
 
 	// Result pipeline: a message bus that the control plane consumes and writes
@@ -219,6 +232,22 @@ func run(cmd string) error {
 		return fmt.Errorf("flow store: %w", err)
 	}
 	defer flowStore.Close()
+	// TENANT-102: DB-level reader scoping. When enabled, reads attach the
+	// per-request tenant custom setting and the reader row policy constrains
+	// the query path even if app-layer WHERE scoping is bypassed.
+	if cfg.FlowCHTenantScoping {
+		if ch, ok := flowStore.(*flowstore.ClickHouse); ok {
+			ch.WithTenantScoping(true)
+			if cfg.FlowCHReaderUser != "" {
+				if perr := ch.EnsureReaderRowPolicy(context.Background(), cfg.FlowCHReaderUser); perr != nil {
+					return fmt.Errorf("flow store reader policy: %w", perr)
+				}
+				log.Info("flowstore: ClickHouse reader row policy installed (TENANT-102)", "reader_user", cfg.FlowCHReaderUser)
+			} else {
+				log.Warn("flowstore: tenant scoping on but PROBECTL_FLOWSTORE_READER_USER unset — reads carry the setting but no policy enforces it yet")
+			}
+		}
+	}
 
 	// ASN/geo enrichment for flows (S15 via S38): OPT-IN — Team Cymru is an
 	// outbound DNS dependency, so it stays off unless explicitly enabled

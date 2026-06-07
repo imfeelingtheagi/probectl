@@ -73,7 +73,24 @@ type ClickHouse struct {
 	base    string
 	client  *http.Client
 	router  TargetRouter // nil = everything pooled
+	// tenantScoping (TENANT-102) attaches the per-request custom setting
+	// SQL_probectl_tenant to every tenant-scoped read, so a row policy can
+	// constrain the query path at the DB even if app-layer WHERE scoping is
+	// bypassed. Off by default: it requires the operator to allow the
+	// custom-settings prefix and install the reader policy (see
+	// docs/security/tenant-isolation.md). When off, app-layer WHERE scoping
+	// (always present) is the boundary.
+	tenantScoping bool
 }
+
+// tenantSettingName is the ClickHouse custom setting carrying the request
+// tenant; the reader row policy binds SELECTs to getSetting() of it.
+const tenantSettingName = "SQL_probectl_tenant"
+
+// WithTenantScoping enables per-request custom-setting tenant scoping on reads
+// (TENANT-102). Call EnsureReaderRowPolicy on the reader user to make it
+// enforcing.
+func (c *ClickHouse) WithTenantScoping(on bool) *ClickHouse { c.tenantScoping = on; return c }
 
 // NewClickHouse connects, ensures the shared schema, and (when retentionDays
 // > 0) applies the delete-TTL — idempotently, so repeated starts are safe.
@@ -214,6 +231,29 @@ func (c *ClickHouse) Insert(ctx context.Context, rows []Row) error {
 // (U-026 defense in depth: the predicate can never be omitted by a caller).
 var ErrNoTenant = errors.New("flowstore: tenant_id is required (refusing an unscoped ClickHouse query)")
 
+// EnsureReaderRowPolicy installs the SETTING-SCOPED row policy (TENANT-102):
+// the readerUser's SELECTs are constrained to rows whose tenant_id equals the
+// per-request custom setting SQL_probectl_tenant. With the reader user's
+// custom setting defaulting to ” server-side, an UNSET or dropped setting
+// matches NO rows — fail closed. Production routes tenant data reads through
+// this reader user (never the write/service user, which keeps full access for
+// inserts + migrations); a compromised query path that omits the WHERE clause
+// then still cannot cross tenants. See docs/security/tenant-isolation.md.
+func (c *ClickHouse) EnsureReaderRowPolicy(ctx context.Context, readerUser string) error {
+	if readerUser == "" {
+		return fmt.Errorf("flowstore: reader user required for setting-scoped policy")
+	}
+	for _, table := range []string{sharedFlowsTable} {
+		ddl := fmt.Sprintf(
+			"CREATE ROW POLICY IF NOT EXISTS probectl_reader_scope ON %s FOR SELECT USING tenant_id = getSetting('%s') TO %s",
+			table, tenantSettingName, readerUser)
+		if err := c.exec(ctx, "", ddl, nil); err != nil {
+			return fmt.Errorf("flowstore: reader row policy: %w", err)
+		}
+	}
+	return nil
+}
+
 // EnsureRowPolicies installs DB-LEVEL tenancy on the shared tables (U-026):
 // per-tenant ClickHouse users (named exactly the tenant id, per the operator
 // convention in docs/isolation.md) are row-filtered to tenant_id =
@@ -280,7 +320,7 @@ func (c *ClickHouse) TopTalkers(ctx context.Context, q TopQuery) ([]TopRow, erro
 	if err != nil {
 		return nil, err
 	}
-	rows, err := c.query(ctx, t.BaseURL, topSQL(q, table))
+	rows, err := c.queryScoped(ctx, t.BaseURL, q.TenantID, topSQL(q, table))
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +372,7 @@ func (c *ClickHouse) Capacity(ctx context.Context, q CapacityQuery) ([]CapacityP
 	if err != nil {
 		return nil, err
 	}
-	rows, err := c.query(ctx, t.BaseURL, capacitySQL(q, table))
+	rows, err := c.queryScoped(ctx, t.BaseURL, q.TenantID, capacitySQL(q, table))
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +411,7 @@ func (c *ClickHouse) DeleteTenant(ctx context.Context, tenantID string) (int64, 
 		"DELETE FROM "+sharedFlowsTable+" WHERE tenant_id="+chStr(tenantID)+" SETTINGS mutations_sync=2", nil); err != nil {
 		return -1, fmt.Errorf("flowstore: delete tenant: %w", err)
 	}
-	rows, err := c.query(ctx, t.BaseURL,
+	rows, err := c.queryScoped(ctx, t.BaseURL, tenantID,
 		"SELECT count() AS n FROM "+sharedFlowsTable+" WHERE tenant_id="+chStr(tenantID))
 	if err != nil {
 		return -1, err
@@ -417,6 +457,9 @@ func (c *ClickHouse) ExportTenant(ctx context.Context, tenantID string, w io.Wri
 	}
 	sql := "SELECT * FROM " + table + " WHERE tenant_id=" + chStr(tenantID) + " ORDER BY ts FORMAT JSONEachRow"
 	u := c.baseFor(t.BaseURL) + "/?query=" + url.QueryEscape(sql)
+	if c.tenantScoping {
+		u += "&" + tenantSettingName + "=" + url.QueryEscape(tenantID)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return 0, err
@@ -436,7 +479,7 @@ func (c *ClickHouse) ExportTenant(ctx context.Context, tenantID string, w io.Wri
 		return 0, err
 	}
 	// Count exported lines for the manifest.
-	rows, qerr := c.query(ctx, t.BaseURL, "SELECT count() AS n FROM "+table+" WHERE tenant_id="+chStr(tenantID))
+	rows, qerr := c.queryScoped(ctx, t.BaseURL, tenantID, "SELECT count() AS n FROM "+table+" WHERE tenant_id="+chStr(tenantID))
 	if qerr != nil || len(rows) == 0 {
 		return -1, nil // streamed fine; count unavailable
 	}
@@ -475,8 +518,22 @@ func (c *ClickHouse) baseFor(base string) string {
 	return strings.TrimRight(base, "/")
 }
 
-func (c *ClickHouse) query(ctx context.Context, base, sql string) ([]map[string]any, error) {
+// queryScoped is query with the per-request tenant custom setting attached
+// (TENANT-102) when scoping is enabled. tenantID "" means an admin/cross-tenant
+// read (migrations, totals) — no setting is attached.
+func (c *ClickHouse) queryScoped(ctx context.Context, base, tenantID, sql string) ([]map[string]any, error) {
 	u := c.baseFor(base) + "/?query=" + url.QueryEscape(sql+" FORMAT JSONEachRow")
+	if c.tenantScoping && tenantID != "" {
+		u += "&" + tenantSettingName + "=" + url.QueryEscape(tenantID)
+	}
+	return c.doQuery(ctx, u)
+}
+
+func (c *ClickHouse) query(ctx context.Context, base, sql string) ([]map[string]any, error) {
+	return c.doQuery(ctx, c.baseFor(base)+"/?query="+url.QueryEscape(sql+" FORMAT JSONEachRow"))
+}
+
+func (c *ClickHouse) doQuery(ctx context.Context, u string) ([]map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err

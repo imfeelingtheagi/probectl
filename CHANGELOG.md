@@ -9,6 +9,22 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 5: database-level tenant-isolation backstops. (TENANT-104)
+  tenancy.AssertIsolationPosture runs at boot and FATALs if the app
+  role is super/bypass-RLS or any tenant_id table lacks FORCE ROW
+  LEVEL SECURITY — RLS-silently-off can no longer serve traffic;
+  isolation suite proves it passes on a migrated DB and rejects an
+  unforced table (non-vacuous). (TENANT-102) opt-in ClickHouse
+  query-path scoping: tenant-scoped reads attach a per-request
+  SQL_probectl_tenant custom setting and EnsureReaderRowPolicy binds a
+  dedicated reader user's SELECTs to it (fail-closed when unset), so
+  the pooled service account can be removed from the read path; the
+  full threat model incl. the residual is in
+  docs/security/tenant-isolation.md. (TENANT-106)
+  PROBECTL_REQUIRE_AT_REST_ENCRYPTION makes keyless passthrough a fatal
+  startup error instead of silent plaintext. All knobs default off
+  (keyless dev still boots); enable in the hardened profiles.
+
 - Sprint 4 [CRITICAL]: server-side tenant binding on ingest — the
   payload tenant_id is never authoritative again. Every bus-consumed
   plane (flow, device, eBPF-derived views, endpoint results, cost/

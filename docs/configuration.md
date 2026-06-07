@@ -703,6 +703,9 @@ anomalies):
 | -------------------------------- | -------- | -------------------------------------------------------------------- |
 | `PROBECTL_FLOWSTORE_MODE`         | `memory` | `memory` \| `clickhouse`                                             |
 | `PROBECTL_FLOWSTORE_URL`          | (none)   | ClickHouse HTTP(S) endpoint (required in clickhouse mode)            |
+| `PROBECTL_FLOWSTORE_TENANT_SCOPING` | `false` | TENANT-102: attach a per-request tenant custom setting to ClickHouse reads so a reader row policy constrains the query path at the DB (needs server-side `custom_settings_prefixes=SQL_` + a reader user) |
+| `PROBECTL_FLOWSTORE_READER_USER` | (none) | TENANT-102: the ClickHouse reader user the setting-scoped row policy is installed on at boot |
+| `PROBECTL_REQUIRE_AT_REST_ENCRYPTION` | `false` | TENANT-106: FATAL at startup if no envelope key is resolvable (refuse plaintext at-rest) instead of silent passthrough |
 | `PROBECTL_FLOW_RETENTION_DAYS`    | `0`      | > 0 applies a ClickHouse delete-TTL to `probectl_flows`              |
 | `PROBECTL_FLOW_ENRICH_ASN`        | `false`  | OPT-IN Team Cymru ASN enrichment (outbound DNS — off by default per the no-phone-home guardrail; device-exported AS numbers always pass through) |
 
