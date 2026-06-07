@@ -15,7 +15,7 @@ func FuzzParseBeacon(f *testing.F) {
 	f.Add([]byte(``))
 	f.Add([]byte(`{"key":"k1","extra":{"a":{"b":{"c":{"d":"deep"}}}}}`))
 
-	f.Fuzz(func(t *testing.T, raw []byte) {
+	f.Fuzz(func(_ *testing.T, raw []byte) {
 		_ = PeekKey(raw) // must never panic
 		b, reason, err := ParseBeacon(raw)
 		if err != nil || reason != "" {

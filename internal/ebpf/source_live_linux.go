@@ -128,6 +128,22 @@ func (e l4eventC) toFlow(cfg *Config) Flow {
 	}
 }
 
+// explainBPFLoadError wraps a bpf() load failure with a clear, structured
+// degradation message when the cause is kernel lockdown confidentiality mode
+// (U-075) — instead of surfacing a bare EPERM/"operation not permitted" that
+// looks like a missing capability. It lives in this -tags ebpf file because
+// the load path is its only consumer (the untagged build would flag it
+// unused).
+func explainBPFLoadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if lockdownBlocksBPF(lockdownMode()) {
+		return fmt.Errorf("ebpf: kernel lockdown is in CONFIDENTIALITY mode, which blocks bpf() even with CAP_BPF — the eBPF agent cannot load programs here; boot without lockdown=confidentiality or use integrity mode (U-075): %w", err)
+	}
+	return err
+}
+
 // Drops returns cumulative dropped records (decode failures + ring-buffer-full).
 func (s *liveSource) Drops() uint64 { return s.drops.Load() }
 

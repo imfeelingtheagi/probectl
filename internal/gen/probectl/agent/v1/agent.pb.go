@@ -471,7 +471,8 @@ func (x *StreamConfigRequest) GetKnownEpoch() uint64 {
 type StreamConfigResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Epoch uint64                 `protobuf:"varint,1,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	// Test/probe definitions arrive here from S7+. Placeholder payload for now.
+	// RESERVED for a future signed config-push design (U-044): always empty
+	// today — see the StreamConfig rpc comment.
 	Payload       []byte `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

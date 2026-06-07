@@ -421,7 +421,7 @@ func (c *ClickHouse) ExportTenant(ctx context.Context, tenantID string, w io.Wri
 	if err != nil {
 		return 0, err
 	}
-	resp, err := c.client.Do(req)
+	resp, err := chDo(c.breaker, c.client, req)
 	if err != nil {
 		return 0, fmt.Errorf("flowstore: export: %w", err)
 	}
@@ -481,7 +481,7 @@ func (c *ClickHouse) query(ctx context.Context, base, sql string) ([]map[string]
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.client.Do(req)
+	resp, err := chDo(c.breaker, c.client, req)
 	if err != nil {
 		return nil, fmt.Errorf("flowstore: clickhouse query: %w", err)
 	}
@@ -510,7 +510,7 @@ func (c *ClickHouse) exec(ctx context.Context, base, query string, body io.Reade
 	if err != nil {
 		return err
 	}
-	resp, err := c.client.Do(req)
+	resp, err := chDo(c.breaker, c.client, req)
 	if err != nil {
 		return fmt.Errorf("flowstore: clickhouse request: %w", err)
 	}
@@ -528,7 +528,7 @@ func (c *ClickHouse) exec(ctx context.Context, base, query string, body io.Reade
 func chDo(b *breaker.Breaker, client *http.Client, req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	err := b.Do(func() error {
-		r, e := client.Do(req)
+		r, e := client.Do(req) //nolint:bodyclose // the response escapes to chDo's caller, which closes it
 		if e != nil {
 			return e
 		}

@@ -282,7 +282,7 @@ func (c *ClickHouse) query(ctx context.Context, sql string) ([]map[string]any, e
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.client.Do(req)
+	resp, err := chDo(c.breaker, c.client, req)
 	if err != nil {
 		return nil, fmt.Errorf("pathstore: clickhouse query: %w", err)
 	}
@@ -309,7 +309,7 @@ func (c *ClickHouse) query(ctx context.Context, sql string) ([]map[string]any, e
 func chDo(b *breaker.Breaker, client *http.Client, req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	err := b.Do(func() error {
-		r, e := client.Do(req)
+		r, e := client.Do(req) //nolint:bodyclose // the response escapes to chDo's caller, which closes it
 		if e != nil {
 			return e
 		}

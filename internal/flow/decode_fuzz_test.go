@@ -23,7 +23,7 @@ func FuzzDecode(f *testing.F) {
 	f.Add([]byte{0xff})
 
 	now := time.Unix(1750000000, 0)
-	f.Fuzz(func(t *testing.T, pkt []byte) {
+	f.Fuzz(func(_ *testing.T, pkt []byte) {
 		d := NewDecoder(time.Minute, 64)
 		recs, _, _ := d.Decode(pkt, "203.0.113.9", now)
 		// Whatever came back must be safely iterable (no torn records).

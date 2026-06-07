@@ -51,7 +51,7 @@ func NewPrometheus(url string) *Prometheus {
 func (p *Prometheus) promDo(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	err := p.breaker.Do(func() error {
-		r, e := p.client.Do(req)
+		r, e := p.client.Do(req) //nolint:bodyclose // the response escapes to promDo's caller, which closes it
 		if e != nil {
 			return e
 		}
