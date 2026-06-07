@@ -9,8 +9,9 @@ import (
 // Evidence is one normalized, citable signal gathered for a question — the unit
 // of grounding. ID is stable within an answer ("E1", "E2", …) so a Finding can
 // cite it and a reader can trace the claim back to the underlying signal. Fields
-// is the raw row from the tenant-and-RBAC-scoped query layer; Ref is a stable
-// pointer back to the source signal for the UI to link.
+// is the row from the tenant-and-RBAC-scoped query layer, reduced to the
+// per-domain allow-list before the answer is serialized (U-092); Ref is a
+// stable pointer back to the source signal for the UI to link.
 type Evidence struct {
 	ID         string    `json:"id"`
 	Domain     Domain    `json:"domain"`
@@ -21,6 +22,52 @@ type Evidence struct {
 	Ref        string    `json:"ref,omitempty"`
 	OccurredAt time.Time `json:"occurred_at,omitempty"`
 	Fields     Row       `json:"fields,omitempty"`
+}
+
+// evidenceFieldAllowList is the per-domain set of row keys that may appear in
+// Evidence.Fields on an API response (U-092). Sources hand the engine raw rows;
+// the model may use them in-process, but the serialized answer carries only
+// these vetted keys — a new source (or a future column) cannot silently leak
+// raw row data to API clients. Keys are the union of what today's sources emit
+// on purpose; extend the list deliberately when a source adds a field.
+var evidenceFieldAllowList = map[Domain]map[string]bool{
+	DomainMetrics:  setOf("metric", "value", "unit", "target", "plane", "severity", "title", "summary", "occurred_at", "timestamp", "at", "time"),
+	DomainEvents:   setOf("id", "kind", "plane", "source", "change_kind", "title", "summary", "target", "prefix", "actor", "ref", "occurred_at"),
+	DomainEntities: setOf("id", "kind", "plane", "severity", "title", "summary", "target", "prefix", "occurred_at"),
+	DomainTopology: setOf("hop", "node", "neighbor", "kind", "label", "plane", "title"),
+}
+
+// universalEvidenceFields applies to any domain without its own allow-list —
+// only the cross-domain display keys survive (fail closed for unknown domains).
+var universalEvidenceFields = setOf("id", "kind", "plane", "severity", "title", "summary", "target", "occurred_at")
+
+func setOf(keys ...string) map[string]bool {
+	m := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		m[k] = true
+	}
+	return m
+}
+
+// sanitizeEvidenceFields strips every non-allow-listed key from each
+// Evidence.Fields in place (U-092), immediately before answer assembly.
+func sanitizeEvidenceFields(evs []Evidence) {
+	for i := range evs {
+		if evs[i].Fields == nil {
+			continue
+		}
+		allowed, ok := evidenceFieldAllowList[evs[i].Domain]
+		if !ok {
+			allowed = universalEvidenceFields
+		}
+		clean := make(Row, len(evs[i].Fields))
+		for k, v := range evs[i].Fields {
+			if allowed[k] {
+				clean[k] = v
+			}
+		}
+		evs[i].Fields = clean
+	}
 }
 
 // collectEvidence turns query rows from one domain into citable Evidence,

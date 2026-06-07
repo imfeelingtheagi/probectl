@@ -197,6 +197,15 @@ type Config struct {
 	AIModelToken    string
 	AIModelTimeout  time.Duration
 	AIMaxEvidence   int
+	// AIMaxConcurrent (U-048) caps concurrent RCA analyses process-wide — a
+	// fail-fast (429) backstop that holds even when no per-tenant fairness
+	// gate is configured.
+	AIMaxConcurrent int
+	// AIPersistAnswers + AIAnswerRetention (U-093): optionally persist every
+	// RCA answer (full cited JSON + model + config hash) for reproducibility
+	// and dispute resolution, pruned past the retention window.
+	AIPersistAnswers  bool
+	AIAnswerRetention time.Duration
 	// AIRedactIPs / AIRedactHostnames (U-013/C8): the pre-egress redaction
 	// pass for REMOTE models — IPs masked by default, hostnames per policy;
 	// obvious secrets are always masked. Local paths are never redacted.
@@ -510,6 +519,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		AIModelToken:             l.str("PROBECTL_AI_MODEL_TOKEN", ""),
 		AIModelTimeout:           l.dur("PROBECTL_AI_MODEL_TIMEOUT", 60*time.Second),
 		AIMaxEvidence:            l.intRange("PROBECTL_AI_MAX_EVIDENCE", 50, 1, 1000),
+		AIMaxConcurrent:          l.intRange("PROBECTL_AI_MAX_CONCURRENT", 8, 1, 1024),
+		AIPersistAnswers:         l.boolean("PROBECTL_AI_PERSIST_ANSWERS", false),
+		AIAnswerRetention:        l.dur("PROBECTL_AI_ANSWER_RETENTION", 90*24*time.Hour),
 		AIEgressAck:              l.str("PROBECTL_AI_EGRESS_ACK", ""),
 		AIRedactIPs:              l.boolean("PROBECTL_AI_REDACT_IPS", true),
 		AIRedactHostnames:        l.boolean("PROBECTL_AI_REDACT_HOSTNAMES", false),

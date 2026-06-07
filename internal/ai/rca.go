@@ -12,6 +12,10 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 )
 
+// DefaultMaxConcurrent is the default process-wide cap on concurrent Analyze
+// calls (U-048) — a backstop that holds even with no fairness gate configured.
+const DefaultMaxConcurrent = 8
+
 // Answer is the result of an RCA: a cited, RBAC-scoped root cause. ID ties an
 // answer to any feedback the user later gives. InsufficientEvidence is set when
 // nothing grounded supports a conclusion — probectl prefers saying so over guessing.
@@ -39,6 +43,12 @@ type Analyzer struct {
 	maxEvidence int
 	newID       func() string
 
+	// sem caps concurrent Analyze calls process-wide (U-048): a default
+	// backstop so a burst of AI calls cannot exhaust the control plane even
+	// when no per-tenant fairness gate is configured. Fail-fast: a saturated
+	// analyzer returns ErrBusy (HTTP 429) instead of queueing.
+	sem chan struct{}
+
 	// Remote-model egress controls (U-013): consulted only when the model
 	// reports RemoteEgress() — the air-gapped default never touches them.
 	egressPolicy EgressPolicy
@@ -53,6 +63,17 @@ func WithModel(m ModelAdapter) AnalyzerOption { return func(a *Analyzer) { a.mod
 
 // WithPlanner overrides the query planner (default: HeuristicPlanner).
 func WithPlanner(p Planner) AnalyzerOption { return func(a *Analyzer) { a.planner = p } }
+
+// WithMaxConcurrent caps concurrent Analyze calls (U-048; default 8). The cap
+// is process-wide and fail-fast (ErrBusy), a backstop under the per-tenant
+// fairness gate when one is configured.
+func WithMaxConcurrent(n int) AnalyzerOption {
+	return func(a *Analyzer) {
+		if n > 0 {
+			a.sem = make(chan struct{}, n)
+		}
+	}
+}
 
 // WithMaxEvidence caps how many signals an answer may gather (cost guard).
 func WithMaxEvidence(n int) AnalyzerOption {
@@ -72,6 +93,7 @@ func NewAnalyzer(engine *Engine, opts ...AnalyzerOption) *Analyzer {
 		planner:     HeuristicPlanner{},
 		maxEvidence: 50,
 		newID:       defaultIDGen,
+		sem:         make(chan struct{}, DefaultMaxConcurrent),
 	}
 	for _, o := range opts {
 		o(a)
@@ -86,6 +108,13 @@ func NewAnalyzer(engine *Engine, opts ...AnalyzerOption) *Analyzer {
 func (a *Analyzer) Analyze(ctx context.Context, p *auth.Principal, q Question) (Answer, error) {
 	if p == nil || p.TenantID == "" {
 		return Answer{}, ErrNoTenant
+	}
+	// U-048: process-wide concurrency backstop, fail-fast (429 at the API).
+	select {
+	case a.sem <- struct{}{}:
+		defer func() { <-a.sem }()
+	default:
+		return Answer{}, ErrBusy
 	}
 	start := time.Now()
 
@@ -137,6 +166,10 @@ func (a *Analyzer) Analyze(ctx context.Context, p *auth.Principal, q Question) (
 	// so a hallucinated reference can never reach the user.
 	syn.Findings = groundFindings(syn.Findings, evidence)
 	insufficient := syn.InsufficientEvidence || len(syn.Findings) == 0
+
+	// U-092: the API response carries only allow-listed evidence fields — the
+	// raw row (which may include keys a future source adds) stays in-process.
+	sanitizeEvidenceFields(evidence)
 
 	ans := Answer{
 		ID:                   a.newID(),

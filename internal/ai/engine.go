@@ -10,7 +10,10 @@ import (
 
 // Engine errors.
 var (
-	ErrNoTenant      = errors.New("ai: no tenant on principal (fail closed)")
+	ErrNoTenant = errors.New("ai: no tenant on principal (fail closed)")
+	// ErrBusy means the process-wide Analyze concurrency cap is saturated
+	// (U-048) — the API maps it to 429 so callers back off, never queue.
+	ErrBusy          = errors.New("ai: analyzer at capacity")
 	ErrForbidden     = errors.New("ai: forbidden — insufficient permission")
 	ErrUnknownDomain = errors.New("ai: unknown query domain")
 	ErrNoSource      = errors.New("ai: no source configured for domain")

@@ -801,6 +801,9 @@ at a model only if you want LLM-written prose; a remote endpoint must be `https`
 | `PROBECTL_AI_MODEL_TOKEN`    | (none)    | API key / bearer token (optional for a local Ollama)              |
 | `PROBECTL_AI_MODEL_TIMEOUT`  | `60s`     | per-request timeout for the model endpoint                         |
 | `PROBECTL_AI_MAX_EVIDENCE`   | `50`      | cost guard: max signals an answer may gather                       |
+| `PROBECTL_AI_MAX_CONCURRENT` | `8`       | U-048: process-wide cap on concurrent RCA analyses (fail-fast 429); a backstop under the per-tenant fairness gate |
+| `PROBECTL_AI_PERSIST_ANSWERS` | `false`  | U-093: persist every RCA answer (full cited JSON + model + config hash) for reproducibility/disputes |
+| `PROBECTL_AI_ANSWER_RETENTION` | `2160h` (90d) | U-093: prune persisted answers older than this (enforced opportunistically on write) |
 
 A non-`builtin` provider without an endpoint fails config validation. Whatever
 the backend, every answer is tenant-and-RBAC-scoped by the S23 query layer and

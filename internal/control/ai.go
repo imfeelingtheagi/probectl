@@ -2,7 +2,10 @@ package control
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -15,6 +18,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/audit"
 	"github.com/imfeelingtheagi/probectl/internal/auth"
 	"github.com/imfeelingtheagi/probectl/internal/config"
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/incident"
 	"github.com/imfeelingtheagi/probectl/internal/store"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
@@ -45,6 +49,9 @@ func buildAnalyzer(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) *ai
 	return ai.NewAnalyzer(buildEngine(cfg, pool),
 		ai.WithModel(buildModel(cfg, log)),
 		ai.WithMaxEvidence(cfg.AIMaxEvidence),
+		// U-048: process-wide concurrency backstop (fail-fast 429), effective
+		// even when no fairness gate is configured.
+		ai.WithMaxConcurrent(cfg.AIMaxConcurrent),
 		// U-013: a REMOTE model is gated on the tenant's recorded consent and
 		// every call that leaves is audited. Local/builtin paths skip both.
 		ai.WithEgressPolicy(tenantEgressPolicy(pool)),
@@ -221,9 +228,18 @@ func (s *Server) handleAIAsk(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, ai.ErrNoTenant) {
 			return apierror.Unauthorized("authentication required")
 		}
+		// U-048: the analyzer's process-wide concurrency backstop is
+		// saturated — tell the caller to back off, like the fairness gate.
+		if errors.Is(err, ai.ErrBusy) {
+			w.Header().Set("Retry-After", "1")
+			return apierror.RateLimited("the AI assistant is at capacity — retry shortly")
+		}
 		s.log.Warn("ai analyze failed", "error", err)
 		return apierror.Unavailable("the AI assistant is temporarily unavailable")
 	}
+	// U-093: optionally persist the artifact (full answer + model/config hash)
+	// for reproducibility/disputes; best-effort, never blocks the answer.
+	s.persistAnswer(r, ans)
 	// RCA is a data-access action — audit it (guardrail 7); a best-effort write
 	// that never blocks the answer.
 	if s.pool != nil {
@@ -235,6 +251,44 @@ func (s *Server) handleAIAsk(w http.ResponseWriter, r *http.Request) error {
 	}
 	writeJSON(w, http.StatusOK, ans)
 	return nil
+}
+
+// persistAnswer stores the RCA artifact when answer persistence is enabled
+// (U-093): the full cited answer JSON plus the model and AI-config hash, then
+// opportunistically prunes this tenant's artifacts past retention. Best-effort:
+// failures are logged, the answer is already on its way to the caller.
+func (s *Server) persistAnswer(r *http.Request, ans ai.Answer) {
+	if !s.cfg.AIPersistAnswers || s.pool == nil {
+		return
+	}
+	payload, err := json.Marshal(ans)
+	if err != nil {
+		s.log.Warn("ai answer marshal failed", "error", err)
+		return
+	}
+	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
+		if err := (store.AIAnswers{}).Save(ctx, sc, store.AIAnswerInput{
+			AnswerID: ans.ID, Question: ans.Question, RootCause: ans.RootCause,
+			Confidence: string(ans.Confidence), Model: ans.Model,
+			ConfigHash: aiConfigHash(s.cfg), Payload: payload,
+		}); err != nil {
+			return err
+		}
+		_, err := (store.AIAnswers{}).PruneOlderThan(ctx, sc, s.cfg.AIAnswerRetention)
+		return err
+	}); err != nil {
+		s.log.Warn("ai answer persistence failed", "error", err)
+	}
+}
+
+// aiConfigHash fingerprints the AI configuration that produced an answer
+// (U-093): same hash = same provider/endpoint/model/evidence-cap/redaction, so
+// a dispute can establish what setup answered. Never includes the token.
+func aiConfigHash(cfg *config.Config) string {
+	canon := fmt.Sprintf("provider=%s|endpoint=%s|model=%s|max_evidence=%d|redact_ips=%t|redact_hostnames=%t",
+		cfg.AIModelProvider, cfg.AIModelEndpoint, cfg.AIModelName,
+		cfg.AIMaxEvidence, cfg.AIRedactIPs, cfg.AIRedactHostnames)
+	return hex.EncodeToString(crypto.Hash([]byte(canon)))
 }
 
 type feedbackRequest struct {
