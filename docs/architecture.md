@@ -1,10 +1,13 @@
-# Architecture (seed)
+# Architecture
 
-This is a seed document. The authoritative architecture and product spec
-(`CLAUDE.md`, `probectl-PRD-v0.5.md`) are internal and kept in the private working
-folder — **not committed** to this repo. This file is filled out as the
-subsystems land; the canonical **tenant-scoped data model** is documented here in
-**S2**.
+The authoritative, in-repo architecture document (U-088 — previously a
+"seed" whose authoritative spec lived outside the repo; that is no longer
+true). The authoritative set is: **this file** (system architecture, kept
+current as subsystems land), the **product spec imported at
+[`docs/architecture/PRD-v0.5.md`](architecture/PRD-v0.5.md)** (provenance
+note in [`docs/architecture/README.md`](architecture/README.md)), and
+**CLAUDE.md** (the engineering contract). The canonical **tenant-scoped
+data model** is documented here in **S2**.
 
 ## Shape
 
