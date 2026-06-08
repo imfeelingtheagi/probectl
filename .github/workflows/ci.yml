@@ -265,7 +265,11 @@ jobs:
       - name: Lock matches pyproject (refuse drift)
         run: |
           pip install uv==0.11.2
-          uv pip compile analyzer/pyproject.toml --extra dev --generate-hashes -o /tmp/requirements-dev.lock --quiet
+          # Compile from INSIDE analyzer/ — the canonical cwd the committed lock
+          # was generated with — so the `# via probectl-analyzer (pyproject.toml)`
+          # provenance matches (compiling from the repo root renders it as
+          # `(analyzer/pyproject.toml)`, a spurious drift). Same hashes either way.
+          ( cd analyzer && uv pip compile pyproject.toml --extra dev --generate-hashes -o /tmp/requirements-dev.lock --quiet )
           # The header comment embeds the output path; compare content only.
           diff -u <(grep -v '^#' analyzer/requirements-dev.lock) <(grep -v '^#' /tmp/requirements-dev.lock) \
             || { echo "::error::analyzer/requirements-dev.lock is stale — regenerate with: cd analyzer && uv pip compile pyproject.toml --extra dev --generate-hashes -o requirements-dev.lock"; exit 1; }
