@@ -31,10 +31,17 @@ func tlsServer(t *testing.T, certPEM, keyPEM, caPEM []byte, h http.Handler) (*ht
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 
-	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	caDir := t.TempDir()
+	caFile := filepath.Join(caDir, "ca.pem")
 	if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
 		t.Fatalf("write ca: %v", err)
 	}
+	// RED-008 (Sprint 12): the agent only honors a ca_file that resolves inside
+	// an operator-allowlisted directory; unset = refused. Mirror a real agent
+	// runtime (tls.canary_ca_dir / PROBECTL_AGENT_CANARY_CA_DIR) by allowlisting
+	// this CA's temp dir, so the probe still exercises the full ca_file path.
+	canary.SetCAFileDir(caDir)
+	t.Cleanup(func() { canary.SetCAFileDir("") })
 	return srv, caFile
 }
 
