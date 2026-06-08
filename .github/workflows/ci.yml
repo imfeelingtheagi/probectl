@@ -805,6 +805,29 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/check_dco.sh
 
+  # DATAROOM-003: generate + retain a CycloneDX SBOM of the Go module graph as a
+  # data-room receipt (90d), alongside the scan receipts. cyclonedx-gomod is
+  # installed pinned + sumdb-verified (no third-party action to pin).
+  # Informational — not a merge gate.
+  sbom:
+    name: sbom
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install cyclonedx-gomod (pinned, sumdb-verified)
+        run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.7.0
+      - name: Generate CycloneDX SBOM (Go module graph)
+        run: cyclonedx-gomod mod -json -licenses -std -output probectl-sbom.cdx.json .
+      - name: Upload SBOM (data-room receipt)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-cyclonedx
+          path: probectl-sbom.cdx.json
+          retention-days: 90
+
   # Sprint 25: the umbrella REQUIRED check closing the diligence
   # "STATIC-ONLY" caveat. One green check == every verification gate above
   # executed and passed (build/lint/race tests/scans/eBPF compile+LOAD on

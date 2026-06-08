@@ -9,6 +9,14 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 16 (plan v2): SBOM generation in CI (DATAROOM-003; decision D8). A
+  new `sbom` CI job generates a CycloneDX SBOM of the Go module graph
+  (`cyclonedx-gomod`, installed pinned + sumdb-verified — no third-party
+  action) and retains it 90 days as the `sbom-cyclonedx` artifact, alongside
+  the scan receipts. Documented in docs/dependency-policy.md. Completes the
+  DATAROOM-003 trio: SPDX headers + NOTICE/inventory (Sprint 14) and the SBOM
+  here.
+
 - Sprint 15 (plan v2): DCO sign-off gate + CONTRIBUTING IP policy
   (LICENSE-004 / GOV-002, automatable half; decision D8). A dependency-free
   DCO check (`scripts/check_dco.sh` + a `dco` CI job, added to the required
