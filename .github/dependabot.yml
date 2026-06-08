@@ -24,3 +24,9 @@ updates:
     directory: /deploy/compose
     schedule:
       interval: weekly
+  # SUPPLY-003: keep the analyzer's hash-locked dependency set fresh (the
+  # lock-matches-pyproject CI step refuses drift either way).
+  - package-ecosystem: pip
+    directory: /analyzer
+    schedule:
+      interval: weekly

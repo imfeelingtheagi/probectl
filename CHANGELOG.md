@@ -9,6 +9,22 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 23: supply-chain pins + analyzer lockfile (SUPPLY-001/002/003/
+  006; 004 already closed, 005 struck w/ courtesy doc). Compose image
+  defaults pin the release tag instead of :latest (dependabot bumps;
+  operator digest-pin guidance documented). CI Python tooling is
+  exact-pinned (ruff==0.15.16, black==26.5.1, pyyaml==6.0.3, uv==0.11.2)
+  and the analyzer dependency set is HASH-LOCKED: analyzer/
+  requirements-dev.lock (uv pip compile --generate-hashes; 219 hashes),
+  installed --require-hashes with the analyzer itself --no-deps, plus a
+  CI step that regenerates the lock and refuses pyproject drift;
+  dependabot gains the pip ecosystem. New `supply-pins` CI gate
+  (scripts/check_supply_pins.sh, SELFTEST'd) fails on :latest under
+  deploy/, unpinned go install, or unpinned pip install. Pinning policy
+  recorded in docs/dependency-policy.md; Go toolchain provenance
+  (official release, sumdb-verified, toolchain-directive-pinned) in
+  docs/build/toolchain.md.
+
 - Sprint 22: OTLP traces + logs + the OTel Collector path (ARCH-001,
   ARCH-006). The OTLP receiver now ingests ALL THREE signals — gRPC
   Trace/Logs services + HTTP /v1/traces and /v1/logs alongside metrics —
