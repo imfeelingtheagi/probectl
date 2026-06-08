@@ -1142,6 +1142,8 @@ per-store verification table.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PROBECTL_BACKUP_RETENTION_NOTE` | (a generic statement) | your backup-TTL statement, included VERBATIM in every deletion attestation — be explicit about snapshot expiry |
+| `PROBECTL_BACKUP_RETENTION_DAYS` | `0` | **COMPLY-002:** concrete backup TTL in days. >0 makes the tenant-erasure attestation quantify a bounded backup-coverage window (`backup_erasure_deadline` = erased_at + this); 0 = note-only |
+| `PROBECTL_ENVELOPE_KEY` / `PROBECTL_ENVELOPE_KEY_FILE` | (none) | **OPS-002:** the at-rest KEK (Sprint 8) — also used by `probectl-control backup-seal`/`backup-open` to encrypt/restore backups. The chart's PG backup CronJob mounts it to seal dumps in-pipe |
 
 The daily retention sweeper enforces per-tenant `flow_retention_days`
 (tighter than the deployment TTL). Prometheus-mode TSDB series deletion is a

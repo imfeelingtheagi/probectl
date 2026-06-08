@@ -41,14 +41,30 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 999 # the postgres image's postgres uid
+          {{- if .Values.backup.encryption.enabled }}
+          # OPS-002: stage the probectl-control binary so the dump can be
+          # piped straight through envelope encryption — plaintext never
+          # touches the backups volume.
+          initContainers:
+            - name: stage-probectl
+              image: {{ include "probectl.image" . }}
+              command: ["/bin/sh", "-ec", "cp /usr/local/bin/app /tools/probectl-control"]
+              volumeMounts:
+                - { name: tools, mountPath: /tools }
+          {{- end }}
           containers:
             - name: pg-dump
               image: {{ .Values.backup.postgres.image | quote }}
               command: ["/bin/sh", "-ec"]
               args:
                 - |
+                  {{- if .Values.backup.encryption.enabled }}
+                  out="/backups/postgres-probectl-$(date -u +%Y%m%dT%H%M%SZ).dump.pbk"
+                  pg_dump -h {{ .Values.backup.postgres.host }} -U "$PGUSER" -d {{ .Values.backup.postgres.database }} --format=custom --no-owner                     | /tools/probectl-control backup-seal --key-file=/keys/envelope.key > "$out"
+                  {{- else }}
                   out="/backups/postgres-probectl-$(date -u +%Y%m%dT%H%M%SZ).dump"
                   pg_dump -h {{ .Values.backup.postgres.host }} -U "$PGUSER" -d {{ .Values.backup.postgres.database }} --format=custom --no-owner > "$out"
+                  {{- end }}
                   sha256sum "$out" > "$out.sha256"
                   echo "wrote $out"
               env:
@@ -62,10 +78,23 @@ spec:
                 {{- toYaml .Values.backup.resources | nindent 16 }}
               volumeMounts:
                 - { name: backups, mountPath: /backups }
+                {{- if .Values.backup.encryption.enabled }}
+                - { name: tools, mountPath: /tools, readOnly: true }
+                - { name: envelope-key, mountPath: /keys, readOnly: true }
+                {{- end }}
           volumes:
             - name: backups
               persistentVolumeClaim:
                 claimName: {{ .Values.backup.persistence.claimName | default (printf "%s-backups" (include "probectl.fullname" .)) }}
+            {{- if .Values.backup.encryption.enabled }}
+            - name: tools
+              emptyDir: {}
+            - name: envelope-key
+              secret:
+                secretName: {{ .Values.backup.encryption.keySecret }}
+                items:
+                  - { key: {{ .Values.backup.encryption.keySecretKey }}, path: envelope.key }
+            {{- end }}
 ---
 {{- end }}
 {{- if .Values.backup.clickhouse.enabled }}
@@ -95,11 +124,17 @@ spec:
               command: ["/bin/sh", "-ec"]
               args:
                 - |
+                  # OPS-002: ClickHouse BACKUP TO File runs SERVER-SIDE, so it
+                  # cannot be piped through the envelope filter like the PG
+                  # dump. Its at-rest encryption is the encrypted-backups-
+                  # volume operator duty (docs/hardening.md §0c; preflight
+                  # --strict checks it). The bulk telemetry lands encrypted by
+                  # the volume, not by this job.
                   name="clickhouse-probectl-$(date -u +%Y%m%dT%H%M%SZ).zip"
                   clickhouse-client --host {{ .Values.backup.clickhouse.host }} \
                     --user "$CH_USER" --password "$CH_PASSWORD" \
                     --query "BACKUP DATABASE {{ .Values.backup.clickhouse.database }} TO File('/backups/$name')"
-                  echo "wrote /backups/$name (on the clickhouse server's backups volume)"
+                  echo "wrote /backups/$name (encrypt the clickhouse backups volume — §0c)"
               env:
                 - name: CH_USER
                   valueFrom:

@@ -88,10 +88,16 @@ func run(cmd string) error {
 		// Sprint 8 (SEC-002/COMPLY-004): deployment self-check — envelope key
 		// + operator storage-encryption duties (docs/hardening.md).
 		return runPreflight(os.Args[2:])
+	case "backup-seal":
+		// OPS-002: stdin→stdout envelope-encryption filter for backup dumps.
+		return backupSeal(os.Args[2:])
+	case "backup-open":
+		// OPS-002: decrypt an encrypted backup container for restore.
+		return backupOpen(os.Args[2:])
 	case "serve", "migrate", "mcp-stdio", "mcp-token", "scim-token", "agent-ca", "enroll-token", "revoke-agent":
 		// fall through to the configured path below
 	default:
-		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | agent-ca | enroll-token | revoke-agent | gen-cert | support-bundle | preflight | version)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | agent-ca | enroll-token | revoke-agent | gen-cert | support-bundle | preflight | backup-seal | backup-open | version)", cmd)
 	}
 
 	cfg, err := config.LoadFromEnv()
@@ -612,11 +618,11 @@ func run(cmd string) error {
 	// artifacts), so the control plane's engine runs without one — recorded
 	// honestly per store in every attestation. The daily sweeper enforces
 	// per-tenant flow retention.
-	lifeEngine := tenantlife.New(db.Pool(), flowStore, nil, tsdbWriter,
+	lifeEngine := tenantlife.NewWithBackupRetention(db.Pool(), flowStore, nil, tsdbWriter,
 		func(ctx context.Context, actor, action, target string, data map[string]any) error {
 			_, err := audit.ProviderAppend(ctx, db.Pool(), actor, action, target, data)
 			return err
-		}, cfg.BackupRetentionNote, log)
+		}, cfg.BackupRetentionNote, cfg.BackupRetentionDays, log)
 	// U-027: erasure coverage for the path store + topology graph; the
 	// attestation enumerates them (or records "store not deployed").
 	if pd, ok := pathStore.(tenantlife.PathDeleter); ok {

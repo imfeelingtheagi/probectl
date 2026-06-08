@@ -9,6 +9,30 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 27: backup encryption, erasure-covers-backups, self-hosted IdP,
+  DR runbooks (OPS-002, COMPLY-002, OPS-008, DOCS-007; OPS-007/DATAROOM-008
+  representative RTO/RPO drill stays [needs infra], owner iron). OPS-002:
+  new internal/backup streams a pg_dump through envelope encryption — a
+  fresh DEK per backup wrapped by the Sprint-8 deployment KEK, chunked
+  AES-256-GCM with the chunk index as AAD so truncation/reorder is
+  detected — exposed as `probectl-control backup-seal`/`backup-open`
+  stdin/stdout filters; the chart's PG backup CronJob pipes the dump
+  through backup-seal (init-staged binary + envelope-key secret), so
+  plaintext never touches the backups volume (.dump.pbk container).
+  Round-trip + plaintext-never-on-disk + tamper/truncation tests; CLI
+  exercised end-to-end. ClickHouse server-side BACKUP encrypts via the
+  §0c encrypted-volume duty (documented). COMPLY-002: the tenant-erasure
+  attestation quantifies a BOUNDED backup-coverage window —
+  BackupErasureDeadline = erased_at + PROBECTL_BACKUP_RETENTION_DAYS —
+  bound into the tamper-evident report hash (verifiable test; honest
+  note-only fallback when no retention is stated). OPS-008:
+  docs/auth/self-hosted-idp.md documents the air-gapped self-hosted OIDC
+  path (Dex reference config + Keycloak). DOCS-007: region-failover +
+  backup-restore runbooks completed (encrypted-restore decrypt step).
+  CI: a named backup/erasure gate runs the Backup|Restore|Erasure tests.
+  Honesty: the representative multi-region RTO/RPO drill needs real
+  infra — PROVISIONAL banners stay, no numbers fabricated.
+
 - Sprint 26: k8s/Helm day-2 ops (OPS-001/004/005/009; OPS-006 struck —
   migrations run at boot). Agent DaemonSet gains real probes: a tiny
   loopback health server in the eBPF agent (/healthz = process up,

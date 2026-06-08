@@ -409,6 +409,10 @@ type Config struct {
 	// backup-retention story — live-store deletion is attested; snapshots
 	// expire per this stated policy).
 	BackupRetentionNote string
+	// BackupRetentionDays (COMPLY-002): the concrete backup TTL in days.
+	// When > 0, tenant-erasure attestations quantify a bounded backup-
+	// coverage window (erased_at + this). 0 = note-only (unquantified).
+	BackupRetentionDays int
 
 	// DataPlanes (S-T2, ee/; siloed_isolation): named residency targets for
 	// siloed/hybrid tenants — "name=clickhouseURL[;name=clickhouseURL...]".
@@ -634,6 +638,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		ProviderBreakGlassMaxTTLMinutes: l.intRange("PROBECTL_PROVIDER_BREAKGLASS_MAX_TTL_MINUTES", 240, 5, 1440),
 		DataPlanes:                      l.str("PROBECTL_DATAPLANES", ""),
 		BackupRetentionNote:             l.str("PROBECTL_BACKUP_RETENTION_NOTE", ""),
+		BackupRetentionDays:             l.intRange("PROBECTL_BACKUP_RETENTION_DAYS", 0, 0, 3650),
 
 		RemediationApprovalsEnabled: l.boolean("PROBECTL_REMEDIATION_APPROVALS_ENABLED", false),
 		RemediationMaxBlastRadius:   l.intRange("PROBECTL_REMEDIATION_MAX_BLAST_RADIUS", 50, 1, 100000),

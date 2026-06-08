@@ -162,6 +162,8 @@ jobs:
           name: test-go-log
           path: test-go.log
           retention-days: 90
+      - name: Backup-encryption + erasure-covers-backups gate (OPS-002, COMPLY-002)
+        run: go test -count=1 -v -run "Backup|Restore|Erasure|Retention|Coverage|SealOpen|Tamper" ./internal/backup/ ./internal/tenantlife/
       - name: Fuzz smoke (untrusted-input parsers must not crash)
         run: make fuzz-smoke
       - name: Agent overhead bench smoke (U-051 — benches compile + run; the

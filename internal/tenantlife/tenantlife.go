@@ -78,6 +78,11 @@ type Engine struct {
 	// BackupNote is the operator's backup-retention statement, included
 	// verbatim in every attestation (the explicit backup-TTL story).
 	backupNote string
+	// backupRetentionDays (COMPLY-002): when > 0, the attestation reports a
+	// CONCRETE backup-erasure deadline (erased_at + retention) — the bounded
+	// window inside which every backup containing the tenant ages out, so
+	// erasure provably covers backups. 0 = unquantified (note-only).
+	backupRetentionDays int
 }
 
 // New wires the engine. flows/objects/tsdb may be nil (that store absent in
@@ -85,6 +90,19 @@ type Engine struct {
 // silently skipped). audit may be nil only when no pool exists (tests).
 func New(pool *pgxpool.Pool, flows flowstore.Store, objects objectstore.Store, w tsdb.Writer,
 	audit AuditSink, backupNote string, log *slog.Logger) *Engine {
+	return newEngine(pool, flows, objects, w, audit, backupNote, 0, log)
+}
+
+// NewWithBackupRetention is New plus a concrete backup-retention window
+// (days) so the attestation can quantify the backup-erasure deadline
+// (COMPLY-002). retentionDays <= 0 falls back to the note-only story.
+func NewWithBackupRetention(pool *pgxpool.Pool, flows flowstore.Store, objects objectstore.Store, w tsdb.Writer,
+	audit AuditSink, backupNote string, retentionDays int, log *slog.Logger) *Engine {
+	return newEngine(pool, flows, objects, w, audit, backupNote, retentionDays, log)
+}
+
+func newEngine(pool *pgxpool.Pool, flows flowstore.Store, objects objectstore.Store, w tsdb.Writer,
+	audit AuditSink, backupNote string, retentionDays int, log *slog.Logger) *Engine {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -92,7 +110,8 @@ func New(pool *pgxpool.Pool, flows flowstore.Store, objects objectstore.Store, w
 		backupNote = "Live-store deletion is attested below. Operator backups/snapshots expire per the deployment's backup policy — state PROBECTL_BACKUP_RETENTION_NOTE to put your TTL on the record."
 	}
 	return &Engine{pool: pool, flows: flows, objects: objects, tsdbW: w,
-		audit: audit, backupNote: backupNote, log: log, now: time.Now}
+		audit: audit, backupNote: backupNote, backupRetentionDays: retentionDays,
+		log: log, now: time.Now}
 }
 
 // WithPaths attaches the path store for erasure coverage (U-027).
@@ -151,8 +170,15 @@ type Attestation struct {
 	FinishedAt    time.Time     `json:"finished_at"`
 	Stores        []StoreResult `json:"stores"`
 	BackupPolicy  string        `json:"backup_policy"`
-	Complete      bool          `json:"complete"`
-	ReportSHA256  string        `json:"report_sha256"`
+	// COMPLY-002: backups are provably covered within a BOUNDED window. When
+	// the deployment states a retention (PROBECTL_BACKUP_RETENTION_DAYS),
+	// BackupRetentionDays is that window and BackupErasureDeadline is the
+	// instant by which every backup containing this tenant has aged out —
+	// after that, no artifact (live or backup) holds the tenant's data.
+	BackupRetentionDays   int        `json:"backup_retention_days,omitempty"`
+	BackupErasureDeadline *time.Time `json:"backup_erasure_deadline,omitempty"`
+	Complete              bool       `json:"complete"`
+	ReportSHA256          string     `json:"report_sha256"`
 }
 
 // maxDeletePasses bounds the FK-ordering retry loop (intra-tenant foreign
@@ -301,6 +327,16 @@ func (e *Engine) Erase(ctx context.Context, tenantID, slug, actor string) (Attes
 	}
 
 	att.FinishedAt = e.now().UTC()
+	// COMPLY-002: quantify the backup-coverage window. The live stores are
+	// zero NOW; any backup taken before this erasure expires by
+	// erased_at + retention, so that instant is when backup coverage is
+	// complete. Without a stated retention we leave it unquantified (the
+	// note still records the operator's policy).
+	if e.backupRetentionDays > 0 {
+		att.BackupRetentionDays = e.backupRetentionDays
+		deadline := att.FinishedAt.Add(time.Duration(e.backupRetentionDays) * 24 * time.Hour)
+		att.BackupErasureDeadline = &deadline
+	}
 	att.ReportSHA256 = att.hash()
 
 	// The attestation goes on the provider audit chain BEFORE returning —

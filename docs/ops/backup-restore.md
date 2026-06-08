@@ -13,9 +13,15 @@ that proves it — for every probectl datastore.
 | Object store | support bundles, **WORM audit exports (U-041)** | Replicate the bucket; the WORM export is itself the tamper-evident off-DB copy of the provider audit chain |
 | Kafka | results/events in transit | No — transit, not a system of record; consumers drain to the stores above |
 
-**Backups contain tenant data.** Encrypt at rest, restrict access, keep them
-inside the operator's network (sovereignty, CLAUDE.md §7.2). Treat a backup
-volume like the database itself.
+**Backups contain tenant data.** They are **encrypted at rest by default**
+(OPS-002): the chart's Postgres backup CronJob pipes the dump through
+`probectl-control backup-seal`, so plaintext never touches the backups
+volume — the artifact is a `.dump.pbk` envelope-encrypted container sealed
+with the deployment's at-rest KEK (the SAME `PROBECTL_ENVELOPE_KEY` as live
+storage, Sprint 8). ClickHouse's `BACKUP TO File` runs server-side and is
+encrypted by the **backups volume** instead (the §0c encrypted-volume duty;
+`preflight --strict` checks it). Restrict access and keep both inside the
+operator's network (sovereignty, CLAUDE.md §7.2) regardless.
 
 ## Taking backups
 
@@ -56,7 +62,12 @@ is down.
 
 ```sh
 # 1. Stop probectl-control (agents buffer; the UI is down from here).
-# 2. Verify + restore Postgres (drops + recreates, pg_restore from stdin):
+# 2a. Decrypt an ENCRYPTED Postgres backup (.dump.pbk) — needs the ORIGINAL
+#     envelope KEK (PROBECTL_ENVELOPE_KEY or --key-file); a fresh node only
+#     needs that one key:
+PROBECTL_ENVELOPE_KEY=<base64 KEK> \
+  probectl-control backup-open < postgres-probectl-<ts>.dump.pbk > postgres-probectl-<ts>.dump
+# 2b. Verify + restore Postgres (drops + recreates, pg_restore from stdin):
 ./scripts/restore_postgres.sh   /srv/probectl-backups/postgres-probectl-<ts>.dump
 # 3. Verify + restore ClickHouse (copies the artifact back, drops, RESTORE):
 ./scripts/restore_clickhouse.sh /srv/probectl-backups/clickhouse-probectl-<ts>.zip

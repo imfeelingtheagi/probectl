@@ -206,6 +206,15 @@ backup:
   # Secret holding username/password (Postgres) and ch-username/ch-password
   # (ClickHouse). Operator-provided.
   credentialsSecret: probectl-db-credentials
+  # OPS-002: envelope-encrypt the Postgres dump in-pipe (probectl-control
+  # backup-seal) so plaintext never touches the backups volume. The KEK is
+  # the SAME deployment envelope key (Sprint 8) — restore on a fresh node
+  # only needs it. ClickHouse server-side backups encrypt via the backups
+  # VOLUME (docs/hardening.md §0c), not this pipe.
+  encryption:
+    enabled: true
+    keySecret: probectl-secrets       # secret holding the envelope KEK
+    keySecretKey: PROBECTL_ENVELOPE_KEY # base64 KEK under this key
   resources:
     requests: { cpu: 100m, memory: 128Mi }
     limits: { cpu: "1", memory: 512Mi }
