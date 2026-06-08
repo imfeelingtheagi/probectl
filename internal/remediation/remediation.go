@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package remediation is the CORE model + seam for guarded agentic remediation
 // (S-EE5, F44 — guardrail-critical). The AI PROPOSES network remediations
 // grounded in RCA (S24) + topology what-if (S43); a human APPROVES; probectl

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package otelstore persists externally-ingested OTLP traces and logs
 // (ARCH-001, Sprint 22) and serves their tenant-scoped queries. Two
 // implementations share one contract: Memory (lightweight mode and tests)

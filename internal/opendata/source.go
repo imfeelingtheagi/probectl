@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package opendata is probectl's open-data enrichment framework (S15): a pluggable
 // set of sources that annotate an IP with ASN / geo / IXP / allocation context
 // drawn from public datasets, with per-source provenance + AUP metadata, caching,

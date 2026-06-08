@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package fairness is the core per-tenant fairness layer (S-T7, F57): in a
 // pooled deployment one tenant must not be able to degrade the others.
 // Enforcement lives in CORE by ratified decision — it protects the pooled

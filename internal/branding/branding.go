@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package branding is the core white-label seam (S-T4, F54-full): the
 // per-tenant brand model resolved at runtime onto the S8a design tokens.
 //

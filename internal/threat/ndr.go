@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package threat
 
 // The NDR-lite behavioral detection engine (S42, F37): stateful, tenant-

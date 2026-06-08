@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package lifecycle holds probectl's zero-downtime upgrade logic (S34, F28): the
 // control-plane↔agent version-compatibility policy (the N/N-1 skew window) and the
 // staged fleet-rollout model (cohorts + pace). It is pure, dependency-free logic

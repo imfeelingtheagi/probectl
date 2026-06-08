@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package store holds probectl's tenant-scoped datastore adapters. S1 introduces
 // the PostgreSQL connection pool (store.DB) and the readiness Pinger; the
 // migration runner lives in the migrate subpackage. Tenant-scoped repositories

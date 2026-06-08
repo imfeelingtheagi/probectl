@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 //go:build integration
 
 // Sprint 11 acceptance (ADR docs/adr/agent-enrollment.md): enrollment

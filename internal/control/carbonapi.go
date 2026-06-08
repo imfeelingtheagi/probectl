@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // Carbon/power observability wiring (S48, F48): the estimation engine rides

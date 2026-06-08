@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package compliance
 
 // The validator: observed traffic (eBPF + flow) checked against declared

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package audit is probectl's immutable, tamper-evident audit log. It keeps two
 // SEPARATE hash-chained streams (CLAUDE.md §7 guardrail 7):
 //

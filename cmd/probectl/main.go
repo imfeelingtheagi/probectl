@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl is the probectl command-line interface — a web-parity client for
 // the control-plane /v1 API (test/agent management). See `probectl help`.
 //

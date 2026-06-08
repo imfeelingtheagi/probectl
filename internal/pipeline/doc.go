@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package pipeline is probectl's result pipeline (S6): it converts probe Results to
 // OTel-aligned time series (ResultToSeries) and runs the control-plane Consumer
 // that drains the result bus and writes to the TSDB. The flow is

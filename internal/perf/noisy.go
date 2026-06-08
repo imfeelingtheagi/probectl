@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package perf
 
 // The multi-tenant NOISY-NEIGHBOR scenario (S48; PRD §5.4 / F57): one tenant

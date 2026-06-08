@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-license is the issuer-side license tool (S-T0): generate
 // signing keypairs, sign license files, and verify/inspect them. The private
 // key is the founder's crown jewel — it lives OFFLINE, never in the repo,

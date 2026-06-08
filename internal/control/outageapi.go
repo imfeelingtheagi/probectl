@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // Collective internet-outage view wiring (S47a, F19): public outage feeds

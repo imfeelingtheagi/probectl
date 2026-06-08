@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package cmdb correlates probectl assets and incidents with configuration
 // items (CIs) in an external CMDB (S40, F30; ServiceNow first).
 //

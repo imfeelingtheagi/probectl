@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // FinOps / egress-cost wiring (S44, F41): the cost engine consumes the flow

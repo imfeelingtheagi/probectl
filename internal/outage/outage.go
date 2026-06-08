@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package outage is the collective internet-outage view (S47a, F19): it
 // aggregates public outage feeds (IODA, Cloudflare Radar) with the operator's
 // OWN vantage points (synthetic-test results) into one situational view, and

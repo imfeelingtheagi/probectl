@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package a2a is the control-plane broker for agent-to-agent measurement
 // sessions (S8). It assigns roles (one agent responds, the other initiates),
 // rendezvouses the responder's listen endpoint to the initiator, and hands each

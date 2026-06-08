@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package eval is the RCA quality eval harness (U-049): a fixed scenario set
 // spanning probectl's planes (change, BGP/routing, path, device, threat,
 // metrics/SLO), each with planted evidence and an expected root-cause label,

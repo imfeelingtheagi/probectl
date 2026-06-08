@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package metrics is probectl's self-observability surface (OPS-005): a
 // tiny, dependency-FREE Prometheus text-exposition registry (CLAUDE.md §9 —
 // no new dependency for this). "probectl observes probectl" (§8): the

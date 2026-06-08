@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package enroll is the agent trust root (Sprint 11 — WIRE-002/RED-002/
 // TENANT-103/ARCH-004; ADR docs/adr/agent-enrollment.md): one-time,
 // tenant-scoped join tokens bootstrap a CSR-based issuance of short-lived

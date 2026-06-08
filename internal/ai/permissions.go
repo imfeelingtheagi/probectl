@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package ai
 
 // Permission keys gating each query domain (RBAC — enforced AFTER the tenant

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package control implements the probectl control-plane HTTP API server: its
 // lifecycle, middleware chain (request-id + request-scoped logging, security
 // headers, access logging, panic recovery), the health/readiness/version/OpenAPI

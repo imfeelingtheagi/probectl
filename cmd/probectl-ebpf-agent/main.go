@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-ebpf-agent is the probectl eBPF host agent (Linux): zero-
 // instrumentation L3/L4 flow capture + a live service map, emitted to the bus as
 // probectl.ebpf.flows (S20). It is observe-only and never loads policy-enforcing

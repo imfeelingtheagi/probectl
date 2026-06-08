@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package opendata
 
 // IOCType classifies a threat-intel indicator of compromise (S28).

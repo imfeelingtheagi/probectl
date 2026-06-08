@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package support is the core supportability layer (S-EE4, F35): deep health
 // checks, a self-monitoring metric snapshot, and a secret-stripped support
 // bundle. It is CORE by the ratified editions decision — better community bug

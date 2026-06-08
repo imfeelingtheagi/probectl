@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package auth
 
 // ABAC over RBAC (S31, F25). The two-level boundary already resolves the tenant

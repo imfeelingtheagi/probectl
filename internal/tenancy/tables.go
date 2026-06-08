@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package tenancy
 
 // Tenant-owned-table vocabulary (S-T2/S-T5): the set of tables that hold

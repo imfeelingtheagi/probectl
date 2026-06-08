@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package agenttransport is the control-plane side of the agent <-> control-plane
 // gRPC transport (S4). Every connection is mTLS (S3 crypto.ServerMTLSConfig);
 // non-mTLS clients are rejected at the TLS layer. The caller's tenant and agent

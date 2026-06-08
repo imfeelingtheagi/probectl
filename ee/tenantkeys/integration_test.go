@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-Commercial-TBD
+
 //go:build integration
 
 // probectl Commercial License — PLACEHOLDER (legal text TBD with counsel).

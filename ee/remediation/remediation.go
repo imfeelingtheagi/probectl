@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-Commercial-TBD
+
 // probectl Commercial License — PLACEHOLDER (legal text TBD with counsel).
 
 // Package remediation (ee/) implements the guarded-remediation workflow

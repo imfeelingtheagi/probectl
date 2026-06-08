@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package canary defines the Canary plugin interface — the load-bearing
 // extension point for every probectl measurement type — together with the
 // Result/Spec/Config shapes and a Registry of compiled-in plugin factories

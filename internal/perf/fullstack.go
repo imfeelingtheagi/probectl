@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package perf
 
 // The FULL-STACK load gate (U-005). The in-process scale gate (scale.go)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package alert is probectl's alerting engine (S16): threshold and baseline
 // (anomaly) rules evaluated over the time-series produced by the result pipeline,
 // with notification channels (webhook + email) and storm-avoiding debounce/dedupe.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package tenantlife is the per-tenant lifecycle engine (S-T5, F55):
 // tenant-scoped data EXPORT (portability), VERIFIABLE full deletion across
 // every store (Postgres / ClickHouse flows / TSDB / object store / path graph

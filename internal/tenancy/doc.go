@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package tenancy is probectl's tenant boundary — the outermost scope and security
 // boundary on every tenant-owned record (F50). It defines the tenant identity
 // type and request context, and the InTenant transaction wrapper that is the

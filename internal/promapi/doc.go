@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package promapi implements probectl's Prometheus-compatible surfaces (S40,
 // F30): the Grafana datasource API (a Prometheus HTTP-API subset Grafana's
 // native Prometheus datasource speaks), the /federate exposition endpoint, and

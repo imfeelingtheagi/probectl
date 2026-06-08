@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 //go:build isolation
 
 // Cross-tenant INGEST-PATH suite (TENANT-105, extending Sprint 4/5) — the

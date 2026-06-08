@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package threat is probectl's security/threat subsystem. S27 implements TLS/cert
 // observability: it analyzes TLS posture from ALREADY-CAPTURED data — the HTTP
 // synthetic canary (S13) and eBPF L7 (S21) — so it never re-handshakes (S27

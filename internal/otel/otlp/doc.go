@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package otlp is probectl's OpenTelemetry OTLP transport (S22): a TLS-only,
 // authenticated, tenant-scoped receiver that ingests external OTLP, an exporter
 // that emits probectl signals as OTLP, and the signal<->OTLP-metrics conversion.

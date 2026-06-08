@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package ebpf
 
 // Agent overhead benchmarks (U-051): reproducible numbers behind the

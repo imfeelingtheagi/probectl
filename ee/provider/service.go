@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-Commercial-TBD
+
 // probectl Commercial License — PLACEHOLDER (legal text TBD with counsel).
 // See ee/doc.go for the boundary rules every ee/ file observes.
 

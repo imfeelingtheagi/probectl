@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package backup is probectl's at-rest backup encryption (OPS-002): a
 // streaming envelope-encrypted container so a pg_dump / ClickHouse BACKUP
 // never lands on disk in plaintext. It reuses the Sprint 8 at-rest key

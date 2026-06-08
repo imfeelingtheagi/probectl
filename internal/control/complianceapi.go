@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // Compliance / segmentation-validation wiring (S46, F43): the validator

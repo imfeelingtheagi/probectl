@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package l7 parses application-protocol calls (HTTP/1.1, HTTP/2, gRPC, DNS,
 // Kafka) from the plaintext byte streams the eBPF agent captures (S21) — via
 // TLS-library uprobes (plaintext-before-encryption) or directly from sockets.

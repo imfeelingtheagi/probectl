@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package notify wires probectl incidents into operational tooling (S33, F27): it
 // pages on-call (PagerDuty/Opsgenie), posts to chat (Slack/Teams), and opens +
 // bidirectionally syncs tickets (ServiceNow/Jira). probectl owns the incident;

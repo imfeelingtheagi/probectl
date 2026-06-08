@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // Topology + what-if API (S43, F40-full). GET /v1/topology serves the

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package change ingests change events and correlates them with incidents (S29).
 //
 // S0 scaffold: this package is an intentionally empty placeholder so the

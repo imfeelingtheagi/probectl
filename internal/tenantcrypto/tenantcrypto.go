@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package tenantcrypto is the core per-tenant at-rest encryption seam (S-T6,
 // F56): sensitive tenant-owned values are sealed through ONE dispatcher, and
 // WHICH key seals them is a deployment property — the deployment envelope by

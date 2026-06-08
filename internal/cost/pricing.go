@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package cost
 
 // Pricing: USD per GiB by traffic class, with provenance (the S44 AUP/

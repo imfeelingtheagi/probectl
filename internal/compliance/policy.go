@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package compliance
 
 // Segmentation policy (S46, F43): the operator DECLARES the intended

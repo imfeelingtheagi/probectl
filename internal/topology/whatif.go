@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package topology
 
 // What-if / impact simulation (S43, F40-full): "if node/link X fails, what

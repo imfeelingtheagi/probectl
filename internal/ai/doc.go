@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package ai is probectl's AI layer. This sprint (S23) implements the unified
 // semantic query layer — one RBAC-aware abstraction over the stores (metrics,
 // events/flows, entities, and the topology graph) that the API, the AI/RCA layer

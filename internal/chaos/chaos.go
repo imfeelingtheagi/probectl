@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package chaos is probectl's network fault injector (S48, F47): a small
 // in-process UDP proxy that applies latency / jitter / loss / partition to
 // the traffic explicitly pointed at it, so the platform's own observability

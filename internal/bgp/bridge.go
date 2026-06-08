@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package bgp bridges the Python BGP analyzer into the control plane (S14).
 //
 // The analyzer (analyzer/) ingests public collector data and emits

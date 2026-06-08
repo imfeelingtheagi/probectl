@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package govern is the core data-governance mechanism (S-EE3, F34): a data
 // CLASSIFICATION taxonomy and a REDACTION/masking engine. The mechanism is
 // core (classification + redaction are useful to any deployment — e.g. a

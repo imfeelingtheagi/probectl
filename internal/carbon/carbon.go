@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package carbon is probectl's network carbon/power observability (S48,
 // F48): Kepler-style ESG visibility for the network plane, computed from
 // telemetry probectl already has — flow volume × published energy-per-byte

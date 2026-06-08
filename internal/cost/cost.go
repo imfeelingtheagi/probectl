@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package cost is the S44 (F41) FinOps / egress-cost engine: it correlates
 // flow records (S38) with operator-declared zone/ownership maps and PUBLIC
 // cloud pricing into per-service/per-team cost attribution, cross-AZ/region

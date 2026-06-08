@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package preflight is the operator-facing deployment self-check (Sprint 8,
 // SEC-002/COMPLY-004). probectl encrypts what it manages (sealed tenant
 // values, TLS in transit); the BULK telemetry stores (Postgres, ClickHouse,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // RUM convergence wiring (S47b, F20): the beacon ingest (mounted OUTSIDE the

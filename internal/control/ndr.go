@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // NDR-lite wiring (S42, F37): the behavioral detection engine consumes the

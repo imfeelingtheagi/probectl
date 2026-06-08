@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package scim implements the SCIM 2.0 (RFC 7643 schema / RFC 7644 protocol) wire
 // types and patch semantics for probectl's enterprise identity lifecycle (S31, F25).
 // It is PURE — no datastore or HTTP-server dependency — so the schema mapping and

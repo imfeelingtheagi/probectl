@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package flowstore persists normalized flow records (S38, F17) and serves the
 // flow-analytics queries: top-talkers, per-exporter/interface capacity, and
 // anomaly baselines. Two implementations share one contract: Memory (default,

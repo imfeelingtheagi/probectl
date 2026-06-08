@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package usage is the core metering seam (S-T3, F53): a zero-cost hook the
 // tenant-tagged data paths call as they already flow (results, flow batches,
 // AI calls) plus a quota gate the resource-creation paths consult.

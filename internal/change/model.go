@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package change ingests, normalizes, and correlates heterogeneous change events
 // (deploys, config/route/IaC changes, commits) so the AI RCA can answer "what
 // changed?" (S29 · F39). Inbound webhooks are authenticated by a per-provider

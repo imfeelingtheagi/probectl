@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package version exposes build metadata shared by every probectl binary.
 //
 // The Version, Commit, and Date values are injected at build time via

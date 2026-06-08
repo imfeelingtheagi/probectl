@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-control is the probectl control-plane API server.
 //
 // Subcommands:

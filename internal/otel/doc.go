@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package otel holds probectl's OpenTelemetry semantic-convention mapping. S6 seeds
 // the canonical Result -> OTel resource/attribute mapping (ResultAttributes) and
 // the convention names, so every signal is OTel-shaped from its first emission

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package slo is the S45 (F42) SLO + business-impact engine: OpenSLO-
 // compatible SLI/SLO definitions over the network signals probectl already
 // collects (synthetic results today; the metricSource model extends to

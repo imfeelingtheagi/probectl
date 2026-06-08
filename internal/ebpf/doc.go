@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package ebpf is the probectl eBPF host agent (S20): zero-instrumentation L3/L4
 // flow capture and a live service map — the shared substrate later reused by the
 // security, segmentation, and cost planes.

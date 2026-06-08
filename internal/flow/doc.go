@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package flow implements the S38 (F17) passive flow-collection plane: UDP
 // collectors for NetFlow v5, NetFlow v9, IPFIX, and sFlow v5 that decode
 // exporter datagrams into one normalized, tenant-scoped Record and publish

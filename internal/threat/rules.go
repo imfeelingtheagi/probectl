@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package threat
 
 // Detection-as-code (S42, F37): behavioral detections are declared as

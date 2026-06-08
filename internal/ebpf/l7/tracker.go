@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package l7
 
 // Tracker parses one connection: it detects the protocol from the first request

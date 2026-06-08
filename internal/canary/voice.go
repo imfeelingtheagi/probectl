@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package canary
 
 // Voice/RTP canary (S47c, F21): an RTP-based voice test measuring MOS

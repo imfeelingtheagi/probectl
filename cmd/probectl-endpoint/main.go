@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-endpoint is the probectl endpoint / Digital-Experience-Monitoring
 // (DEM) agent (S37, F16/F46): a lightweight, cross-OS (Linux/macOS/Windows)
 // binary that runs on a user's device and captures last-mile experience — WiFi

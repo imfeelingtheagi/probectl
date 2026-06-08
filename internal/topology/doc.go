@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package topology is probectl's live, versioned, tenant-scoped network topology
 // graph (S30, F40-foundation). It builds a graph — nodes (agents, hops, hosts,
 // services, prefixes, ASes) and edges (path adjacencies, eBPF service edges, BGP

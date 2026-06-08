@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-flow-agent is the probectl passive flow collector (S38,
 // F17): NetFlow v5/v9, IPFIX, and sFlow v5 listeners that decode exporter
 // datagrams (templates, sampling correction) into normalized, tenant-bound

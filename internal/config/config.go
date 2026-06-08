@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package config loads and validates the probectl control-plane configuration
 // from PROBECTL_-prefixed environment variables. Every key is documented in
 // docs/configuration.md (CLAUDE.md §6). Load reports all validation problems at

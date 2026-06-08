@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // Editions wiring (S-T0): the license manager loads once at startup (a

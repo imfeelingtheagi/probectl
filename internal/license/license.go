@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package license implements probectl's offline edition gating (S-T0): an
 // Ed25519-signed license file activates commercial feature sets, verified
 // with pure local math against build-time-baked public keys — never a

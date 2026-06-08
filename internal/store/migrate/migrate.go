@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package migrate applies the sequential, idempotent SQL migrations embedded in
 // the migrations package. Applied versions are recorded in a schema_migrations
 // ledger, so a second run is a no-op — re-running is always safe (CLAUDE.md §6).

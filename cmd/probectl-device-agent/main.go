@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-device-agent is the probectl device-telemetry collector
 // (S39, F18): an SNMP poller (v2c/v3 — IF-MIB interface health + HC counters,
 // HOST-RESOURCES CPU/memory, optional entity temperature sensors) and a

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package rum is real-user monitoring convergence (S47b, F20): a privacy-first
 // browser-beacon schema, server-side enforcement of that privacy contract, and
 // the synthetic↔RUM correlation that completes DEM — "synthetics are red AND

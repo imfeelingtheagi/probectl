@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package cluster is the core multi-region / active-active HA layer (S-EE2,
 // F33). The control plane is stateless (S1/S34), so "active-active" means
 // every region runs interchangeable API + ingest replicas; the durable state

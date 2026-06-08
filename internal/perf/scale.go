@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package perf
 
 // The S48 L/XL scale gate: the S/M/L/XL reference-architecture load profiles

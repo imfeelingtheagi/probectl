@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // Secret-backend health surface (S41, F31): GET /v1/secrets/health reports

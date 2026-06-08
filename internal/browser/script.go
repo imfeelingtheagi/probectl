@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package browser is probectl's browser/transaction synthetic (S36, F15): scripted
 // multi-step transactions (a login, a checkout) run by a managed worker fleet,
 // capturing a per-resource waterfall, DOM/paint timings, step timings, and a

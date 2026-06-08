@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package testspec is the canonical schema for a probectl synthetic-test
 // (canary) configuration: the field set, the valid types, defaults, and
 // validation. It is dependency-free so every producer of a test config — the

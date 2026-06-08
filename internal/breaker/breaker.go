@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package breaker is a minimal circuit breaker for the storage HTTP clients
 // (U-078). When an upstream (Prometheus / ClickHouse) goes unreachable, the
 // breaker short-circuits further calls after a failure threshold — failing

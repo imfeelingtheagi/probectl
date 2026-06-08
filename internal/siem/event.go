@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package siem exports probectl's audit + security events to a SOC's SIEM (S32,
 // F26). It is the forwarder: a canonical Event, pluggable Formatters (RFC 5424
 // syslog, ArcSight CEF, Elastic ECS, OTLP logs), preset-aware HTTP/syslog Senders

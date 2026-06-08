@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package apierror defines probectl's transport-agnostic domain errors. Services
 // return these; the transport layer (internal/control) maps each Kind to an HTTP
 // status and a JSON envelope (CLAUDE.md §6). Keeping the category here, separate

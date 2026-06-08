@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package device implements the S39 (F18) device-telemetry plane: an SNMP
 // poller (v2c/v3) and a gNMI/OpenConfig streaming collector that both
 // normalize into one DeviceMetric, published to the bus

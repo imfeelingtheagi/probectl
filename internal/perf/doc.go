@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package perf is probectl's reusable load/perf harness (S18a, perf-foundation).
 //
 // It drives the core path — agents → bus → stores → query — at a defined

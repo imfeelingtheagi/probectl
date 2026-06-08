@@ -9,6 +9,21 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 14 (plan v2): SPDX headers + NOTICE + third-party inventory
+  (LICENSE-003, DATAROOM-003; decision D8 — mechanical artifacts only, no
+  binding legal text). `scripts/add_spdx_headers.sh` stamps every
+  first-party Go file (901 files) with a PLACEHOLDER SPDX tag
+  (`LicenseRef-probectl-TBD` for core, `LicenseRef-probectl-Commercial-TBD`
+  for ee/) — idempotent, build-tag-safe (the tag precedes any `//go:build`
+  per `go help buildconstraint`), and finalizable by a single value-swap
+  once counsel picks the license. `scripts/gen_third_party.sh` regenerates
+  `NOTICE` + `docs/diligence/third-party-licenses.md` from
+  `go list -deps ./...` plus a module-cache LICENSE scan (dependency-free —
+  no external tool to pin): 26 modules, all permissive (13 BSD / 8
+  Apache-2.0 / 4 MIT / 1 ISC). The actual `LICENSE` choice and the `ee/`
+  commercial text remain counsel decisions (Appendix B). Build + gofmt +
+  the crypto/editions/TLS guards stay green across the 901-file change.
+
 - Sprint 13 (plan v2): hygiene bundle (SEC-006, SCHEMA-001; SUPPLY-007
   landed earlier as the go.work hotfix). SEC-006: the security-headers
   middleware now sets `Referrer-Policy: no-referrer` and a deny-by-default

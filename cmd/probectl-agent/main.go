@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command probectl-agent is the probectl canary agent — a single, statically linked,
 // multi-arch binary with compiled-in canary plugins, a disk-backed
 // store-and-forward buffer, and a tenant-bound mTLS connection to the control

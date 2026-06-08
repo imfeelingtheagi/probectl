@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package cost implements the FinOps cost/attribution engine (S44).
 //
 // S0 scaffold: this package is an intentionally empty placeholder so the

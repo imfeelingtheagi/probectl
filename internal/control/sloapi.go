@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package control
 
 // SLO wiring (S45, F42): the engine consumes the synthetic-result stream,

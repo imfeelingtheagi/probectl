@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package crypto is probectl's cryptographic abstraction — the single place that
 // imports cryptographic primitives, so a FIPS 140-3 validated module can be
 // compiled in later (CLAUDE.md §7 guardrail 3). A CI guard

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package path is probectl's ECMP/MPLS-aware path-discovery engine (S10).
 //
 // It runs Paris-style traceroutes — each trace uses a constant flow identifier

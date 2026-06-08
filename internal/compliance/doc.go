@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package compliance performs segmentation validation and evidence collection (S46).
 //
 // S0 scaffold: this package is an intentionally empty placeholder so the

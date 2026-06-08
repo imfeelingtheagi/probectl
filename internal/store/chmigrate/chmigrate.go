@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package chmigrate is the ClickHouse counterpart of internal/store/migrate
 // (U-046): versioned, ordered schema migrations recorded in a server-side
 // ledger (probectl_ch_migrations), replacing inline one-shot DDL strings.

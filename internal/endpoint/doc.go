@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package endpoint is probectl's endpoint / Digital-Experience-Monitoring (DEM)
 // agent core (S37, F16/F46): it captures last-mile experience from a user's
 // device — WiFi link health, the local gateway, the ISP/last-mile path, and

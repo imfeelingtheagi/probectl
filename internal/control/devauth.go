@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 //go:build devauth
 
 // Dev auth (RED-001/SEC-001): the trusted-header, all-permissions principal

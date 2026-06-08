@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package objectstore is probectl's pluggable blob store for large, out-of-band
 // artifacts — starting with S36 browser-synthetic screenshots/waterfalls. It is a
 // small Put/Get/Stat interface with a filesystem implementation (the default) and

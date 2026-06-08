@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Command gendigests writes internal/ebpf/bpf_digests_ebpf.go: the SHA-256
 // manifest of the bpf2go-compiled BPF objects (U-014). It runs inside `make
 // ebpf-agent`, right after bpf2go and before `go build -tags ebpf`, so the

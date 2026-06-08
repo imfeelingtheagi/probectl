@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package slo
 
 // The SLI tracker + error-budget + multi-window burn-rate engine. Burn rate

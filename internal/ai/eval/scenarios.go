@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package eval
 
 import "github.com/imfeelingtheagi/probectl/internal/ai"

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package slo
 
 // Loading: OpenSLO YAML files from an operator directory. A missing or

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 package agent
 
 // Staged fleet rollout (U-031). The control plane PLANS waves from the agent

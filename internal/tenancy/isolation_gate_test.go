@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 //go:build isolation
 
 // Cross-tenant isolation gate — the permanent CI gate (CLAUDE.md §7 guardrail 1).

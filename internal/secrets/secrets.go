@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package secrets is the S41 (F31) secret-backend integration: device/source/
 // integration credentials resolve from enterprise secret stores instead of
 // living in config files or long-lived env plaintext.

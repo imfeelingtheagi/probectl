@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package author is probectl's AI test authoring + auto-discovery (S26, F45): it
 // turns a natural-language request into a synthetic-test config, and mines
 // observed telemetry to propose monitorable targets.

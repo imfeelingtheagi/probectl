@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LicenseRef-probectl-TBD
+
 // Package cli implements the probectl command-line interface — a web-parity client
 // for the control-plane /v1 API. Run is the testable entry point; cmd/probectl is
 // a thin wrapper around it.
