@@ -17,36 +17,41 @@ import (
 func TestProviderLoginThrottleLockout(t *testing.T) {
 	f := newFixture(t, licenseManager(t, license.TierProvider, 0, 90*24*time.Hour))
 
-	attempt := func(email, pw string) *http.Response {
+	// attempt returns the status + Retry-After header (closing the body) — the
+	// only things this test asserts on, so no *http.Response escapes (bodyclose).
+	attempt := func(email, pw string) (int, string) {
 		rec := doReq(f.h, newReq(http.MethodPost, "/provider/v1/auth/login",
 			map[string]string{"email": email, "password": pw}))
-		return rec.Result()
+		resp := rec.Result()
+		defer resp.Body.Close()
+		return resp.StatusCode, resp.Header.Get("Retry-After")
 	}
 
 	// Hammer a (nonexistent) account: the first failures are 401/403; once
 	// the limiter trips, the answer becomes 429 BEFORE authentication runs.
 	var saw429 bool
-	var resp *http.Response
+	var retryAfter string
 	for i := 0; i < 12; i++ {
-		resp = attempt("attacker-target@msp.example", "wrong-password")
-		if resp.StatusCode == http.StatusTooManyRequests {
+		status, ra := attempt("attacker-target@msp.example", "wrong-password")
+		retryAfter = ra
+		if status == http.StatusTooManyRequests {
 			saw429 = true
 			break
 		}
-		if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("attempt %d: unexpected status %d", i, resp.StatusCode)
+		if status != http.StatusForbidden && status != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: unexpected status %d", i, status)
 		}
 	}
 	if !saw429 {
 		t.Fatal("repeated bad provider logins were never throttled (SEC-003)")
 	}
-	if resp.Header.Get("Retry-After") == "" {
+	if retryAfter == "" {
 		t.Fatal("throttled response must carry Retry-After")
 	}
 
 	// Locked means locked: the very next attempt is refused without touching
 	// the password path (still 429).
-	if got := attempt("attacker-target@msp.example", "wrong-password").StatusCode; got != http.StatusTooManyRequests {
+	if got, _ := attempt("attacker-target@msp.example", "wrong-password"); got != http.StatusTooManyRequests {
 		t.Fatalf("locked account answered %d, want 429", got)
 	}
 

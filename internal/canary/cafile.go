@@ -44,8 +44,8 @@ func ResolveCAFile(p string) (string, error) {
 	}
 	// Resolve the ALLOWLISTED root through symlinks once, so containment is
 	// judged in real-path space.
-	if real, err := filepath.EvalSymlinks(dirAbs); err == nil {
-		dirAbs = real
+	if resolved, err := filepath.EvalSymlinks(dirAbs); err == nil {
+		dirAbs = resolved
 	}
 	cand := p
 	if !filepath.IsAbs(cand) {
@@ -53,12 +53,12 @@ func ResolveCAFile(p string) (string, error) {
 	}
 	cand = filepath.Clean(cand)
 	// The candidate must exist and resolve (symlinks included) INSIDE the dir.
-	real, err := filepath.EvalSymlinks(cand)
+	resolved, err := filepath.EvalSymlinks(cand)
 	if err != nil {
 		return "", fmt.Errorf("canary: ca_file %q: %v", p, err)
 	}
-	if real != dirAbs && !strings.HasPrefix(real, dirAbs+string(filepath.Separator)) {
+	if resolved != dirAbs && !strings.HasPrefix(resolved, dirAbs+string(filepath.Separator)) {
 		return "", fmt.Errorf("canary: ca_file %q escapes the allowlisted CA directory (RED-008)", p)
 	}
-	return real, nil
+	return resolved, nil
 }

@@ -176,8 +176,8 @@ func (s *Service) MintToken(ctx context.Context, tenantID, agentID, name, create
 	return display, id, nil
 }
 
-// EnrollRequest is the pre-identity bootstrap call.
-type EnrollRequest struct {
+// Request is the pre-identity bootstrap call.
+type Request struct {
 	Token    string `json:"token"`
 	CSRPEM   string `json:"csr_pem"`
 	Hostname string `json:"hostname"`
@@ -202,7 +202,7 @@ type Identity struct {
 // ONLY from the token; the agent id comes from the token's pin or is
 // assigned here. The agent is registered in the tenant's registry, so the
 // Sprint 4 binding immediately vouches for the pair.
-func (s *Service) Enroll(ctx context.Context, req EnrollRequest) (*Identity, error) {
+func (s *Service) Enroll(ctx context.Context, req Request) (*Identity, error) {
 	if req.Attestor != "" && req.Attestor != "join-token" {
 		return nil, fmt.Errorf("enroll: attestor %q not supported (join-token only; see ADR)", req.Attestor)
 	}

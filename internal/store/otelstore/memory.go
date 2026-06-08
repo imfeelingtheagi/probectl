@@ -34,11 +34,10 @@ func (m *Memory) WriteSpans(_ context.Context, spans []Span) error {
 		if s.TenantID == "" {
 			continue // never store an unowned row (fail closed)
 		}
-		cur := append(m.spans[s.TenantID], s)
-		if len(cur) > memoryMaxPerTenant {
-			cur = cur[len(cur)-memoryMaxPerTenant:]
+		m.spans[s.TenantID] = append(m.spans[s.TenantID], s)
+		if over := len(m.spans[s.TenantID]) - memoryMaxPerTenant; over > 0 {
+			m.spans[s.TenantID] = m.spans[s.TenantID][over:]
 		}
-		m.spans[s.TenantID] = cur
 	}
 	return nil
 }
@@ -51,11 +50,10 @@ func (m *Memory) WriteLogs(_ context.Context, recs []LogRecord) error {
 		if r.TenantID == "" {
 			continue
 		}
-		cur := append(m.logs[r.TenantID], r)
-		if len(cur) > memoryMaxPerTenant {
-			cur = cur[len(cur)-memoryMaxPerTenant:]
+		m.logs[r.TenantID] = append(m.logs[r.TenantID], r)
+		if over := len(m.logs[r.TenantID]) - memoryMaxPerTenant; over > 0 {
+			m.logs[r.TenantID] = m.logs[r.TenantID][over:]
 		}
-		m.logs[r.TenantID] = cur
 	}
 	return nil
 }

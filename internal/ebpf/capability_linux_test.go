@@ -52,7 +52,7 @@ func TestCapMaskPerfmonAndBPF(t *testing.T) {
 		t.Fatal("the documented minimal pair must satisfy both checks")
 	}
 	admin := capMask(1 << capSysAdmin)
-	if !(admin.has(capBPF) || admin.has(capSysAdmin)) || !(admin.has(capPerfmon) || admin.has(capSysAdmin)) {
+	if (!admin.has(capBPF) && !admin.has(capSysAdmin)) || (!admin.has(capPerfmon) && !admin.has(capSysAdmin)) {
 		t.Fatal("CAP_SYS_ADMIN must satisfy both (the legacy catch-all)")
 	}
 }

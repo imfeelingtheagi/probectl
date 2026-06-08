@@ -102,10 +102,7 @@ func DriveFlowPlane(ctx context.Context, tier Tier, scale float64) (FlowPlaneRep
 
 	// Settle: every record visible in the store (completeness, the U-019 bar).
 	deadline := time.Now().Add(2 * time.Minute)
-	for {
-		if st.Len() >= records {
-			break
-		}
+	for st.Len() < records {
 		if time.Now().After(deadline) {
 			break
 		}

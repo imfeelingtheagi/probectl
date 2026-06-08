@@ -204,7 +204,7 @@ func FuzzVerifyBatchTenant(f *testing.F) {
 		if lane != "" && got != lane {
 			t.Fatalf("lane %q but authoritative %q", lane, got)
 		}
-		if lane == "" && !(got == "tenant-a" && agent == "agent-1") {
+		if lane == "" && (got != "tenant-a" || agent != "agent-1") {
 			t.Fatalf("pooled accepted unvouched pair (%q,%q) -> %q", tenant, agent, got)
 		}
 	})

@@ -384,7 +384,7 @@ func (c *ClickHouse) do(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	err := c.breaker.Do(func() error {
 		var derr error
-		resp, derr = c.client.Do(req)
+		resp, derr = c.client.Do(req) //nolint:bodyclose // the response escapes to do's caller (query/exec), which closes it
 		return derr
 	})
 	return resp, err

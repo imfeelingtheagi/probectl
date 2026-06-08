@@ -60,17 +60,17 @@ type PathItem struct {
 
 // NewBatchingSaver wraps inner with the window (default 100ms) and max batch
 // size (default 32).
-func NewBatchingSaver(inner Store, log *slog.Logger, window time.Duration, max int) *BatchingSaver {
+func NewBatchingSaver(inner Store, log *slog.Logger, window time.Duration, maxBatch int) *BatchingSaver {
 	if log == nil {
 		log = slog.Default()
 	}
 	if window <= 0 {
 		window = 100 * time.Millisecond
 	}
-	if max <= 0 {
-		max = 32
+	if maxBatch <= 0 {
+		maxBatch = 32
 	}
-	return &BatchingSaver{inner: inner, log: log, window: window, max: max}
+	return &BatchingSaver{inner: inner, log: log, window: window, max: maxBatch}
 }
 
 // Save enqueues and returns; the window flusher persists.

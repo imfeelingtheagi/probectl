@@ -4,8 +4,9 @@ package control
 
 import (
 	_ "embed"
-	"github.com/imfeelingtheagi/probectl/internal/apierror"
 	"net/http"
+
+	"github.com/imfeelingtheagi/probectl/internal/apierror"
 )
 
 // openapiJSON is the OpenAPI 3.1 description of the control-plane API. Resource

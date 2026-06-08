@@ -177,15 +177,15 @@ type cacheEntry struct {
 }
 
 type synthCache struct {
-	mu      sync.Mutex
-	entries map[string]cacheEntry
-	max     int
-	ttl     time.Duration
-	now     func() time.Time
+	mu         sync.Mutex
+	entries    map[string]cacheEntry
+	maxEntries int
+	ttl        time.Duration
+	now        func() time.Time
 }
 
-func newSynthCache(max int, ttl time.Duration) *synthCache {
-	return &synthCache{entries: map[string]cacheEntry{}, max: max, ttl: ttl, now: time.Now}
+func newSynthCache(maxEntries int, ttl time.Duration) *synthCache {
+	return &synthCache{entries: map[string]cacheEntry{}, maxEntries: maxEntries, ttl: ttl, now: time.Now}
 }
 
 // synthKey hashes the model + question + evidence CONTENT in order —
@@ -244,8 +244,8 @@ func (c *synthCache) put(key string, in SynthesisInput, syn Synthesis) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.entries) >= c.max {
-		// Evict the oldest (bounded scan; max is small).
+	if len(c.entries) >= c.maxEntries {
+		// Evict the oldest (bounded scan; maxEntries is small).
 		var oldestK string
 		var oldestT time.Time
 		first := true

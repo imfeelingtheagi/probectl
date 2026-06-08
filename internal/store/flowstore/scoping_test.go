@@ -3,6 +3,7 @@
 package flowstore
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"testing"
@@ -52,7 +53,7 @@ func TestReaderRowPolicyDDLShape(t *testing.T) {
 // EnsureReaderRowPolicy refuses an empty reader user (no accidental TO ALL).
 func TestEnsureReaderRowPolicyRejectsEmptyUser(t *testing.T) {
 	c := &ClickHouse{base: "http://ch:8123"}
-	if err := c.EnsureReaderRowPolicy(nil, ""); err == nil {
+	if err := c.EnsureReaderRowPolicy(context.TODO(), ""); err == nil {
 		t.Fatal("empty reader user must be rejected")
 	}
 }

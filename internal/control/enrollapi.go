@@ -71,7 +71,7 @@ func (s *Server) handleAgentEnroll(w http.ResponseWriter, r *http.Request) error
 	if s.enrollSvc == nil {
 		return apierror.Unavailable("agent enrollment is not configured (run: probectl-control agent-ca init)")
 	}
-	var req enroll.EnrollRequest
+	var req enroll.Request
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 		return apierror.BadRequest("malformed enrollment request")
 	}

@@ -78,7 +78,7 @@ func TestEnrollHappyPathIssuesTenantBoundSVID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr), Hostname: "host-a", Version: "v1"})
+	id, err := svc.Enroll(ctx, enroll.Request{Token: display, CSRPEM: string(csr), Hostname: "host-a", Version: "v1"})
 	if err != nil {
 		t.Fatalf("enroll: %v", err)
 	}
@@ -116,16 +116,16 @@ func TestEnrollTokenReplayRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	csr, _, _ := crypto.CreateCSR("host-b")
-	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr)}); err != nil {
+	if _, err := svc.Enroll(ctx, enroll.Request{Token: display, CSRPEM: string(csr)}); err != nil {
 		t.Fatalf("first use: %v", err)
 	}
 	// REPLAY: the same token a second time must be refused, uninformatively.
 	csr2, _, _ := crypto.CreateCSR("host-c")
-	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr2)}); err == nil {
+	if _, err := svc.Enroll(ctx, enroll.Request{Token: display, CSRPEM: string(csr2)}); err == nil {
 		t.Fatal("token replay was accepted (single-use violated)")
 	}
 	// Unknown/garbage tokens are equally refused.
-	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: "pjt_deadbeef", CSRPEM: string(csr2)}); err == nil {
+	if _, err := svc.Enroll(ctx, enroll.Request{Token: "pjt_deadbeef", CSRPEM: string(csr2)}); err == nil {
 		t.Fatal("unknown token accepted")
 	}
 }
@@ -140,7 +140,7 @@ func TestRotationKeepsIdentityAndRecordsNewSerial(t *testing.T) {
 		t.Fatal(err)
 	}
 	csr1, key1, _ := crypto.CreateCSR("host-r")
-	first, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr1)})
+	first, err := svc.Enroll(ctx, enroll.Request{Token: display, CSRPEM: string(csr1)})
 	if err != nil {
 		t.Fatalf("enroll: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestWrongTenantCannotBeRequested(t *testing.T) {
 		t.Fatal(err)
 	}
 	csr, _, _ := crypto.CreateCSR("host-w")
-	id, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr)})
+	id, err := svc.Enroll(ctx, enroll.Request{Token: display, CSRPEM: string(csr)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func TestRevokeAgentPersistsAndBlocksReissuance(t *testing.T) {
 		t.Fatal(err)
 	}
 	csr1, key1, _ := crypto.CreateCSR("host-rev")
-	id, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display, CSRPEM: string(csr1)})
+	id, err := svc.Enroll(ctx, enroll.Request{Token: display, CSRPEM: string(csr1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestRevokeAgentPersistsAndBlocksReissuance(t *testing.T) {
 		t.Fatal(err)
 	}
 	csr3, _, _ := crypto.CreateCSR("host-rev")
-	if _, err := svc.Enroll(ctx, enroll.EnrollRequest{Token: display2, CSRPEM: string(csr3)}); !errors.Is(err, enroll.ErrRevoked) {
+	if _, err := svc.Enroll(ctx, enroll.Request{Token: display2, CSRPEM: string(csr3)}); !errors.Is(err, enroll.ErrRevoked) {
 		t.Fatalf("re-enrollment of a revoked identity must refuse with ErrRevoked, got %v", err)
 	}
 }

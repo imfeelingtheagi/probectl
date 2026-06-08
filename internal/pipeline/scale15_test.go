@@ -208,7 +208,7 @@ type slowEnricher struct {
 	calls int
 }
 
-func (s *slowEnricher) Enrich(ctx context.Context, ip string) (opendata.Enrichment, error) {
+func (s *slowEnricher) Enrich(ctx context.Context, _ string) (opendata.Enrichment, error) {
 	s.mu.Lock()
 	s.calls++
 	s.mu.Unlock()

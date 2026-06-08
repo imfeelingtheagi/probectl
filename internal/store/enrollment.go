@@ -170,13 +170,13 @@ func (a AgentIdentities) RevokeAgent(ctx context.Context, tenantID, agentID, rev
 	if spiffeID == "" {
 		// No live rows (all expired or none issued): still revoke the IDENTITY
 		// so re-enrollment under the same id is refused.
-		var any int
+		var count int
 		if err := a.pool.QueryRow(ctx,
 			`SELECT count(*) FROM agent_identities WHERE tenant_id=$1 AND agent_id=$2`,
-			tenantID, agentID).Scan(&any); err != nil {
+			tenantID, agentID).Scan(&count); err != nil {
 			return nil, "", err
 		}
-		if any == 0 {
+		if count == 0 {
 			return nil, "", fmt.Errorf("store: agent %s has no issued identities in tenant %s", agentID, tenantID)
 		}
 	}

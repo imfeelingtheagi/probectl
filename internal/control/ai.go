@@ -64,15 +64,9 @@ func redactionPolicy(cfg *config.Config) ai.RedactionPolicy {
 	}
 }
 
-// buildAnalyzer wires the RCA Analyzer (S24) over the S23 query engine, so RCA is
-// grounded in real, RLS-scoped signals. The model defaults to the in-process,
-// air-gapped built-in synthesizer.
-func buildAnalyzer(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool) *ai.Analyzer {
-	return buildAnalyzerWithGate(cfg, log, pool, buildEgressGate(cfg, log, pool))
-}
-
-// buildAnalyzerWithGate is the gate-injected form (the server composes ONE
-// gate and shares it across the analyzer, MCP, and authoring surfaces).
+// buildAnalyzerWithGate wires the RCA Analyzer (S24) over the S23 query engine,
+// so RCA is grounded in real, RLS-scoped signals; the server composes ONE
+// gate and shares it across the analyzer, MCP, and authoring surfaces.
 func buildAnalyzerWithGate(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, gate *ai.EgressGate) *ai.Analyzer {
 	return ai.NewAnalyzer(buildEngine(cfg, pool),
 		ai.WithModel(buildModel(cfg, log)),
