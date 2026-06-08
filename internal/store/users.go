@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
 )
@@ -29,7 +30,9 @@ func scanUser(row interface{ Scan(...any) error }, u *User) error {
 		u.UserName = *uname
 	}
 	if len(attrs) > 0 {
-		_ = json.Unmarshal(attrs, &u.Attributes)
+		if err := json.Unmarshal(attrs, &u.Attributes); err != nil {
+			return fmt.Errorf("store: decode user %s attributes: %w", u.ID, err)
+		}
 	}
 	return nil
 }

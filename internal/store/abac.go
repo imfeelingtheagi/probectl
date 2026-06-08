@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/imfeelingtheagi/probectl/internal/auth"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
@@ -23,11 +24,19 @@ func scanPolicy(row interface{ Scan(...any) error }, p *auth.Policy) error {
 	}
 	p.Effect = auth.PolicyEffect(effect)
 	p.Subject, p.Resource = nil, nil
+	// Surface decode errors (CODE-005): a corrupt subject/resource column must
+	// NOT silently hydrate an EMPTY attribute map — an empty subject matches
+	// every request, which could flip a deny-override policy open. Fail the row
+	// read instead.
 	if len(subj) > 0 {
-		_ = json.Unmarshal(subj, &p.Subject)
+		if err := json.Unmarshal(subj, &p.Subject); err != nil {
+			return fmt.Errorf("store: decode ABAC policy %s subject attributes: %w", p.ID, err)
+		}
 	}
 	if len(res) > 0 {
-		_ = json.Unmarshal(res, &p.Resource)
+		if err := json.Unmarshal(res, &p.Resource); err != nil {
+			return fmt.Errorf("store: decode ABAC policy %s resource attributes: %w", p.ID, err)
+		}
 	}
 	return nil
 }

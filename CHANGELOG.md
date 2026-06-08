@@ -9,6 +9,17 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 5 (plan v2): surface JSON decode errors in store hydration
+  (CODE-005 / CODE-002). `scanPolicy` (`store/abac.go`), `scanUser`
+  (`users.go`), and `scanChange` (`changes.go`) used `_ = json.Unmarshal`
+  on the attributes columns, so a corrupt column silently hydrated an EMPTY
+  map — for ABAC an empty subject matches every request and could flip a
+  deny-override policy open (fail-open-ish). All three now capture + wrap
+  the decode error and FAIL the row read; a malformed policy can no longer
+  degrade into a permissive empty one. New unit test drives each hydrator
+  with a corrupt column (errors loudly) and a valid one (still loads); no
+  `_ = json.Unmarshal` remains in the store hydration paths.
+
 - Sprint 4 (plan v2): lock the Vault AppRole token cache (KEYS-001).
   `VaultSource.authToken` read/wrote `leaseTok`/`leaseExp` with no lock, and
   the resolver releases its own mutex before calling `src.Fetch`, so

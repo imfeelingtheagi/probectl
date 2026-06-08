@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/imfeelingtheagi/probectl/internal/change"
@@ -26,7 +27,9 @@ func scanChange(row interface{ Scan(...any) error }, c *change.Event) error {
 	}
 	c.Kind = change.Kind(kind)
 	if len(attrs) > 0 {
-		_ = json.Unmarshal(attrs, &c.Attributes)
+		if err := json.Unmarshal(attrs, &c.Attributes); err != nil {
+			return fmt.Errorf("store: decode change %s attributes: %w", c.ID, err)
+		}
 	}
 	return nil
 }
