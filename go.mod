@@ -1,10 +1,10 @@
 module github.com/imfeelingtheagi/probectl
 
-go 1.26
-
-// Patched toolchain (stdlib fixes: GO-2026-5037 crypto/x509, GO-2026-5039
-// net/textproto). govulncheck and all builds resolve to >= this.
-toolchain go1.26.4
+// Pinned to the official go1.26.4 release (sumdb-verified on download —
+// docs/build/toolchain.md). The exact patch in the go directive keeps
+// govulncheck's stdlib attribution honest (Sprint 25): a bare "go 1.26"
+// scans as 1.26.0 and false-flags every already-patched stdlib CVE.
+go 1.26.4
 
 require (
 	github.com/cilium/ebpf v0.21.0

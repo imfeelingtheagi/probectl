@@ -247,6 +247,10 @@ lint-python: ## Lint the Python analyzer (ruff + black --check).
 	ruff check analyzer
 	black --check analyzer
 
+.PHONY: verify-all
+verify-all: ## Sprint 25 umbrella: build + lint + race tests + scans + eBPF compile, every output tee'd to receipts/ (executed verification, not static claims). Load+attach rides the ebpf-kernel-matrix CI job.
+	./scripts/verify_all.sh
+
 .PHONY: fmt
 fmt: ## Auto-format Go and Python.
 	gofmt -w $$(find . -name '*.go' -not -path '*/gen/*')

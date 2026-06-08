@@ -9,6 +9,26 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 25: green-build capstone — the verify-all umbrella (closes the
+  STATIC-ONLY methodology caveat). `make verify-all` runs build + lint +
+  race-detector tests + the repo guards + govulncheck + trivy + the eBPF
+  object compile with every output tee'd into receipts/ (a missing tool
+  FAILS — silent skips would recreate the gap). In CI, `verify-all` is
+  the single required check that needs all 29 verification gates —
+  including the kernel-matrix eBPF load+attach and the already-blocking
+  govulncheck/trivy (exit-code 1; continue-on-error remains zero
+  repo-wide) — runs even when a dependency fails so it reports RED not
+  skipped, and archives the gate→result map as verify-all-receipt (90d)
+  next to the per-gate receipts (DATAROOM-005/-011). The run surfaced a
+  real fix: go.mod said bare `go 1.26`, so govulncheck attributed the
+  stdlib as 1.26.0 and flagged 17 already-patched CVEs — the directive
+  now pins `go 1.26.4` (provenance comment restored; toolchain doc
+  updated; the sumdb-verified toolchain download was exercised in the
+  run) and govulncheck exits 0. The -race run also surfaced + fixed a
+  test-only data race: bus tests polled the unexported subs map without
+  the mutex (memory_overflow_test.go) — now via a locked
+  subscriberCount() accessor.
+
 - Sprint 23: supply-chain pins + analyzer lockfile (SUPPLY-001/002/003/
   006; 004 already closed, 005 struck w/ courtesy doc). Compose image
   defaults pin the release tag instead of :latest (dependabot bumps;

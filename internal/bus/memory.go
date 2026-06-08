@@ -59,6 +59,15 @@ func NewMemory(opts ...MemoryOption) *Memory {
 // policy (always 0 under the default block policy).
 func (m *Memory) Dropped() uint64 { return m.dropped.Load() }
 
+// subscriberCount returns the live subscriber count for a topic under the
+// lock — the race-free way for tests (and callers) to await registration.
+// Reading m.subs directly races the Subscribe writer (caught by -race).
+func (m *Memory) subscriberCount(topic string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.subs[topic])
+}
+
 // Publish delivers value to every current subscriber of topic.
 func (m *Memory) Publish(ctx context.Context, topic string, key, value []byte) error {
 	m.mu.Lock()

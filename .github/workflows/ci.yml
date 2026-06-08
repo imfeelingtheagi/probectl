@@ -778,3 +778,66 @@ jobs:
       - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6
         with:
           configFile: commitlint.config.mjs
+
+  # Sprint 25: the umbrella REQUIRED check closing the diligence
+  # "STATIC-ONLY" caveat. One green check == every verification gate above
+  # executed and passed (build/lint/race tests/scans/eBPF compile+LOAD on
+  # real kernels/isolation/eval/...). It runs even when dependencies fail
+  # (if: always()) so it reports an explicit RED instead of a skip, and it
+  # archives the gate->result map as the executed-verification receipt
+  # (extends DATAROOM-005/-011; per-gate receipts live on their own jobs).
+  verify-all:
+    name: verify-all (executed-verification umbrella)
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - action-pins
+      - secret-scan
+      - no-devauth-in-release
+      - verify-branch-protection
+      - lint-go
+      - lint-python
+      - editions-gate
+      - fips-gate
+      - test-go
+      - rca-eval
+      - coverage
+      - test-python
+      - browser-worker
+      - openapi-gate
+      - migration-gate
+      - helm-gate
+      - terraform-gate
+      - ebpf-kernel-matrix
+      - ebpf-image-live
+      - cross-tenant-isolation
+      - integration
+      - perf-smoke
+      - backup-drill
+      - failover-drill
+      - load-smoke
+      - proto
+      - web
+      - dependency-scan
+      - build-images
+    steps:
+      - name: Assert every verification gate is green
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          printf '%s' "$NEEDS_JSON" > verify-all-summary.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("verify-all-summary.json"))
+          bad = sorted(k for k, v in d.items() if v.get("result") != "success")
+          print(f"verification gates: {len(d)}; failed/skipped: {bad or 'none'}")
+          if bad:
+              print("::error::verify-all is RED — non-green gates: " + ", ".join(bad))
+              raise SystemExit(1)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: verify-all-receipt
+          path: verify-all-summary.json
+          retention-days: 90

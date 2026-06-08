@@ -24,7 +24,7 @@ func TestMemoryDropOverflowDoesNotBlock(t *testing.T) {
 		})
 	}()
 	// Let the subscriber register.
-	for i := 0; i < 100 && len(m.subs["t"]) == 0; i++ {
+	for i := 0; i < 100 && m.subscriberCount("t") == 0; i++ {
 		time.Sleep(time.Millisecond)
 	}
 	close(subscribed)
@@ -74,7 +74,7 @@ func TestMemoryBlockPolicyLosesNothing(t *testing.T) {
 			return nil
 		})
 	}()
-	for i := 0; i < 100 && len(m.subs["t"]) == 0; i++ {
+	for i := 0; i < 100 && m.subscriberCount("t") == 0; i++ {
 		time.Sleep(time.Millisecond)
 	}
 	for i := 0; i < n; i++ {
