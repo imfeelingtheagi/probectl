@@ -9,6 +9,18 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Removed Dependabot at the operator's request: deleted `.github/dependabot.yml`
+  (it drove the weekly version-update PRs for SHA-pinned actions, digest-pinned
+  images, and the analyzer's hash-locked pip lock). No CI gate depended on it —
+  the pinning gates (`check_action_pins.sh`, `check_supply_pins.sh`) still
+  enforce every pin, and vulnerability management still rests on the scheduled
+  govulncheck/trivy scans (`security-scan.yml`, run nightly + on every PR); pin
+  refreshes are now a manual, human-reviewed bump. Scrubbed the now-stale
+  references from the threat-model, SOC2 mapping, dependency-policy, the compose
+  comment, and the SUPPLY known-risks entry. To fully retire it, turn off
+  Dependabot alerts + security updates in repo Settings → Code security (a
+  Settings toggle, not a repo file).
+
 - CI greening, round 2 (run #203, after the round-1 fixes pushed): the full
   `make lint-go` / `make cover-gate` / Docker / arm64 paths ran on GitHub for
   the first time and surfaced five more real failures — all fixed without

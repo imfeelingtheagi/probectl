@@ -4,8 +4,8 @@
 # Every `uses:` in .github/workflows must reference a full 40-hex commit SHA
 # (`owner/repo@<sha> # <tag>`), never a mutable tag or branch. Local composite
 # actions (`uses: ./…`) are exempt; docker:// refs must pin a sha256 digest.
-# Dependabot (.github/dependabot.yml, github-actions ecosystem) keeps the pins
-# fresh and rewrites the trailing tag comment.
+# Pins are bumped manually — re-pin to the new commit SHA and update the
+# trailing "# <tag>" comment; this gate rejects any non-SHA ref regardless.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

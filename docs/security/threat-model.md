@@ -114,7 +114,7 @@ B7 build/release↔deployments · B8 agent↔monitored host.
 
 | Threat | Mitigation — evidence |
 |---|---|
-| Malicious dependency/action | every workflow action SHA-pinned + CI pin gate (U-007, `scripts/check_action_pins.sh`); dependabot + scheduled vuln scans (U-069/C12); base images digest-pinned (U-061) |
+| Malicious dependency/action | every workflow action SHA-pinned + CI pin gate (U-007, `scripts/check_action_pins.sh`); scheduled vuln scans (U-069/C12, govulncheck/trivy); base images digest-pinned (U-061) |
 | Tampered release artifact | cosign keyless signing of binaries + images, SPDX SBOMs (C6/C11, U-006; `docs/ops/verify-artifacts.md`); releases refuse on red CI (U-083) |
 | Tampered BPF object at run time | SHA-256 manifest baked at build; loaders verify embedded bytes before any kernel load and **fail closed** (U-014, `internal/ebpf/integrity.go`) |
 | Unsigned bits reaching the fleet | rollout planning *refuses* artifacts without recorded digest+method+verifier (U-031) |

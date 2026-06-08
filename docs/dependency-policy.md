@@ -16,9 +16,11 @@ deliberately** — a floating version is a supply-chain input nobody reviewed.
 
 ## Upgrade cadence
 
-- **Dependabot weekly** across Go, npm, and Actions; each bump lands as its
-  own PR through the FULL gate set (unit/integration, isolation suites,
-  fuzz-smoke, kernel-matrix where relevant) — never batched, never auto-merged.
+- **Manual review cadence** across Go modules, GitHub Actions, and the
+  digest-pinned images (Dependabot was removed — pins are bumped by a human who
+  reads the release notes); each bump lands as its own PR through the FULL gate
+  set (unit/integration, isolation suites, fuzz-smoke, kernel-matrix where
+  relevant) — never batched, never auto-merged.
 - **Security releases**: out-of-band, same gates; `govulncheck` + Trivy run in
   the scheduled security-scan workflow (C12) and on every PR, so a vulnerable
   pin surfaces even when no bump is open.
@@ -59,7 +61,7 @@ Controls specific to this dependency:
 3. **Digest-verified embedded objects** (C9/U-014): the loader refuses
    tampered/stale BPF objects before any kernel call, independent of the
    library version.
-4. **Upgrade rule**: bump on dependabot cadence; read the release notes for
+4. **Upgrade rule**: bump on a manual review cadence; read the release notes for
    verifier/loader behavior changes; require kernel-matrix + fuzz-smoke +
    agent-overhead bench green. Treat a minor-version bump of this library
    with the same care as a kernel bump.
@@ -89,8 +91,8 @@ Every mutable input is pinned; the `supply-pins` CI gate
 - **Images:** shipped compose/Helm reference a PINNED release tag, never
   `:latest`; build/runtime base images in Dockerfiles are digest-pinned
   (`@sha256:`, U-061). Operators should digest-pin deployed images:
-  `docker inspect --format='{{index .RepoDigests 0}}' <image>`. Dependabot
-  (docker ecosystems) bumps pins; a human merges.
+  `docker inspect --format='{{index .RepoDigests 0}}' <image>`. Image pins are
+  bumped manually (read the release notes; a human merges).
 - **GitHub Actions:** SHA-pinned (U-007, `check_action_pins.sh`).
 - **Go tools in CI:** `go install` only with an exact `@vX.Y.Z`.
 - **Python:** the analyzer's dependency set is HASH-LOCKED

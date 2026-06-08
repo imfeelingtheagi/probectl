@@ -54,8 +54,8 @@ services:
   # one is not already present. Idempotent — re-running leaves an existing cert.
   certgen:
     # SUPPLY-001: the shipped default is a PINNED release, never :latest.
-    # Dependabot (deploy/compose docker ecosystem) bumps the pin; operators
-    # should digest-pin on install — see docs/dependency-policy.md:
+    # Bump the pin manually; operators should digest-pin on install — see
+    # docs/dependency-policy.md:
     #   docker inspect --format='{{index .RepoDigests 0}}' <image>
     image: ${PROBECTL_IMAGE:-ghcr.io/imfeelingtheagi/probectl-control:v0.4.0}
     entrypoint: ["/bin/sh", "-c"]

@@ -20,7 +20,7 @@
 | CC6.6 Boundary protection | TLS on every listener; mTLS+SPIFFE agent transport with trust-domain pin; bus TLS with plaintext refusal; OTLP authenticated+tenant-scoped | guardrail §7.4/§7.12; U-010/U-011; `docs/otlp.md` | Vendor (defaults) |
 | CC6.7 Transmission/at-rest | Hardened TLS client policy (U-036); envelope encryption for secrets; BYOK/per-tenant keys (EE); at-rest posture documented honestly | `internal/crypto`; `docs/audit/residency-findings.md` (U-042) | Shared |
 | CC6.8 Malicious software | Signed releases (cosign keyless) + SBOM; digest-pinned images; SHA-pinned actions; BPF object digests verified pre-load | C6/C11/U-007/U-014; `docs/ops/verify-artifacts.md` | Vendor |
-| CC7.1 Vulnerability mgmt | Dependabot + scheduled scans (govulncheck/trivy per `security-scan.yml`); fuzz smoke on parsers | U-069/C12 | Vendor |
+| CC7.1 Vulnerability mgmt | scheduled scans (govulncheck/trivy per `security-scan.yml`) + on every PR; SHA/digest/hash-pinned deps enforced by CI pin gates; fuzz smoke on parsers | U-069/C12 | Vendor |
 | CC7.2/7.3 Anomaly detection & incident handling | probectl-observes-probectl metrics; severity matrix, SLAs, evidence preservation | `docs/security/incident-response.md` (U-066) | Shared |
 | CC7.4/7.5 Incident recovery | Backup/restore tooling with a **CI-executed drill**; timed failover drill; DR runbook | U-030 `docs/ops/backup-restore.md`; U-053 `docs/ops/dr.md` | Customer operates; vendor proves mechanism |
 | CC8.1 Change management | Conventional commits; release refuses red CI; expand/contract migration gate; buf breaking gate | U-083; `migration-gate`, `proto` jobs | Vendor |
