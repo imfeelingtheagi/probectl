@@ -9,6 +9,25 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening (first real GitHub Actions run): the prior "verify-all green"
+  was local-only, so the first push surfaced gates that had never executed on
+  GitHub. Fixed with real code/config changes — no linter disabled, no test
+  skipped or weakened: `lint-go` (golangci-lint v2.12.2 pre-existing findings:
+  goimports grouping, revive redefines-builtin/stutter/unused-param, gocritic
+  appendAssign, De Morgan, bodyclose; dead func removed), `proto` (stop
+  stamping SPDX on generated `*.pb.go` so `buf generate` reproduces the tree),
+  `web` (the `/v1/me` test-harness stub no longer shadows the provider
+  console's `/provider/v1/me`), `test-python` (compile the lock from
+  `analyzer/` so uv's provenance matches the committed lock), `secret-scan`
+  (allowlist the Sprint-20 egress-gate redaction-test fixture per the existing
+  policy), and `coverage`/`integration` (exit-2 BUILD failures — the
+  `EnrollRequest→Request` rename now propagates to the integration-tagged
+  test). Added `scripts/apply_branch_protection.sh` so an admin can enforce the
+  committed ruleset (the only step that turns `verify-branch-protection`
+  green). Residual gates that need real CI infra or a human action
+  (`helm-gate`, `ebpf-image-live`, `ebpf-kernel-matrix`, `failover-drill`,
+  `verify-branch-protection`) are tracked in `docs/diligence/known-risks.md`.
+
 - Sprint 17 (plan v2): wire the web AuthProvider to the real session
   identity (SEC-001 — down-rated to Medium: a UI demo stub, never an
   access-control hole, since the backend OIDC+session+RBAC enforces every

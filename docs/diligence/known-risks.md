@@ -86,3 +86,25 @@ the status with the commit hash rather than deleting the row.
 | Solo founder bus factor | Verification net (~30 CI gates), documentation density, ADRs; not eliminated |
 | Adoption metrics untested until public launch | PRD v1.0 §8 separates readiness (measurable now) from adoption (clock starts at launch) |
 | Open-data/threat-intel AUPs for commercial resale | Tracked per source (`docs/opendata-aup.md`); counsel item before MSP channel opens |
+
+## First-CI-run residuals (GitHub Actions — the repo's first real run on GitHub)
+
+The first push surfaced failures that had never run on GitHub before (the
+prior "verify-all green" was local only; `golangci-lint`, `gitleaks`, the
+GitHub-rules read, and the container/QEMU jobs had no way to run locally).
+Fixed with real code/config changes — **no linter disabled, no test
+skipped/weakened**:
+
+| Job | Cause | Status |
+|---|---|---|
+| lint-go | `golangci-lint` v2.12.2 had never actually executed; pre-existing findings (goimports grouping, revive `redefines-builtin`/stutter/unused-param, gocritic `appendAssign`, De Morgan, `bodyclose`) + a dead func | **FIXED** (07ec426) — `golangci-lint run ./...` = 0 issues |
+| proto | the Sprint-14 SPDX script stamped generated `*.pb.go`; `buf generate` re-emits them without it → `git diff` drift | **FIXED** (a923d0b) — script skips generated files; the 12 generated files un-stamped |
+| web | the screen-test harness intercepted `/v1/me` with `endsWith`, shadowing the provider console's `/provider/v1/me` → empty `<main/>`, 13 failures | **FIXED** (996289f) — exclude `/provider/`; 62 web tests green |
+| test-python | the lock-drift check compiled from the repo root, so uv's provenance comment differed from the committed lock (compiled in `analyzer/`) | **FIXED** (3915bc7) — compile from `analyzer/`, diff content-only; verified with uv 0.11.2 |
+| secret-scan | `egressgate_test.go` (Sprint 20) plants a fake `sk_live_…` to prove redaction; added after the Sprint-1 gitleaks allowlist | **FIXED** (375f8a1) — file allowlisted per the documented redaction-fixture policy; gitleaks = no leaks |
+| coverage / integration | exit 2 = BUILD failure: the `EnrollRequest→Request` rename did not propagate to the integration-tagged `enroll_integration_test.go` (plain `go build` misses it) | **FIXED** by 07ec426 — `go vet -tags=integration ./...` clean in both modules |
+| verify-branch-protection | the committed ruleset (`.github/rulesets/main.json`) is not yet *enforced* on the default branch; the default CI token cannot write rulesets | **NEEDS HUMAN** — run `scripts/apply_branch_protection.sh` once with an admin token (or import via Settings → Rules); helper added (2b3e496) |
+| helm-gate | needs `helm`/`kubeconform`/`docker compose` (none installable in the dev sandbox within disk+time limits) | **NEEDS CI TOOLCHAIN** — chart passes static review (all values files + templates present; ServiceMonitor/CronJob gating correct; strict NetworkPolicy closes both holes) and the two python/YAML sub-steps (`gitops-gate`, compose YAML) pass locally |
+| ebpf-image-live | `Dockerfile.ebpf` dumps `/sys/kernel/btf/vmlinux` *inside* the build; BuildKit RUN steps may not expose `/sys/kernel/btf` → `test -r` fails. **§4 eBPF build-path change → founder decision** | **NEEDS DOCKER TO CONFIRM** — recommended fix if confirmed: generate `vmlinux.h` on the runner (as the kernel-matrix job already does) and `COPY` it in, rather than dumping BTF in-container. Not guessed/applied (untestable here + touches the eBPF build architecture) |
+| ebpf-kernel-matrix | boots real LTS kernels under QEMU/KVM (load+attach BPF) — pure infra, no local repro | **INFRA** — NOT a required check (absent from `main.json`); not a merge blocker |
+| failover-drill | exit 143 = SIGTERM; with `concurrency.cancel-in-progress: true`, an in-progress long job (boots PG primary+replica, timed promote) is cancelled when a newer commit is pushed | **LIKELY CANCELLATION** — drill + compose are structurally sound (`postgres`/`pg-replica` services present); expected to pass on a clean, uncancelled run |
