@@ -23,6 +23,7 @@ internal/alert/channel.go         # webhook channel (injected in tests)
 internal/opendata/peeringdb.go    # opendata fetcher (cached, TLS-verified URL)
 internal/opendata/atlas.go        # opendata fetcher (cached, TLS-verified URL)
 internal/otel/otlp/exporter.go    # builds on hardened TLS transport explicitly
+internal/agent/identity.go        # enroll client builds on crypto.InternalClientTLSConfig + cert pin/CA
 internal/cli/cli.go               # CLI talking to the operator-chosen endpoint
 internal/browser/httpdriver.go    # browser-synthetic driver (per-run jar/transport)
 internal/store/pathstore/clickhouse.go  # in-cluster store client (TLS via URL)

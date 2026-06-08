@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/imfeelingtheagi/probectl/internal/breaker"
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
@@ -96,7 +97,10 @@ func (e chExec) Query(ctx context.Context, sql string, p chmigrate.Params) ([]ma
 // NewClickHouse connects, applies the versioned schema, and (when
 // retentionDays > 0) applies the delete-TTLs — idempotently.
 func NewClickHouse(rawURL string, retentionDays int) (*ClickHouse, error) {
-	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: &http.Client{Timeout: 30 * time.Second}, breaker: breaker.New(0, 0)}
+	// Hardened egress (U-036): TLS 1.2+/AEAD/verify-on for an https ClickHouse
+	// URL; unused for an in-cluster http URL. (flowstore/pathstore predate the
+	// ratchet and are allowlisted; this store post-dates it, so it migrates.)
+	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: crypto.HardenedHTTPClient(30 * time.Second), breaker: breaker.New(0, 0)}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if _, err := chmigrate.Apply(ctx, chExec{c}, "otelstore", chMigrations(), nil); err != nil {
