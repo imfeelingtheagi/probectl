@@ -27,6 +27,11 @@ type DataEvent struct {
 	Kind    Kind
 	Time    time.Time
 	Payload []byte
+	// Size is the chunk's TRUE plaintext size. Under a kernel capture window
+	// (EBPF-002) Payload may carry fewer bytes than the application wrote —
+	// len(Payload) is what was captured, Size is what happened. 0 = unknown
+	// (fixture/cleartext sources), treat as len(Payload).
+	Size int
 }
 
 // Call is one parsed application-protocol call: the unit the agent rolls up onto

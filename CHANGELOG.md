@@ -9,6 +9,29 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 18: eBPF TLS-capture scoping + kernel-side redaction
+  (EBPF-001/002, RED-003). Uprobes on a shared libssl fire for every
+  process on the host, so the fix lives IN THE KERNEL: sslsniff now
+  checks an allowlist (scope_tgids/scope_cgroups maps) before copying
+  a byte — a non-allowlisted process's plaintext never enters the ring
+  buffer, and empty maps match nothing (load-time default = capture
+  off). The allowlist is the THIRD consent gate: l7_capture_scope
+  (pid:/exe:/cgroup: entries; a container IS a cgroup) must name the
+  opted-in workloads or capture refuses to start — host-wide capture
+  is not expressible. exe: entries re-resolve against /proc on a 10s
+  ticker so restarts stay in scope. Redaction moved up a layer: the
+  kernel capture window (capture_cfg; zero-initialized = length-only =
+  fail-closed) bounds plaintext per chunk transiting the ring (headers
+  ≤ l7_capture_kernel_window, default 1024; new "length" mode ships
+  none; orig_len preserves true sizes and the D-001 len≤copied
+  invariant), then decodeChunk (l7chunk.go — pure, the only entry from
+  the ring) redacts the only surviving copy before any parser or
+  forwarder. Tests: scope parse/resolve (fake procfs; cgroup-id =
+  dir inode), triple-gate, decode-boundary redaction incl. hostile
+  records, and a kernel-matrix gate (TestLiveScopeAllowlistAttach)
+  proving a non-allowlisted openssl s_client yields ZERO events while
+  an exe:-allowlisted one flows.
+
 - Sprint 17: scale validation — everything-but-the-run (SCALE-002/015,
   DOCS-001/006). The benchmark set is complete: path-store write joins
   ingest (S14) and TSDB query (S16) — memory Save ~38ns and the

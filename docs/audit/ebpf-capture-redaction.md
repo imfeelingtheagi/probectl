@@ -109,6 +109,30 @@ fixed (`sslsniff.bpf.c` clamps to `MAX_DATA-1`, so the verifier mask is the
 identity and the stale-ring-memory ship is gone). Tests prove capture stays
 off without consent and no raw body byte survives the boundary.
 
+## Remediation status (Sprint 18 — EBPF-001/EBPF-002/RED-003)
+
+The two residuals C13 left open are closed:
+
+- **Process scope (EBPF-001/RED-003):** the allowlist is enforced IN THE
+  KERNEL (`scope_tgids`/`scope_cgroups` maps checked in `scoped()` before
+  any byte is copied) and is the THIRD consent gate — `l7_capture_scope`
+  (`pid:`/`exe:`/`cgroup:` entries) must be non-empty or capture refuses to
+  start. Empty maps match nothing, so the load-time default is capture-off
+  even when attached; host-wide capture is not expressible. `exe:` entries
+  are re-resolved against /proc on a 10s ticker.
+- **Pre-ring redaction (EBPF-002):** the kernel capture window
+  (`capture_cfg`, zero-initialized = length-only = fail-closed) bounds the
+  plaintext that may transit the ring per chunk — `headers` ships at most
+  `l7_capture_kernel_window` (default 1024) bytes, `length` ships none,
+  body bytes past the window never leave kernel space. The chunk carries
+  `orig_len` (true size) alongside `len` (copied bytes), preserving the
+  D-001 invariant `len <= copied`. Userspace redaction now lives in
+  `decodeChunk` (`l7chunk.go`) — pure, unit-tested, and the only entry
+  point from the ring.
+- **Kernel-matrix gate:** `TestLiveScopeAllowlistAttach` proves on a real
+  kernel that a non-allowlisted `openssl s_client` produces ZERO events and
+  an `exe:`-allowlisted one produces them.
+
 ## Recommended register updates
 
 - **D-001 → resolved.** Adjudication: "their" off-by-one is a real length-clamp bug at

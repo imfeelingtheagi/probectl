@@ -8,9 +8,7 @@ package ebpf
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target amd64,arm64 -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"runtime"
@@ -21,8 +19,6 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-
-	"github.com/imfeelingtheagi/probectl/internal/ebpf/l7"
 )
 
 // liveL7Source captures TLS plaintext via uprobes on the SSL library's read/
@@ -36,29 +32,35 @@ import (
 // (docs/ebpf-agent.md). Go's crypto/tls does NOT use libssl and needs the
 // separate ret-offset + goroutine-tracking strategy (docs/ebpf-feasibility.md §7).
 type liveL7Source struct {
-	objs  sslsniffObjects
-	links []link.Link
-	rd    *ringbuf.Reader
-	cfg   *Config
-	drops atomic.Uint64
+	objs    sslsniffObjects
+	links   []link.Link
+	rd      *ringbuf.Reader
+	cfg     *Config
+	scope   []ScopeEntry
+	exePIDs map[uint32]struct{} // tgids we programmed for exe: entries (refresher diff)
+	drops   atomic.Uint64
 }
 
-// sslChunk mirrors struct tls_chunk in bpf/sslsniff.bpf.c.
-type sslChunk struct {
-	PID    uint32
-	TID    uint32
-	Conn   uint64
-	IsRead uint8
-	Pad    [3]byte
-	Len    uint32
-	Data   [4096]byte
-}
+// scopeRefreshInterval is how often exe: entries are re-resolved against
+// /proc while capture runs (new workers of an opted-in binary join scope;
+// exited PIDs leave it). Test-tunable.
+var scopeRefreshInterval = 10 * time.Second
 
 func newLiveL7Source(cfg *Config) (L7Source, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("ebpf: remove memlock: %w", err)
 	}
-	s := &liveL7Source{cfg: cfg}
+	// EBPF-001: the scope allowlist is the third consent gate — refuse to
+	// attach at all without it (the maps would match nothing anyway; this
+	// makes the refusal loud instead of silent).
+	scope, err := ParseScopeEntries(cfg.L7CaptureScope)
+	if err != nil {
+		return nil, err
+	}
+	if len(scope) == 0 {
+		return nil, fmt.Errorf("ebpf: l7_capture_scope is empty — TLS capture requires an explicit workload allowlist (EBPF-001)")
+	}
+	s := &liveL7Source{cfg: cfg, scope: scope, exePIDs: map[uint32]struct{}{}}
 	// U-014: the embedded object must match the build-time manifest before
 	// the kernel ever sees it; a tampered/stale object refuses to load. The
 	// object (and so its manifest key) is per-arch — see the bpf2go directive.
@@ -71,6 +73,20 @@ func newLiveL7Source(cfg *Config) (L7Source, error) {
 	}
 	if err := loadSslsniffObjects(&s.objs, nil); err != nil {
 		return nil, fmt.Errorf("ebpf: load sslsniff objects (need a BTF kernel + CAP_BPF): %w", err)
+	}
+
+	// Program the kernel-side policy BEFORE attaching: the capture window
+	// (EBPF-002 — the map's zero default is length-only, fail-closed) and
+	// the process scope (EBPF-001 — empty maps match nothing). Order means
+	// no probe ever fires against an unprogrammed policy.
+	window := kernelWindowFor(cfg.L7CaptureRedaction, cfg.L7CaptureKernelWindow)
+	if err := s.objs.CaptureCfg.Put(uint32(0), window); err != nil {
+		_ = s.objs.Close()
+		return nil, fmt.Errorf("ebpf: program capture window: %w", err)
+	}
+	if err := s.syncScope(); err != nil {
+		_ = s.objs.Close()
+		return nil, err
 	}
 
 	libssl, err := opensslPath()
@@ -121,8 +137,81 @@ func newLiveL7Source(cfg *Config) (L7Source, error) {
 	return s, nil
 }
 
+// syncScope materializes the allowlist into the kernel maps. pid: and
+// cgroup: entries are stable; exe: entries are re-resolved against /proc —
+// newly started processes of an opted-in binary are added and exited ones
+// removed (only tgids owned by exe: entries are ever removed, so explicit
+// pid: opt-ins persist).
+func (s *liveL7Source) syncScope() error {
+	procRoot := s.cfg.ProcRoot
+	if procRoot == "" {
+		procRoot = "/proc"
+	}
+	tgids, cgroups, err := resolveScope(s.scope, procRoot)
+	if err != nil {
+		return err
+	}
+	for id := range cgroups {
+		if err := s.objs.ScopeCgroups.Put(id, uint8(1)); err != nil {
+			return fmt.Errorf("ebpf: program scope cgroup %d: %w", id, err)
+		}
+	}
+	// Static pid: entries (always present in tgids) plus current exe: matches.
+	static := map[uint32]struct{}{}
+	for _, e := range s.scope {
+		if e.Kind == scopePID {
+			static[e.PID] = struct{}{}
+		}
+	}
+	next := map[uint32]struct{}{}
+	for tgid := range tgids {
+		if err := s.objs.ScopeTgids.Put(tgid, uint8(1)); err != nil {
+			return fmt.Errorf("ebpf: program scope tgid %d: %w", tgid, err)
+		}
+		if _, isStatic := static[tgid]; !isStatic {
+			next[tgid] = struct{}{}
+		}
+	}
+	// Exited exe-resolved processes leave scope (delete is idempotent).
+	for tgid := range s.exePIDs {
+		if _, still := next[tgid]; !still {
+			if _, isStatic := static[tgid]; !isStatic {
+				_ = s.objs.ScopeTgids.Delete(tgid)
+			}
+		}
+	}
+	s.exePIDs = next
+	return nil
+}
+
+// hasExeEntries reports whether the allowlist needs periodic re-resolution.
+func (s *liveL7Source) hasExeEntries() bool {
+	for _, e := range s.scope {
+		if e.Kind == scopeExe {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *liveL7Source) L7Events(ctx context.Context) (<-chan L7Event, error) {
 	ch := make(chan L7Event)
+	if s.hasExeEntries() {
+		// exe: allowlist entries track the BINARY, not a PID — re-resolve
+		// while capture runs so restarts/new workers stay opted in.
+		go func() {
+			t := time.NewTicker(scopeRefreshInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					_ = s.syncScope() // transient /proc races retry next tick
+				}
+			}
+		}()
+	}
 	go func() {
 		defer close(ch)
 		go func() {
@@ -134,36 +223,15 @@ func (s *liveL7Source) L7Events(ctx context.Context) (<-chan L7Event, error) {
 			if err != nil {
 				return
 			}
-			var c sslChunk
-			if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &c); err != nil {
+			// U-003/EBPF-002 boundary: decodeChunk redacts the ONLY copy of
+			// the plaintext before anything downstream (parsers, buffers)
+			// can retain it. rec.RawSample is kernel-owned and reused on
+			// the next ring read; no other reference survives. The kernel
+			// already withheld everything past the capture window.
+			ev, err := decodeChunk(rec.RawSample, s.cfg.TenantID, s.cfg.L7CaptureRedaction)
+			if err != nil {
 				s.drops.Add(1)
 				continue
-			}
-			kind := l7.Request
-			if c.IsRead == 1 {
-				kind = l7.Response
-			}
-			n := c.Len
-			if n > uint32(len(c.Data)) {
-				n = uint32(len(c.Data))
-			}
-			// U-003 redaction boundary: the ONLY copy of the plaintext is
-			// redacted in place before anything downstream (parsers,
-			// buffers) can retain it. rec.RawSample is kernel-owned and
-			// reused on the next ring read; no other reference survives.
-			payload := RedactPayload(append([]byte(nil), c.Data[:n]...), s.cfg.L7CaptureRedaction)
-			ev := L7Event{
-				ConnID:      c.Conn,
-				TenantID:    s.cfg.TenantID,
-				Encrypted:   true,
-				Source:      Endpoint{PID: c.PID}, // 5-tuple correlation is the productionization step
-				Destination: Endpoint{},
-				Transport:   TransportTCP,
-				Data: l7.DataEvent{
-					Kind:    kind,
-					Time:    time.Now(),
-					Payload: payload,
-				},
 			}
 			select {
 			case <-ctx.Done():

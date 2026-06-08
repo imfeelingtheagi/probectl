@@ -620,9 +620,11 @@ The agent is **observe-only**; the CO-RE loader is compiled in only with
 | `PROBECTL_EBPF_FIXTURE_PATH`   | (none)      | replay recorded flows instead of loading eBPF (no-kernel path) |
 | `PROBECTL_EBPF_L7_FIXTURE_PATH` | (none)     | replay recorded L7 events (no-kernel L7 path, S21)             |
 | `PROBECTL_EBPF_LIBSSL`         | (auto)      | libssl path for TLS-uprobe L7 capture (`-tags ebpf`)           |
-| `PROBECTL_EBPF_L7_CAPTURE`     | `false`     | **U-003:** live TLS-plaintext capture is OFF by default; `true` alone is not enough — consent below is also required |
+| `PROBECTL_EBPF_L7_CAPTURE`     | `false`     | **U-003:** live TLS-plaintext capture is OFF by default; `true` alone is not enough — consent AND scope below are also required |
 | `PROBECTL_EBPF_L7_CONSENT_TENANT` | (none)   | the EXPLICIT per-tenant consent: must equal this agent's bound tenant id exactly, else capture stays off |
-| `PROBECTL_EBPF_L7_REDACTION`   | `headers`   | capture-boundary policy: `headers` zeroes payload bodies in place before any retention (protocol metadata survives); `full` (consented debugging) disables masking |
+| `PROBECTL_EBPF_L7_SCOPE`       | (none)      | **EBPF-001:** the EXPLICIT workload opt-in — comma-separated `pid:<n>`, `exe:/abs/path`, `cgroup:/abs/cgroup-dir` entries. The kernel program drops every other process BEFORE copying a byte; empty = capture refuses to start. Host-wide capture is not expressible. Container/pod scoping is the `cgroup:` form (a container IS a cgroup); `exe:` entries are re-resolved every 10s so restarts stay in scope |
+| `PROBECTL_EBPF_L7_REDACTION`   | `headers`   | capture-boundary policy: `headers` zeroes payload bodies in place before any retention (protocol metadata survives); `length` captures NO payload bytes (kernel window 0 — traffic shape only, no parsed calls); `full` (consented debugging) disables masking |
+| `PROBECTL_EBPF_L7_KERNEL_WINDOW` | `1024`    | **EBPF-002:** max plaintext bytes per chunk that may transit the kernel ring under `headers` redaction (128–4095); bytes past the window never leave kernel space. `length` forces 0, `full` forces 4095. The BPF policy map's zero default is length-only, so an unprogrammed kernel ships no plaintext |
 | `PROBECTL_EBPF_PROC_ROOT`      | `/proc`     | procfs root for process/cgroup enrichment                      |
 | `PROBECTL_EBPF_FLUSH_INTERVAL` | `10s`       | how often flows + the service map are emitted                  |
 | `PROBECTL_EBPF_LOG_LEVEL`      | `info`      | `debug` \| `info` \| `warn` \| `error`                         |

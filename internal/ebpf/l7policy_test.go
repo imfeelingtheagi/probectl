@@ -10,9 +10,11 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/ebpf/l7"
 )
 
-// U-003: capture is off by default and stays off without an exact-tenant
-// consent — the gate requires BOTH flags and a tenant match.
+// U-003 + EBPF-001: capture is off by default and stays off without an
+// exact-tenant consent AND an explicit workload scope — the gate requires
+// all three statements. Host-wide capture is not expressible.
 func TestL7CaptureConsentGate(t *testing.T) {
+	scope := []string{"exe:/usr/sbin/nginx"}
 	cases := []struct {
 		name    string
 		cfg     Config
@@ -20,10 +22,11 @@ func TestL7CaptureConsentGate(t *testing.T) {
 		reasony string
 	}{
 		{"default off", Config{TenantID: "t1"}, false, "OFF by default"},
-		{"enabled without consent", Config{TenantID: "t1", L7CaptureEnabled: true}, false, "consent"},
-		{"consent for another tenant", Config{TenantID: "t1", L7CaptureEnabled: true, L7CaptureConsentTenant: "t2"}, false, "does not match"},
-		{"consent without enable", Config{TenantID: "t1", L7CaptureConsentTenant: "t1"}, false, "OFF by default"},
-		{"enabled with matching consent", Config{TenantID: "t1", L7CaptureEnabled: true, L7CaptureConsentTenant: "t1"}, true, ""},
+		{"enabled without consent", Config{TenantID: "t1", L7CaptureEnabled: true, L7CaptureScope: scope}, false, "consent"},
+		{"consent for another tenant", Config{TenantID: "t1", L7CaptureEnabled: true, L7CaptureConsentTenant: "t2", L7CaptureScope: scope}, false, "does not match"},
+		{"consent without enable", Config{TenantID: "t1", L7CaptureConsentTenant: "t1", L7CaptureScope: scope}, false, "OFF by default"},
+		{"enabled+consent WITHOUT scope", Config{TenantID: "t1", L7CaptureEnabled: true, L7CaptureConsentTenant: "t1"}, false, "l7_capture_scope"},
+		{"enabled with consent and scope", Config{TenantID: "t1", L7CaptureEnabled: true, L7CaptureConsentTenant: "t1", L7CaptureScope: scope}, true, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,14 +62,37 @@ func TestL7CaptureConfigValidation(t *testing.T) {
 	c = base()
 	c.L7CaptureEnabled = true
 	c.L7CaptureConsentTenant = "t1"
+	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "l7_capture_scope") {
+		t.Fatalf("enable without a workload scope must fail load (EBPF-001): %v", err)
+	}
+	c.L7CaptureScope = []string{"pid:0x12"}
+	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "pid") {
+		t.Fatalf("malformed scope entry must fail load: %v", err)
+	}
+	c.L7CaptureScope = []string{"exe:/usr/sbin/nginx", "pid:42"}
 	if err := c.validate(); err != nil {
-		t.Fatalf("consented config must validate: %v", err)
+		t.Fatalf("consented+scoped config must validate: %v", err)
+	}
+	c.L7CaptureKernelWindow = 64
+	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "l7_capture_kernel_window") {
+		t.Fatalf("out-of-bounds kernel window must fail load: %v", err)
+	}
+	c.L7CaptureKernelWindow = 2048
+	if err := c.validate(); err != nil {
+		t.Fatalf("in-bounds kernel window must validate: %v", err)
+	}
+	c.L7CaptureRedaction = RedactLengthOnly
+	if err := c.validate(); err != nil {
+		t.Fatalf("length-only redaction must be a valid mode: %v", err)
 	}
 	if Default().L7CaptureEnabled {
 		t.Fatal("L7 capture must default OFF")
 	}
 	if Default().L7CaptureRedaction != RedactHeaders {
 		t.Fatal("redaction must default to headers mode")
+	}
+	if len(Default().L7CaptureScope) != 0 {
+		t.Fatal("scope must default EMPTY — workloads opt in explicitly (EBPF-001)")
 	}
 }
 

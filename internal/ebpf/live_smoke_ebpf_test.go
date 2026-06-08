@@ -7,7 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -51,6 +55,9 @@ func TestLiveLoadAttachSslsniff(t *testing.T) {
 	cfg.TenantID = "kernel-matrix"
 	cfg.L7CaptureEnabled = true
 	cfg.L7CaptureConsentTenant = "kernel-matrix" // U-003 consent for the smoke VM
+	// EBPF-001: attach now requires the third gate — an explicit workload
+	// allowlist (here: this test process).
+	cfg.L7CaptureScope = []string{"pid:" + strconv.Itoa(os.Getpid())}
 	src, err := newLiveL7Source(cfg)
 	if err != nil {
 		t.Skipf("sslsniff attach unavailable (no libssl on this rootfs?): %v", err)
@@ -63,6 +70,130 @@ func TestLiveLoadAttachSslsniff(t *testing.T) {
 		t.Fatalf("l7 events stream: %v", err)
 	}
 	<-ctx.Done()
+}
+
+// Sprint 18 (EBPF-001/RED-003) kernel gate: the in-kernel allowlist. An
+// openssl client doing real TLS through libssl produces ZERO ring events
+// while it is not in scope, and produces events once its binary is
+// allowlisted (exe: entry picked up by the refresher). This is the
+// "non-allowlisted process produces no events" acceptance run on the
+// kernel matrix.
+func TestLiveScopeAllowlistAttach(t *testing.T) {
+	openssl, err := exec.LookPath("openssl")
+	if err != nil {
+		t.Skip("openssl binary not on this rootfs — allowlist traffic test needs it")
+	}
+	if resolved, rerr := filepath.EvalSymlinks(openssl); rerr == nil {
+		openssl = resolved // /proc/<pid>/exe reports the resolved path
+	}
+
+	// A local TLS server (Go crypto/tls — no libssl, so the SERVER side can
+	// never pollute the capture; only the openssl CLIENT exercises SSL_*).
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	addr := srv.Listener.Addr().String()
+
+	// Fast exe: re-resolution so phase 2 sees the child quickly.
+	oldRefresh := scopeRefreshInterval
+	scopeRefreshInterval = 200 * time.Millisecond
+	defer func() { scopeRefreshInterval = oldRefresh }()
+
+	// run pipes one HTTP request through `openssl s_client` and returns the
+	// child's PID. SSL_write fires in the CHILD process (the scope subject).
+	run := func(ctx context.Context, delay time.Duration) (int, error) {
+		cmd := exec.CommandContext(ctx, openssl, "s_client", "-connect", addr, "-quiet", "-verify_quiet")
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return 0, err
+		}
+		cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+		if err := cmd.Start(); err != nil {
+			return 0, err
+		}
+		go func() {
+			defer stdin.Close()
+			time.Sleep(delay) // let the refresher allowlist the pid first (phase 2)
+			_, _ = io.WriteString(stdin, "GET / HTTP/1.0\r\nHost: x\r\n\r\n")
+			time.Sleep(500 * time.Millisecond)
+		}()
+		go func() { _ = cmd.Wait() }()
+		return cmd.Process.Pid, nil
+	}
+
+	countFrom := func(events <-chan L7Event, pid int, window time.Duration) int {
+		n := 0
+		deadline := time.After(window)
+		for {
+			select {
+			case ev, ok := <-events:
+				if !ok {
+					return n
+				}
+				if int(ev.Source.PID) == pid {
+					n++
+				}
+			case <-deadline:
+				return n
+			}
+		}
+	}
+
+	// ---- Phase 1: NOT allowlisted (scope = pid:1) → zero events. ----
+	cfg := Default()
+	cfg.TenantID = "kernel-matrix"
+	cfg.L7CaptureEnabled = true
+	cfg.L7CaptureConsentTenant = "kernel-matrix"
+	cfg.L7CaptureScope = []string{"pid:1"}
+	src, err := newLiveL7Source(cfg)
+	if err != nil {
+		t.Skipf("sslsniff attach unavailable (no libssl on this rootfs?): %v", err)
+	}
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 10*time.Second)
+	events, err := src.L7Events(ctx1)
+	if err != nil {
+		cancel1()
+		t.Fatalf("l7 events stream: %v", err)
+	}
+	pid, err := run(ctx1, 0)
+	if err != nil {
+		cancel1()
+		_ = src.Close()
+		t.Fatalf("spawn openssl: %v", err)
+	}
+	if n := countFrom(events, pid, 3*time.Second); n != 0 {
+		cancel1()
+		_ = src.Close()
+		t.Fatalf("EBPF-001 VIOLATION: %d plaintext events from a NON-allowlisted process reached userspace", n)
+	}
+	cancel1()
+	_ = src.Close()
+
+	// ---- Phase 2: allowlisted via exe: → events flow. ----
+	cfg2 := Default()
+	cfg2.TenantID = "kernel-matrix"
+	cfg2.L7CaptureEnabled = true
+	cfg2.L7CaptureConsentTenant = "kernel-matrix"
+	cfg2.L7CaptureScope = []string{"exe:" + openssl}
+	src2, err := newLiveL7Source(cfg2)
+	if err != nil {
+		t.Fatalf("attach with exe: scope: %v", err)
+	}
+	defer src2.Close()
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel2()
+	events2, err := src2.L7Events(ctx2)
+	if err != nil {
+		t.Fatalf("l7 events stream: %v", err)
+	}
+	pid2, err := run(ctx2, 1*time.Second) // > 2 refresh ticks before any SSL_write
+	if err != nil {
+		t.Fatalf("spawn openssl: %v", err)
+	}
+	if n := countFrom(events2, pid2, 8*time.Second); n == 0 {
+		t.Fatal("allowlisted (exe:) process produced no events — scope refresher or kernel filter broken")
+	}
 }
 
 // The agent end-to-end on a live kernel: capability probe, live source, one

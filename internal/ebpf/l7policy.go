@@ -29,10 +29,46 @@ const (
 	// is zeroed in place; for non-HTTP chunks only the protocol-detection
 	// window (first redactKeepPrefix bytes) survives.
 	RedactHeaders = "headers"
+	// RedactLengthOnly captures NO payload bytes: the kernel window is 0, so
+	// only chunk metadata (direction, true size, connection key) transits the
+	// ring — traffic shape without any plaintext. Parsed L7 calls are
+	// unavailable in this mode (there is nothing to parse), by design.
+	RedactLengthOnly = "length"
 	// RedactFull disables payload redaction (consented debugging only —
-	// still behind the same enable+consent gate).
+	// still behind the same enable+consent+scope gates).
 	RedactFull = "full"
 )
+
+// Kernel capture-window bounds (EBPF-002): the window is how many plaintext
+// bytes per chunk may transit the kernel ring AT ALL — body bytes past it
+// never leave kernel space. The BPF map is zero-initialized (window 0 =
+// length-only), so an unprogrammed policy fails closed.
+const (
+	// defaultKernelWindow covers a request line + typical headers + every
+	// protocol-detection signature under "headers" redaction.
+	defaultKernelWindow = 1024
+	// minKernelWindow keeps protocol detection viable (HTTP/2 preface is 24
+	// bytes; DNS/Kafka identifiers sit early; redactKeepPrefix is 128).
+	minKernelWindow = 128
+	// maxKernelWindow is MAX_DATA-1 in bpf/sslsniff.bpf.c.
+	maxKernelWindow = 4095
+)
+
+// kernelWindowFor maps the consented redaction mode to the kernel capture
+// window programmed into capture_cfg.
+func kernelWindowFor(mode string, configured int) uint32 {
+	switch mode {
+	case RedactLengthOnly:
+		return 0
+	case RedactFull:
+		return maxKernelWindow
+	default: // RedactHeaders
+		if configured == 0 {
+			return defaultKernelWindow
+		}
+		return uint32(configured)
+	}
+}
 
 // redactKeepPrefix is the survival window for non-HTTP-framed chunks: enough
 // for protocol detection and early metadata (HTTP/2 preface is 24 bytes; DNS
@@ -48,11 +84,13 @@ var (
 	http2Preface = []byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
 )
 
-// l7CaptureAuthorized is the consent gate: both the explicit enable AND the
-// per-tenant consent (matching the agent's bound tenant) are required.
+// l7CaptureAuthorized is the consent gate — now THREE explicit statements
+// (U-003 + EBPF-001): the enable flag, the per-tenant consent (matching the
+// agent's bound tenant), and a non-empty process-scope allowlist naming the
+// opted-in workloads. Host-wide capture is not expressible.
 func l7CaptureAuthorized(cfg *Config) (bool, string) {
 	if !cfg.L7CaptureEnabled {
-		return false, "TLS-plaintext capture is OFF by default (set l7_capture_enabled + per-tenant consent; U-003)"
+		return false, "TLS-plaintext capture is OFF by default (set l7_capture_enabled + per-tenant consent + l7_capture_scope; U-003)"
 	}
 	if cfg.L7CaptureConsentTenant == "" {
 		return false, "l7_capture_enabled without l7_capture_consent_tenant — consent must name the tenant explicitly (U-003)"
@@ -60,6 +98,9 @@ func l7CaptureAuthorized(cfg *Config) (bool, string) {
 	if cfg.L7CaptureConsentTenant != cfg.TenantID {
 		return false, fmt.Sprintf("l7_capture_consent_tenant %q does not match this agent's tenant %q — capture stays off (U-003)",
 			cfg.L7CaptureConsentTenant, cfg.TenantID)
+	}
+	if len(cfg.L7CaptureScope) == 0 {
+		return false, "l7_capture_enabled without l7_capture_scope — capture must name the opted-in workloads (pid:/exe:/cgroup:), never the whole host (EBPF-001)"
 	}
 	return true, ""
 }
@@ -70,6 +111,14 @@ func l7CaptureAuthorized(cfg *Config) (bool, string) {
 // region is the retained-plaintext kill zone.
 func RedactPayload(p []byte, mode string) []byte {
 	if mode == RedactFull {
+		return p
+	}
+	if mode == RedactLengthOnly {
+		// The kernel window is 0 in this mode, so p is normally already
+		// empty — this is defense in depth for any other caller.
+		for i := range p {
+			p[i] = 0
+		}
 		return p
 	}
 	keep := redactKeepPrefix
@@ -91,5 +140,5 @@ func RedactPayload(p []byte, mode string) []byte {
 
 // validRedactionMode reports whether mode is a known capture-boundary policy.
 func validRedactionMode(mode string) bool {
-	return mode == RedactHeaders || mode == RedactFull
+	return mode == RedactHeaders || mode == RedactLengthOnly || mode == RedactFull
 }

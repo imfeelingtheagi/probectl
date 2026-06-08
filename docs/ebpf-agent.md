@@ -16,11 +16,29 @@ process/cgroup enrichment, the capability probe, the OTel mapping, and the bus
 emitter) drives a pluggable **flow `Source`**. The live `Source` — a CO-RE eBPF
 program loaded via `cilium/ebpf` into a ring buffer — is compiled in **only under
 `-tags ebpf`**. Live TLS-plaintext (sslsniff) capture is additionally
-**off by default and consent-gated** (U-003): it runs only with
+**off by default and triple-gated** (U-003 + EBPF-001): it runs only with
 `l7_capture_enabled: true` AND `l7_capture_consent_tenant` matching the
-agent's bound tenant, and payload bodies are zeroed at the ring-buffer →
-user-space boundary (`l7_capture_redaction: headers`, the default; http2/grpc
-call extraction is degraded under redaction by design). Every other build
+agent's bound tenant AND a non-empty `l7_capture_scope` workload allowlist
+(`pid:<n>` / `exe:/abs/path` / `cgroup:/abs/cgroup-dir` — container/pod
+scoping is the cgroup form). The allowlist is enforced **in the kernel**:
+uprobes on a shared libssl fire for every process that maps it, so the BPF
+program checks `scope_tgids`/`scope_cgroups` before copying a byte — a
+non-allowlisted process's plaintext never enters the ring buffer, and
+host-wide capture is not expressible. `exe:` entries are re-resolved
+against /proc every 10s, so restarts/new workers of an opted-in binary
+stay in scope.
+
+Redaction is layered (EBPF-002): the kernel **capture window**
+(`l7_capture_kernel_window`, default 1024 bytes; the policy map's zero
+default is length-only, fail-closed) bounds how much plaintext per chunk
+may transit the ring at all — body bytes past it never leave kernel
+space — then payload bodies are zeroed at the ring-buffer → user-space
+boundary on the only surviving copy (`l7_capture_redaction: headers`, the
+default; http2/grpc call extraction is degraded under redaction by
+design). `length` mode captures no payload bytes at all (traffic shape
+only — chunk direction + true size via `DataEvent.Size`; nothing to
+parse, so no L7 calls). Parser byte-counts reflect the captured window;
+`DataEvent.Size` carries the true chunk size. Every other build
 uses the **`FixtureSource`** (recorded flows),
 which is also the no-kernel CI path.
 

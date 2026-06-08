@@ -40,14 +40,29 @@ type Config struct {
 	// rounded to a valid power-of-two page multiple at load (U-050).
 	RingBufferBytes int `yaml:"ring_buffer_bytes"`
 
-	// TLS-plaintext capture policy (U-003): live sslsniff capture is OFF by
-	// default and requires BOTH the enable flag and an explicit per-tenant
-	// consent naming this agent's tenant. L7CaptureRedaction selects the
-	// boundary policy ("headers" default — bodies zeroed before any
-	// retention; "full" only for consented debugging).
+	// TLS-plaintext capture policy (U-003 + EBPF-001/002): live sslsniff
+	// capture is OFF by default and requires THREE explicit statements — the
+	// enable flag, a per-tenant consent naming this agent's tenant, and a
+	// process-scope allowlist naming the opted-in workloads (host-wide
+	// capture is not expressible). L7CaptureRedaction selects the boundary
+	// policy ("headers" default — bodies zeroed before any retention;
+	// "length" — no payload bytes at all; "full" only for consented
+	// debugging).
 	L7CaptureEnabled       bool   `yaml:"l7_capture_enabled"`
 	L7CaptureConsentTenant string `yaml:"l7_capture_consent_tenant"`
 	L7CaptureRedaction     string `yaml:"l7_capture_redaction"`
+
+	// L7CaptureScope is the EXPLICIT workload opt-in (EBPF-001/RED-003):
+	// entries pid:<n>, exe:/abs/path, cgroup:/abs/cgroup-dir. The kernel
+	// program drops everything else before copying a byte. Container/pod
+	// scoping is the cgroup form (a container IS a cgroup).
+	L7CaptureScope []string `yaml:"l7_capture_scope"`
+
+	// L7CaptureKernelWindow bounds plaintext bytes per chunk that may
+	// transit the kernel ring under "headers" redaction (EBPF-002).
+	// 0 = default (1024). Bounds: 128..4095. "length" forces 0; "full"
+	// forces 4095.
+	L7CaptureKernelWindow int `yaml:"l7_capture_kernel_window"`
 }
 
 // BusConfig selects the bus backend for emission.
@@ -137,6 +152,14 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	if v := getenv("PROBECTL_EBPF_L7_REDACTION"); v != "" {
 		c.L7CaptureRedaction = v
 	}
+	if v := getenv("PROBECTL_EBPF_L7_SCOPE"); v != "" {
+		c.L7CaptureScope = splitComma(v)
+	}
+	if v := getenv("PROBECTL_EBPF_L7_KERNEL_WINDOW"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.L7CaptureKernelWindow = n
+		}
+	}
 }
 
 func (c *Config) validate() error {
@@ -159,6 +182,15 @@ func (c *Config) validate() error {
 	}
 	if c.L7CaptureEnabled && c.L7CaptureConsentTenant == "" {
 		return fmt.Errorf("ebpf: l7_capture_enabled requires l7_capture_consent_tenant (the EXPLICIT per-tenant consent, U-003)")
+	}
+	if c.L7CaptureEnabled && len(c.L7CaptureScope) == 0 {
+		return fmt.Errorf("ebpf: l7_capture_enabled requires l7_capture_scope — name the opted-in workloads (pid:<n>|exe:/path|cgroup:/path); host-wide capture is not expressible (EBPF-001)")
+	}
+	if _, err := ParseScopeEntries(c.L7CaptureScope); err != nil {
+		return err
+	}
+	if w := c.L7CaptureKernelWindow; w != 0 && (w < minKernelWindow || w > maxKernelWindow) {
+		return fmt.Errorf("ebpf: l7_capture_kernel_window %d out of bounds (%d..%d, 0 = default %d)", w, minKernelWindow, maxKernelWindow, defaultKernelWindow)
 	}
 	return nil
 }

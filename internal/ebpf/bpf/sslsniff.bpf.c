@@ -9,6 +9,23 @@
 // the symbols per library). SSL_read is captured at the *return* uprobe because
 // the destination buffer is not yet populated at entry.
 //
+// PROCESS SCOPE (EBPF-001/RED-003): uprobes on a SHARED libssl fire for every
+// process that maps it, so the filter must live HERE, in the kernel, before
+// any byte is copied. A process is in scope only if its tgid is in scope_tgids
+// or its cgroup id is in scope_cgroups — both maps are programmed by userspace
+// from the explicit l7_capture_scope allowlist. Empty maps (the load-time
+// state) match nothing: DEFAULT = CAPTURE OFF, consistent with the U-003
+// double-consent gate. Non-allowlisted process plaintext never enters the
+// ring buffer at all.
+//
+// CAPTURE WINDOW (EBPF-002): capture_cfg.window bounds how many plaintext
+// bytes per chunk may transit the ring. The map is zero-initialized, so the
+// kernel default is 0 = LENGTH-ONLY (metadata, no payload bytes) until
+// userspace explicitly programs the consented redaction mode's window. The
+// chunk's orig_len always reports the true plaintext size for volumetrics;
+// len is the bytes actually copied (len <= orig_len, and data[:len] is the
+// only valid region — the D-001/U-003 invariant).
+//
 // OBSERVE-ONLY (CLAUDE.md §7 guardrail 8): this program only reads buffers and
 // reports them; it attaches no enforcement hook and alters no traffic. Go's
 // crypto/tls does not use libssl and needs the separate strategy documented in
@@ -23,14 +40,15 @@
 
 #define MAX_DATA 4096
 
-// Mirrors sslChunk in source_live_l7_linux.go — keep field order/sizes in sync.
+// Mirrors sslChunk in l7chunk.go — keep field order/sizes in sync.
 struct tls_chunk {
 	__u32 pid;
 	__u32 tid;
-	__u64 conn;    // SSL* pointer, used as a per-connection key
-	__u8 is_read;  // 0 = write (request/egress), 1 = read (response/ingress)
+	__u64 conn;     // SSL* pointer, used as a per-connection key
+	__u8 is_read;   // 0 = write (request/egress), 1 = read (response/ingress)
 	__u8 pad[3];
-	__u32 len;
+	__u32 len;      // bytes copied into data (<= window; data[:len] valid)
+	__u32 orig_len; // true plaintext size of the SSL_read/SSL_write
 	__u8 data[MAX_DATA];
 };
 
@@ -38,6 +56,45 @@ struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 1 << 24);
 } tls_chunks SEC(".maps");
+
+// Process allowlist: tgids (exact PIDs + PIDs resolved from exe: entries).
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 4096);
+	__type(key, __u32); // tgid
+	__type(value, __u8);
+} scope_tgids SEC(".maps");
+
+// Process allowlist: cgroup v2 ids (cgroup:/container scoping).
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 4096);
+	__type(key, __u64); // cgroup id (bpf_get_current_cgroup_id)
+	__type(value, __u8);
+} scope_cgroups SEC(".maps");
+
+// Capture policy: [0] = window, the max payload bytes per chunk (0 = length-
+// only metadata). Zero-initialized => length-only until userspace programs
+// the consented mode (fail-closed for plaintext).
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u32);
+} capture_cfg SEC(".maps");
+
+// scoped reports whether the CURRENT process opted in via the allowlist.
+// Both maps empty (default) => nothing is in scope.
+static __always_inline int scoped(void)
+{
+	__u32 tgid = bpf_get_current_pid_tgid() >> 32;
+	if (bpf_map_lookup_elem(&scope_tgids, &tgid))
+		return 1;
+	__u64 cg = bpf_get_current_cgroup_id();
+	if (bpf_map_lookup_elem(&scope_cgroups, &cg))
+		return 1;
+	return 0;
+}
 
 // SSL_read args stashed at entry, consumed at return (buffer filled by then).
 struct read_args {
@@ -56,6 +113,13 @@ static __always_inline void emit(__u64 conn, __u8 is_read, const void *buf, int 
 {
 	if (num <= 0)
 		return;
+
+	__u32 zero = 0;
+	__u32 *pol = bpf_map_lookup_elem(&capture_cfg, &zero);
+	__u32 window = pol ? *pol : 0;
+	if (window > MAX_DATA - 1)
+		window = MAX_DATA - 1;
+
 	struct tls_chunk *e = bpf_ringbuf_reserve(&tls_chunks, sizeof(*e), 0);
 	if (!e)
 		return; // ring buffer full — userspace counts the drop
@@ -66,14 +130,16 @@ static __always_inline void emit(__u64 conn, __u8 is_read, const void *buf, int 
 	e->conn = conn;
 	e->is_read = is_read;
 	e->pad[0] = e->pad[1] = e->pad[2] = 0;
+	e->orig_len = (__u32)num;
 
 	__u32 n = (__u32)num;
-	if (n > MAX_DATA - 1)
-		n = MAX_DATA - 1; /* clamp BELOW the mask: at n==MAX_DATA the old code
-	                       * copied ZERO bytes while declaring len=4096, shipping
-	                       * stale ring memory to userspace (D-001/U-003). */
+	if (n > window)
+		n = window; /* EBPF-002: at most the policy window transits the ring.
+		             * window < MAX_DATA always, so the D-001/U-003 invariant
+		             * (len <= bytes actually copied) holds by construction. */
 	e->len = n;
-	bpf_probe_read_user(&e->data, n & (MAX_DATA - 1), buf); // mask aids the verifier (now identity)
+	if (n)
+		bpf_probe_read_user(&e->data, n & (MAX_DATA - 1), buf); // mask aids the verifier
 	bpf_ringbuf_submit(e, 0);
 }
 
@@ -81,6 +147,8 @@ static __always_inline void emit(__u64 conn, __u8 is_read, const void *buf, int 
 SEC("uprobe/SSL_write")
 int BPF_UPROBE(probe_ssl_write, void *ssl, const void *buf, int num)
 {
+	if (!scoped())
+		return 0; // EBPF-001: non-allowlisted plaintext never leaves the process
 	emit((__u64)ssl, 0, buf, num);
 	return 0;
 }
@@ -89,6 +157,8 @@ int BPF_UPROBE(probe_ssl_write, void *ssl, const void *buf, int num)
 SEC("uprobe/SSL_read")
 int BPF_UPROBE(probe_ssl_read_enter, void *ssl, void *buf, int num)
 {
+	if (!scoped())
+		return 0; // not in scope: no stash, so the exit probe no-ops too
 	__u64 tid = bpf_get_current_pid_tgid();
 	struct read_args a = {.conn = (__u64)ssl, .buf = (__u64)buf};
 	bpf_map_update_elem(&active_reads, &tid, &a, BPF_ANY);
