@@ -9,6 +9,31 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 19: agent integrity, capabilities, resource caps, kernel matrix
+  (EBPF-003..008). EBPF-003 decided per the triage rule: operator-
+  supplied BPF objects are NOT supported — the embedded-digest chain
+  (source → bpf2go → embed → U-014 manifest → cosign-signed binary,
+  signature covering objects+manifest together) is the documented
+  trust boundary, with a static tripwire test forcing the signature
+  design if a filesystem/env load path ever appears. EBPF-004: the
+  SHIPPED probectl-ebpf-agent image is now the LIVE -tags ebpf build
+  (Dockerfile.ebpf: same bpf2go+gendigests path operators use;
+  release.yml wired; the ebpf-image-live ci job extracts the image
+  binary and fails unless Go build metadata records the tag) — fixture
+  mode documented dev/test-only. EBPF-005: the capability probe checks
+  CAP_PERFMON (attach/perf_event_open) separately from CAP_BPF (load),
+  CAP_SYS_ADMIN implies both, with distinct actionable reasons — no
+  more ready-then-fail-at-attach; CAP_NET_ADMIN documented NOT needed
+  (no TC/XDP, observe-only). EBPF-006 confirmed closed (Sprint 0
+  re-audit note + bpf_probe_write_user in the forbidden list).
+  EBPF-007: systemd unit gains CPUQuota=100%, MemoryHigh=384M,
+  MemoryMax=512M, TasksMax=128, IOWeight — mirroring the Helm limits.
+  EBPF-008: kernel matrix broadened to arm64 (native ubuntu-24.04-arm
+  runner; vimto can't cross-emulate) and a hardened entry raising
+  lockdown to INTEGRITY inside the ephemeral VM and proving load+
+  attach + probe truthfulness there (secure-boot distro kernel stays
+  [needs infra] if the ci-kernel lacks the lockdown LSM).
+
 - Sprint 18: eBPF TLS-capture scoping + kernel-side redaction
   (EBPF-001/002, RED-003). Uprobes on a shared libssl fire for every
   process on the host, so the fix lives IN THE KERNEL: sslsniff now

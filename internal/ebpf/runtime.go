@@ -45,7 +45,7 @@ func New(cfg *Config, b bus.Bus, log *slog.Logger) (*Agent, error) {
 	caps := Probe()
 	log.Info("ebpf capability probe",
 		"mode", string(caps.Mode), "btf", caps.BTF, "ringbuf", caps.RingBuffer,
-		"cap_bpf", caps.CapBPF, "compiled", caps.Compiled,
+		"cap_bpf", caps.CapBPF, "cap_perfmon", caps.CapPerfmon, "compiled", caps.Compiled,
 		"kernel", caps.KernelVersion, "reason", caps.Reason)
 
 	var (

@@ -31,3 +31,41 @@ func TestDigitPrefix(t *testing.T) {
 		}
 	}
 }
+
+// EBPF-005: the probe distinguishes the LOAD capability (CAP_BPF) from the
+// ATTACH capability (CAP_PERFMON) — and CAP_SYS_ADMIN implies both. Reasons
+// name the missing capability so the agent fails fast and actionably,
+// instead of loading objects and dying at attach.
+func TestCapMaskPerfmonAndBPF(t *testing.T) {
+	none := capMask(0)
+	if none.has(capBPF) || none.has(capPerfmon) || none.has(capSysAdmin) {
+		t.Fatal("empty mask must hold nothing")
+	}
+	bpfOnly := capMask(1 << capBPF)
+	if !bpfOnly.has(capBPF) || bpfOnly.has(capPerfmon) {
+		t.Fatal("CAP_BPF alone must not imply CAP_PERFMON — that is exactly the EBPF-005 bug")
+	}
+	pair := capMask(1<<capBPF | 1<<capPerfmon)
+	if !pair.has(capBPF) || !pair.has(capPerfmon) {
+		t.Fatal("the documented minimal pair must satisfy both checks")
+	}
+	admin := capMask(1 << capSysAdmin)
+	if !(admin.has(capBPF) || admin.has(capSysAdmin)) || !(admin.has(capPerfmon) || admin.has(capSysAdmin)) {
+		t.Fatal("CAP_SYS_ADMIN must satisfy both (the legacy catch-all)")
+	}
+}
+
+// The live probe on this host must report BOTH capability dimensions and,
+// when either is missing, an actionable reason naming the gap.
+func TestProbeCapabilityReasons(t *testing.T) {
+	c := Probe()
+	if c.Mode == ModeUnavailable && c.Reason == "" {
+		t.Fatal("unavailable must carry a reason")
+	}
+	if !c.CapBPF && c.Mode == ModeLive {
+		t.Fatal("live mode without CAP_BPF is impossible")
+	}
+	if c.Compiled && c.BTF && c.RingBuffer && c.CapBPF && !c.CapPerfmon && c.Mode == ModeLive {
+		t.Fatal("EBPF-005: ready-without-CAP_PERFMON must NOT report live")
+	}
+}

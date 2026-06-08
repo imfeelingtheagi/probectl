@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1
+#
+# probectl-ebpf-agent — the LIVE (-tags ebpf) image (EBPF-004).
+#
+# The generic deploy/docker/Dockerfile builds plain Go binaries; built that
+# way, probectl-ebpf-agent would be the FIXTURE-ONLY replayer (dev/test
+# mode). The shipped agent image must carry the live CO-RE loader, so this
+# Dockerfile runs the same toolchain operators use (`make ebpf-agent`):
+# bpf2go (clang) compiles the BPF objects for BOTH target arches, gendigests
+# bakes the U-014 SHA-256 manifest, and the Go build embeds objects +
+# manifest under -tags ebpf. The ci.yml `ebpf-image-live` job asserts the
+# built image's binary really records the tag — a fixture image can't ship
+# unnoticed.
+#
+# Build-host requirement: /sys/kernel/btf/vmlinux must be readable in the
+# build container (any BTF kernel — GitHub runners and Docker Desktop
+# qualify); vmlinux.h is generated from it, CO-RE relocates at load time on
+# the deployment kernel.
+
+ARG GO_VERSION=1.26
+
+# Digest-pinned (U-061); dependabot bumps the digest. Tag kept for humans.
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm@sha256:5d2b868674b57c9e48cdd39e891acce4196b6926ca6d11e9c270a8f85106203d AS build
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=0.0.0-dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+WORKDIR /src
+
+RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
+      clang llvm bpftool && rm -rf /var/lib/apt/lists/*
+
+# Cache dependencies first for faster rebuilds.
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+# The operator build path (mirrors `make ebpf-agent` + the kernel-matrix CI
+# job): vmlinux.h from the build host's BTF, bpf2go for both objects (the
+# uprobe object is per-arch; clang cross-compiles BPF regardless of build
+# platform), then the U-014 digest manifest.
+RUN test -r /sys/kernel/btf/vmlinux || { echo "build host kernel has no BTF (/sys/kernel/btf/vmlinux) — required to generate vmlinux.h"; exit 1; }
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    set -eux; \
+    bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/bpf/vmlinux.h; \
+    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf -go-package ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf); \
+    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target amd64,arm64 -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf); \
+    (cd internal/ebpf && go run ./gendigests .); \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
+    go build -trimpath -tags ebpf \
+      -ldflags "-s -w \
+        -X github.com/imfeelingtheagi/probectl/internal/version.Version=${VERSION} \
+        -X github.com/imfeelingtheagi/probectl/internal/version.Commit=${COMMIT} \
+        -X github.com/imfeelingtheagi/probectl/internal/version.Date=${DATE}" \
+      -o /out/app ./cmd/probectl-ebpf-agent
+
+# Minimal, non-root runtime. The agent needs CAP_BPF + CAP_PERFMON granted by
+# the orchestrator (see deploy/agent/probectl-ebpf-agent.service and the Helm
+# chart) — the image itself stays nonroot.
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639
+LABEL org.opencontainers.image.source="https://github.com/imfeelingtheagi/probectl" \
+      org.opencontainers.image.title="probectl-ebpf-agent" \
+      org.opencontainers.image.description="probectl eBPF host agent (live CO-RE loader, observe-only)"
+COPY --from=build /out/app /usr/local/bin/app
+USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/app"]

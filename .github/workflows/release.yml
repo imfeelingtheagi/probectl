@@ -63,9 +63,16 @@ jobs:
         component:
           - probectl-control
           - probectl-agent
-          - probectl-ebpf-agent
           - probectl-endpoint
           - probectl
+        dockerfile: [deploy/docker/Dockerfile]
+        include:
+          # EBPF-004: the SHIPPED ebpf-agent image is the LIVE (-tags ebpf)
+          # build — the generic Dockerfile would ship the fixture-only
+          # replayer (dev/test mode). ci.yml's ebpf-image-live job asserts
+          # the binary records the tag.
+          - component: probectl-ebpf-agent
+            dockerfile: deploy/docker/Dockerfile.ebpf
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
@@ -86,7 +93,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: deploy/docker/Dockerfile
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           build-args: |
             COMPONENT=${{ matrix.component }}

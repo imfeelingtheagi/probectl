@@ -97,12 +97,20 @@ returns a clear message rather than a bare `EPERM` (U-075). Boot without
 ## Kernel-matrix CI (U-021)
 
 The `ebpf-kernel-matrix` ci job LOADS and ATTACHES every BPF program on real
-LTS kernels (currently **5.15** and **6.6**, digest-pinned
-`ghcr.io/cilium/ci-kernels` images) under QEMU via `vimto` (`go test -exec`),
-running the live smoke: l4flow tracepoint attach, sslsniff uprobe attach
-(consented, U-003), one full agent flush cycle, with the U-014 digest
-verification on the load path. Bump the matrix when adopting a new LTS; the
-table above documents the runtime capability matrix.
+LTS kernels (digest-pinned `ghcr.io/cilium/ci-kernels` images) under QEMU via
+`vimto` (`go test -exec`), running the live smoke: l4flow tracepoint attach,
+sslsniff uprobe attach (consented + scoped, U-003/EBPF-001), one full agent
+flush cycle, with the U-014 digest verification on the load path. The matrix
+(EBPF-008): **5.15** and **6.6** on x86_64, **6.6 on arm64** (native
+`ubuntu-24.04-arm` runner — vimto does not emulate cross-arch), and a
+**hardened entry** that raises kernel lockdown to INTEGRITY inside the
+ephemeral VM (`TestLiveHardenedLockdownIntegrity`, gated on
+`PROBECTL_TEST_SET_LOCKDOWN`) and proves load+attach still works there while
+the probe reports the mode truthfully (confidentiality is the blocking mode,
+U-075; the test skips loudly if the ci-kernel lacks the lockdown LSM — a
+secure-boot distro-kernel image is the remaining [needs infra] extension).
+Bump the matrix when adopting a new LTS; the table above documents the
+runtime capability matrix.
 
 ## Installing (U-016)
 
@@ -153,6 +161,23 @@ container/K8s securityContext examples.
 |---|---|---|---|
 | Default (any OS) | `make build` | FixtureSource / stub | nothing extra |
 | Live eBPF (Linux) | `make ebpf-agent` | CO-RE loader | clang + bpftool + libbpf headers + a BTF kernel |
+
+**Fixture mode is dev/test-only (EBPF-004).** The SHIPPED agent image is the
+live `-tags ebpf` build: `deploy/docker/Dockerfile.ebpf` runs the same
+bpf2go + gendigests path and release.yml publishes `probectl-ebpf-agent`
+from it; the `ebpf-image-live` ci job extracts the binary from the built
+image and fails unless its Go build metadata records `-tags=ebpf` — a
+fixture-only image cannot ship unnoticed.
+
+**Trust boundary (EBPF-003, decided):** operator-supplied BPF objects are
+deliberately NOT supported. The chain is source → bpf2go (pinned clang) →
+objects EMBEDDED in the binary → SHA-256 manifest baked at the same build →
+`VerifyObjectDigest` before any kernel load → the binary/image cosign-signed
+at release (C6/U-067) — the release signature covers objects + manifest
+together, so a swapped object can't ride a signed binary. A static gate
+(`TestNoOperatorSuppliedBPFObjectPath`) trips if anyone adds a filesystem/env
+object-load path; doing so would require the load-time signature scheme
+EBPF-003 anticipated.
 
 The live build regenerates `vmlinux.h` from the running kernel's BTF and runs
 `bpf2go`, then writes a SHA-256 manifest of the compiled objects

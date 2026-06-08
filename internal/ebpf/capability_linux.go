@@ -15,6 +15,7 @@ import (
 // Linux capability numbers (see <linux/capability.h>).
 const (
 	capSysAdmin = 21
+	capPerfmon  = 38
 	capBPF      = 39
 )
 
@@ -30,7 +31,14 @@ func Probe() Capabilities {
 	}
 	c.BTF = fileExists("/sys/kernel/btf/vmlinux")
 	c.RingBuffer = kernelAtLeast(c.KernelVersion, 5, 8)
-	c.CapBPF = hasBPFCapability()
+	caps := effectiveCaps()
+	c.CapBPF = caps.has(capBPF) || caps.has(capSysAdmin)
+	// EBPF-005: loading is only half the job — attaching the tracepoints and
+	// uprobes goes through perf_event_open, which needs CAP_PERFMON (>= 5.8)
+	// or CAP_SYS_ADMIN. Without this check the probe reported "ready" and
+	// the agent failed later at attach. CAP_NET_ADMIN is NOT required: the
+	// agent attaches no TC/XDP programs (observe-only guardrail).
+	c.CapPerfmon = caps.has(capPerfmon) || caps.has(capSysAdmin)
 	c.Lockdown = lockdownMode()
 
 	switch {
@@ -41,7 +49,9 @@ func Probe() Capabilities {
 	case !c.RingBuffer:
 		c.Mode, c.Reason = ModeUnavailable, fmt.Sprintf("kernel %q lacks the BPF ring buffer (need >= 5.8)", c.KernelVersion)
 	case !c.CapBPF:
-		c.Mode, c.Reason = ModeUnavailable, "process lacks CAP_BPF / CAP_SYS_ADMIN to load eBPF"
+		c.Mode, c.Reason = ModeUnavailable, "process lacks CAP_BPF / CAP_SYS_ADMIN to LOAD eBPF programs (grant the CAP_BPF + CAP_PERFMON pair, e.g. AmbientCapabilities in the shipped unit)"
+	case !c.CapPerfmon:
+		c.Mode, c.Reason = ModeUnavailable, "process lacks CAP_PERFMON / CAP_SYS_ADMIN to ATTACH tracepoints/uprobes (perf_event_open) — programs would load and then fail at attach; grant CAP_PERFMON alongside CAP_BPF (EBPF-005)"
 	case lockdownBlocksBPF(c.Lockdown):
 		c.Mode, c.Reason = ModeUnavailable, "kernel lockdown is in CONFIDENTIALITY mode — bpf() is blocked even with CAP_BPF; boot without lockdown=confidentiality (or use integrity mode) to run the eBPF agent (U-075)"
 	default:
@@ -92,10 +102,17 @@ func digitPrefix(s string) string {
 	return s[:i]
 }
 
-func hasBPFCapability() bool {
+// capMask is the process's effective capability set.
+type capMask uint64
+
+func (m capMask) has(bit uint) bool { return m&(1<<bit) != 0 }
+
+// effectiveCaps parses CapEff from /proc/self/status (0 on any error — a
+// process whose capabilities can't be read claims none).
+func effectiveCaps() capMask {
 	data, err := os.ReadFile("/proc/self/status")
 	if err != nil {
-		return false
+		return 0
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if !strings.HasPrefix(line, "CapEff:") {
@@ -103,11 +120,11 @@ func hasBPFCapability() bool {
 		}
 		mask, err := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(line, "CapEff:")), 16, 64)
 		if err != nil {
-			return false
+			return 0
 		}
-		return mask&(1<<capSysAdmin) != 0 || mask&(1<<capBPF) != 0
+		return capMask(mask)
 	}
-	return false
+	return 0
 }
 
 func fileExists(p string) bool {

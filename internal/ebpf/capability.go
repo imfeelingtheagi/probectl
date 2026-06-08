@@ -24,8 +24,16 @@ type Capabilities struct {
 	KernelVersion string
 	BTF           bool // /sys/kernel/btf/vmlinux present (CO-RE relocation)
 	RingBuffer    bool // kernel >= 5.8 (BPF_MAP_TYPE_RINGBUF)
-	CapBPF        bool // process holds CAP_BPF or CAP_SYS_ADMIN
-	Compiled      bool // built with -tags ebpf (the live source is linked in)
+	CapBPF        bool // process holds CAP_BPF or CAP_SYS_ADMIN (program/map load)
+	// CapPerfmon: CAP_PERFMON or CAP_SYS_ADMIN — required to ATTACH the
+	// tracepoints and uprobes (perf_event_open) on kernels >= 5.8. Probed
+	// here so the agent fails fast with a clear reason instead of loading
+	// objects and then failing at attach (EBPF-005). CAP_NET_ADMIN is
+	// deliberately NOT probed: the agent attaches only tracepoints + uprobes
+	// (observe-only) — no TC/XDP — so it never needs it (the systemd unit
+	// documents the same pair).
+	CapPerfmon bool
+	Compiled   bool // built with -tags ebpf (the live source is linked in)
 	// Lockdown is the kernel lockdown mode ("", "none", "integrity",
 	// "confidentiality"); confidentiality mode blocks bpf() even with
 	// CAP_BPF (U-075).
@@ -34,6 +42,6 @@ type Capabilities struct {
 
 // String renders a one-line summary for logs.
 func (c Capabilities) String() string {
-	return fmt.Sprintf("mode=%s os=%s arch=%s kernel=%q btf=%t ringbuf=%t cap_bpf=%t lockdown=%q compiled=%t reason=%q",
-		c.Mode, c.OS, c.Arch, c.KernelVersion, c.BTF, c.RingBuffer, c.CapBPF, c.Lockdown, c.Compiled, c.Reason)
+	return fmt.Sprintf("mode=%s os=%s arch=%s kernel=%q btf=%t ringbuf=%t cap_bpf=%t cap_perfmon=%t lockdown=%q compiled=%t reason=%q",
+		c.Mode, c.OS, c.Arch, c.KernelVersion, c.BTF, c.RingBuffer, c.CapBPF, c.CapPerfmon, c.Lockdown, c.Compiled, c.Reason)
 }

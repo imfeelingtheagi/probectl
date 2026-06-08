@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -211,6 +212,70 @@ func TestLiveAgentBoot(t *testing.T) {
 	defer cancel()
 	if err := a.Run(ctx); err != nil {
 		t.Fatalf("agent run: %v", err)
+	}
+}
+
+// TestLiveHardenedLockdownIntegrity (Sprint 19, EBPF-008): the hardened-
+// kernel matrix entry. Kernel lockdown is raised to INTEGRITY inside the
+// ephemeral QEMU VM (a one-way sysfs write — exactly why it runs in a
+// throwaway kernel), then the full load+attach path must still work:
+// integrity mode permits BPF (only CONFIDENTIALITY blocks it, U-075), and
+// the capability probe must report the mode truthfully. Gated on
+// PROBECTL_TEST_SET_LOCKDOWN=integrity so the regular matrix entries never
+// poison their VMs.
+func TestLiveHardenedLockdownIntegrity(t *testing.T) {
+	if os.Getenv("PROBECTL_TEST_SET_LOCKDOWN") != "integrity" {
+		t.Skip("set PROBECTL_TEST_SET_LOCKDOWN=integrity to run the hardened-lockdown entry")
+	}
+	const lockdownPath = "/sys/kernel/security/lockdown"
+	cur, err := os.ReadFile(lockdownPath)
+	if err != nil {
+		t.Skipf("kernel has no lockdown LSM (%v) — hardened entry needs CONFIG_SECURITY_LOCKDOWN_LSM; distro-kernel coverage is the [needs infra] residual", err)
+	}
+	if !strings.Contains(string(cur), "[integrity]") {
+		if werr := os.WriteFile(lockdownPath, []byte("integrity"), 0); werr != nil {
+			t.Skipf("cannot raise lockdown to integrity (%v) — need root in the VM", werr)
+		}
+	}
+
+	// The probe must see the hardened state and still report ready.
+	caps := Probe()
+	if caps.Lockdown != "integrity" {
+		t.Fatalf("probe reports lockdown %q, want integrity (U-075 visibility)", caps.Lockdown)
+	}
+	if caps.Mode != ModeLive {
+		t.Fatalf("integrity lockdown must NOT block the agent (only confidentiality does): mode=%s reason=%s", caps.Mode, caps.Reason)
+	}
+
+	// Full load+attach under lockdown: the flow plane...
+	cfg := Default()
+	cfg.TenantID = "hardened"
+	src, err := newLiveSource(cfg)
+	if err != nil {
+		t.Fatalf("l4flow load+attach under lockdown=integrity: %v", err)
+	}
+	defer src.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := src.Flows(ctx); err != nil {
+		t.Fatalf("flows stream under lockdown: %v", err)
+	}
+
+	// ...and the uprobe plane (skip only for missing libssl, same as the
+	// regular smoke).
+	cfg2 := Default()
+	cfg2.TenantID = "hardened"
+	cfg2.L7CaptureEnabled = true
+	cfg2.L7CaptureConsentTenant = "hardened"
+	cfg2.L7CaptureScope = []string{"pid:" + strconv.Itoa(os.Getpid())}
+	l7src, err := newLiveL7Source(cfg2)
+	if err != nil {
+		t.Logf("sslsniff under lockdown skipped (no libssl on this rootfs?): %v", err)
+		return
+	}
+	defer l7src.Close()
+	if _, err := l7src.L7Events(ctx); err != nil {
+		t.Fatalf("l7 events stream under lockdown: %v", err)
 	}
 }
 

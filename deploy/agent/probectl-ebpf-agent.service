@@ -26,6 +26,16 @@ NoNewPrivileges=yes
 # BPF maps/ringbuf need locked memory.
 LimitMEMLOCK=infinity
 
+# --- resource caps (EBPF-007): mirror the Helm chart's limits ---
+# Helm: requests 100m/128Mi, limits 1 cpu / 512Mi. A host agent must never
+# starve the workloads it observes.
+CPUQuota=100%
+CPUWeight=100
+MemoryHigh=384M
+MemoryMax=512M
+TasksMax=128
+IOWeight=100
+
 # --- syscall filter (mirror of deploy/agent/seccomp.json) ---
 SystemCallArchitectures=native
 SystemCallFilter=@system-service bpf perf_event_open
