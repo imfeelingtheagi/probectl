@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/imfeelingtheagi/probectl/internal/bus"
+	"github.com/imfeelingtheagi/probectl/internal/metrics"
 	"github.com/imfeelingtheagi/probectl/internal/store/otelstore"
 )
 
@@ -38,6 +39,7 @@ type OTLPTraceConsumer struct {
 	store    otelstore.Store
 	log      *slog.Logger
 	consumed atomic.Uint64
+	dlq      *otlpDLQ // retry + dead-letter on store-write failure (SCALE-003)
 }
 
 // NewOTLPTraceConsumer builds the consumer.
@@ -45,7 +47,14 @@ func NewOTLPTraceConsumer(b bus.Bus, st otelstore.Store, log *slog.Logger) *OTLP
 	if log == nil {
 		log = slog.Default()
 	}
-	return &OTLPTraceConsumer{bus: b, store: st, log: log}
+	return &OTLPTraceConsumer{bus: b, store: st, log: log,
+		dlq: newOTLPDLQ(b, bus.DeadLetterOTLPTracesTopic, "traces", log)}
+}
+
+// WithMetrics surfaces this consumer's dead-letter/drop counters at /metrics.
+func (c *OTLPTraceConsumer) WithMetrics(reg *metrics.Registry) *OTLPTraceConsumer {
+	c.dlq.withMetrics(reg)
+	return c
 }
 
 // Run subscribes until ctx is canceled. It blocks.
@@ -68,11 +77,13 @@ func (c *OTLPTraceConsumer) handle(ctx context.Context, msg bus.Message) error {
 	if len(spans) == 0 {
 		return nil
 	}
-	if err := c.store.WriteSpans(ctx, spans); err != nil {
-		c.log.Error("otlp spans write failed", "spans", len(spans), "error", err.Error())
-		return nil // best-effort, matching the metrics consumer's contract
+	// SCALE-003 / ARCH-002: retry the store write, then dead-letter the original
+	// bytes (replayable) + count — no longer a silent best-effort drop.
+	if stored := c.dlq.process(ctx, msg, func(ctx context.Context) error {
+		return c.store.WriteSpans(ctx, spans)
+	}); stored {
+		c.consumed.Add(uint64(len(spans)))
 	}
-	c.consumed.Add(uint64(len(spans)))
 	return nil
 }
 
@@ -119,6 +130,7 @@ type OTLPLogConsumer struct {
 	store    otelstore.Store
 	log      *slog.Logger
 	consumed atomic.Uint64
+	dlq      *otlpDLQ // retry + dead-letter on store-write failure (SCALE-003)
 }
 
 // NewOTLPLogConsumer builds the consumer.
@@ -126,7 +138,14 @@ func NewOTLPLogConsumer(b bus.Bus, st otelstore.Store, log *slog.Logger) *OTLPLo
 	if log == nil {
 		log = slog.Default()
 	}
-	return &OTLPLogConsumer{bus: b, store: st, log: log}
+	return &OTLPLogConsumer{bus: b, store: st, log: log,
+		dlq: newOTLPDLQ(b, bus.DeadLetterOTLPLogsTopic, "logs", log)}
+}
+
+// WithMetrics surfaces this consumer's dead-letter/drop counters at /metrics.
+func (c *OTLPLogConsumer) WithMetrics(reg *metrics.Registry) *OTLPLogConsumer {
+	c.dlq.withMetrics(reg)
+	return c
 }
 
 // Run subscribes until ctx is canceled. It blocks.
@@ -149,11 +168,13 @@ func (c *OTLPLogConsumer) handle(ctx context.Context, msg bus.Message) error {
 	if len(recs) == 0 {
 		return nil
 	}
-	if err := c.store.WriteLogs(ctx, recs); err != nil {
-		c.log.Error("otlp logs write failed", "records", len(recs), "error", err.Error())
-		return nil
+	// SCALE-003 / ARCH-002: retry the store write, then dead-letter the original
+	// bytes (replayable) + count — no longer a silent best-effort drop.
+	if stored := c.dlq.process(ctx, msg, func(ctx context.Context) error {
+		return c.store.WriteLogs(ctx, recs)
+	}); stored {
+		c.consumed.Add(uint64(len(recs)))
 	}
-	c.consumed.Add(uint64(len(recs)))
 	return nil
 }
 

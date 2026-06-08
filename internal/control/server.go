@@ -233,6 +233,11 @@ func (s *Server) WithProviderPlane(h http.Handler) *Server {
 // it). nil when no database is configured.
 func (s *Server) SessionManager() *auth.Manager { return s.sessions }
 
+// Metrics returns the self-observability registry exposed at /metrics
+// (OPS-005), so background workers (e.g. the OTLP consumers) can surface their
+// dead-letter/drop counters there. Process/aggregate health only.
+func (s *Server) Metrics() *metrics.Registry { return s.metrics }
+
 // PermissionLoader exposes the tenant RBAC loader for the ee/ attach seam.
 // nil when no database is configured.
 func (s *Server) PermissionLoader() auth.PermissionLoader {

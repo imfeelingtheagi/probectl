@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/imfeelingtheagi/probectl/internal/bus"
+	"github.com/imfeelingtheagi/probectl/internal/metrics"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 )
 
@@ -35,6 +36,7 @@ type OTLPConsumer struct {
 
 	consumed atomic.Uint64
 	skipped  atomic.Uint64 // unsupported point kinds (histogram/summary/exp-histogram)
+	dlq      *otlpDLQ      // retry + dead-letter on store-write failure (SCALE-003)
 }
 
 // otlpMaxLabels bounds per-series labels (cardinality stance, U-017).
@@ -45,7 +47,15 @@ func NewOTLPConsumer(b bus.Bus, w tsdb.Writer, log *slog.Logger) *OTLPConsumer {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &OTLPConsumer{bus: b, tsdb: w, log: log}
+	return &OTLPConsumer{bus: b, tsdb: w, log: log,
+		dlq: newOTLPDLQ(b, bus.DeadLetterOTLPMetricsTopic, "metrics", log)}
+}
+
+// WithMetrics surfaces this consumer's dead-letter/drop counters at /metrics
+// (OPS-005). Returns the consumer for chaining.
+func (c *OTLPConsumer) WithMetrics(reg *metrics.Registry) *OTLPConsumer {
+	c.dlq.withMetrics(reg)
+	return c
 }
 
 // Run subscribes until ctx is canceled. It blocks.
@@ -66,11 +76,13 @@ func (c *OTLPConsumer) handle(ctx context.Context, msg bus.Message) error {
 	if len(series) == 0 {
 		return nil
 	}
-	if err := c.tsdb.Write(ctx, series); err != nil {
-		c.log.Error("otlp tsdb write failed", "series", len(series), "error", err.Error())
-		return nil // best-effort, matching the receiver's bus-sink contract
+	// SCALE-003 / ARCH-002: retry the store write, then dead-letter the original
+	// bytes (replayable) + count — no longer a silent best-effort drop.
+	if stored := c.dlq.process(ctx, msg, func(ctx context.Context) error {
+		return c.tsdb.Write(ctx, series)
+	}); stored {
+		c.consumed.Add(uint64(len(series)))
 	}
-	c.consumed.Add(uint64(len(series)))
 	return nil
 }
 

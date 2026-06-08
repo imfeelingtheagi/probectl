@@ -9,6 +9,21 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 6 (plan v2): retry + DLQ for the OTLP consumers (SCALE-003,
+  ARCH-002). The OTLP metrics/traces/logs consumers dropped
+  externally-ingested data best-effort on a store-write failure
+  (`return nil`), unlike the results/device plane which retries +
+  dead-letters. Fix (decision D4): a shared `otlpDLQ` helper gives all
+  three consumers the SAME contract as the results plane — bounded jittered
+  retry, then dead-letter the ORIGINAL bytes to a per-signal DLQ topic
+  (`probectl.deadletter.otlp.{metrics,traces,logs}`, replayable) and count
+  it. The dead-letter/drop counts surface at /metrics
+  (`probectl_otlp_<signal>_{dead_lettered,dropped}_total`) via a new
+  `Server.Metrics()` accessor wired in main.go; `consumed` increments only
+  on an actual store. Tests: a failing writer dead-letters the original
+  bytes and increments the counter, and a failing DLQ publish is counted as
+  a true drop.
+
 - Sprint 5 (plan v2): surface JSON decode errors in store hydration
   (CODE-005 / CODE-002). `scanPolicy` (`store/abac.go`), `scanUser`
   (`users.go`), and `scanChange` (`changes.go`) used `_ = json.Unmarshal`

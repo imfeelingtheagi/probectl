@@ -61,6 +61,18 @@ const DeadLetterDeviceTopic = "probectl.deadletter.device"
 // logged; operators alert on this topic's depth.
 const DeadLetterResultsTopic = "probectl.deadletter.results"
 
+// DeadLetterOTLP{Metrics,Traces,Logs}Topic receive externally-ingested OTLP
+// messages whose store write exhausted retries (SCALE-003 / ARCH-002) — the
+// ORIGINAL marshaled Export*ServiceRequest, tenant-keyed, replayable. Same
+// contract as the results DLQ; one topic PER signal because each replays into
+// its own consumer + store (a metrics payload can't be decoded by the trace
+// consumer).
+const (
+	DeadLetterOTLPMetricsTopic = "probectl.deadletter.otlp.metrics"
+	DeadLetterOTLPTracesTopic  = "probectl.deadletter.otlp.traces"
+	DeadLetterOTLPLogsTopic    = "probectl.deadletter.otlp.logs"
+)
+
 // RUMEventsTopic carries real-user page views from the RUM beacon ingest
 // (S47b) — validated, consent-gated, PII-redacted at the edge — tenant-tagged
 // via the message key. Payload: resultv1.Result (canary_type "rum"; the

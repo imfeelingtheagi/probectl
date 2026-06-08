@@ -879,9 +879,17 @@ func run(cmd string) error {
 		g.Go(func() error { return otlpSrv.Run(gctx) })
 		// SCALE-010 + ARCH-001: every topic has a CONSUMER — metrics land in
 		// the TSDB; traces + logs land in the otelstore.
-		g.Go(func() error { return pipeline.NewOTLPConsumer(resultBus, tsdbWriter, log).Run(gctx) })
-		g.Go(func() error { return pipeline.NewOTLPTraceConsumer(resultBus, otelStore, log).Run(gctx) })
-		g.Go(func() error { return pipeline.NewOTLPLogConsumer(resultBus, otelStore, log).Run(gctx) })
+		// SCALE-003/ARCH-002: each consumer retries + dead-letters store-write
+		// failures; .WithMetrics surfaces the DLQ/drop counters at /metrics.
+		g.Go(func() error {
+			return pipeline.NewOTLPConsumer(resultBus, tsdbWriter, log).WithMetrics(srv.Metrics()).Run(gctx)
+		})
+		g.Go(func() error {
+			return pipeline.NewOTLPTraceConsumer(resultBus, otelStore, log).WithMetrics(srv.Metrics()).Run(gctx)
+		})
+		g.Go(func() error {
+			return pipeline.NewOTLPLogConsumer(resultBus, otelStore, log).WithMetrics(srv.Metrics()).Run(gctx)
+		})
 	}
 
 	// MCP server (S25): the Model Context Protocol HTTP transport — TLS + bearer-
