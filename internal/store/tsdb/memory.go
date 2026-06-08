@@ -20,8 +20,16 @@ const (
 // Retention ages out by ARRIVAL time (the writer is a recency buffer), so
 // backfilled or clock-skewed sample timestamps are never swept early.
 type Memory struct {
-	mu        sync.Mutex
-	entries   []memEntry // arrival order: the eviction axis
+	mu      sync.Mutex
+	entries []memEntry // arrival order: the eviction axis
+	// byMetric indexes entry positions per metric name (Sprint 16,
+	// SCALE-014): Query scans ONLY the named metric's samples instead of
+	// every retained sample. Positions are offsets into the LOGICAL arrival
+	// sequence; `base` is how many have been evicted from the front, so a
+	// position p maps to entries[p-base]. Eviction (front-only) just
+	// advances base and trims index heads — no rewrites.
+	byMetric  map[string][]int64
+	base      int64
 	retention time.Duration
 	maxBytes  int64
 	bytes     int64 // accounted size of retained samples
@@ -48,7 +56,7 @@ func NewMemoryWithLimits(retention time.Duration, maxBytes int64) *Memory {
 	if maxBytes <= 0 {
 		maxBytes = DefaultMemoryMaxBytes
 	}
-	return &Memory{retention: retention, maxBytes: maxBytes, now: time.Now}
+	return &Memory{retention: retention, maxBytes: maxBytes, byMetric: map[string][]int64{}, now: time.Now}
 }
 
 // sampleSize is the accounted footprint of one sample (struct + strings).
@@ -67,6 +75,7 @@ func (m *Memory) Write(_ context.Context, series []Series) error {
 	nowMs := m.now().UnixMilli()
 	for _, s := range series {
 		m.bytes += sampleSize(s)
+		m.byMetric[s.Metric] = append(m.byMetric[s.Metric], m.base+int64(len(m.entries)))
 		m.entries = append(m.entries, memEntry{s: s, arrivalMs: nowMs})
 	}
 	m.enforceLocked()
@@ -89,6 +98,22 @@ func (m *Memory) enforceLocked() {
 		drop++
 	}
 	if drop > 0 {
+		// Trim the per-metric index heads to the new logical floor.
+		newBase := m.base + int64(drop)
+		for metric, idx := range m.byMetric {
+			cut := 0
+			for cut < len(idx) && idx[cut] < newBase {
+				cut++
+			}
+			if cut == len(idx) {
+				delete(m.byMetric, metric)
+				continue
+			}
+			if cut > 0 {
+				m.byMetric[metric] = append(idx[:0], idx[cut:]...)
+			}
+		}
+		m.base = newBase
 		m.entries = append(m.entries[:0], m.entries[drop:]...) // keep one backing array
 	}
 }
@@ -114,15 +139,15 @@ func (m *Memory) Close() error { return nil }
 
 // Query returns the retained series with the given metric name whose labels match
 // all of match (a simple lightweight/test query).
+// Query returns the retained series for metric whose labels match all of
+// match. SUB-LINEAR in total samples (SCALE-014): the per-metric index means
+// the scan touches only the named metric's samples, not every entry.
 func (m *Memory) Query(metric string, match map[string]string) []Series {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []Series
-	for _, e := range m.entries {
-		s := e.s
-		if s.Metric != metric {
-			continue
-		}
+	for _, pos := range m.byMetric[metric] {
+		s := m.entries[pos-m.base].s
 		ok := true
 		for k, v := range match {
 			if s.Labels[k] != v {
@@ -174,5 +199,13 @@ func (m *Memory) DeleteTenant(_ context.Context, tenantID string) (int, error) {
 		kept = append(kept, e)
 	}
 	m.entries = kept
+	// Scattered removal invalidates positions: rebuild the index (erasure is
+	// rare and already O(n); queries stay sub-linear).
+	m.base = 0
+	m.byMetric = map[string][]int64{}
+	for i := range m.entries {
+		s := m.entries[i].s
+		m.byMetric[s.Metric] = append(m.byMetric[s.Metric], int64(i))
+	}
 	return removed, nil
 }

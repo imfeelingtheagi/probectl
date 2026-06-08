@@ -705,6 +705,7 @@ anomalies):
 | `PROBECTL_FLOWSTORE_URL`          | (none)   | ClickHouse HTTP(S) endpoint (required in clickhouse mode)            |
 | `PROBECTL_FLOWSTORE_TENANT_SCOPING` | `false` | TENANT-102: attach a per-request tenant custom setting to ClickHouse reads so a reader row policy constrains the query path at the DB (needs server-side `custom_settings_prefixes=SQL_` + a reader user) |
 | `PROBECTL_FLOWSTORE_READER_USER` | (none) | TENANT-102: the ClickHouse reader user the setting-scoped row policy is installed on at boot |
+| `PROBECTL_PATH_RETENTION_DAYS` | `90` | SCALE-006: delete-TTL on the path/traceroute ClickHouse tables (boot-applied ALTER, flowstore pattern); 0 disables |
 | `PROBECTL_FAIRNESS_RESULTS_PER_SEC` | `1000` | SCALE-004: per-tenant result admission (was 0=unlimited). NEGATIVE = explicit unlimited |
 | `PROBECTL_FAIRNESS_FLOW_EVENTS_PER_SEC` | `10000` | SCALE-004: per-tenant flow-record admission; negative = unlimited |
 | `PROBECTL_FAIRNESS_INGEST_BYTES_PER_SEC` | `2097152` | SCALE-004: per-tenant ingest bytes (2 MiB/s); negative = unlimited |

@@ -106,6 +106,48 @@ func BuildAlertEvaluator(pool *pgxpool.Pool, writer any, deps alert.ChannelDeps,
 		opts = append(opts, alert.WithAlertSink(sink))
 	}
 	engine := alert.NewEngine(metricSource{q: q, tenant: tenant.String()}, alert.NewNotifier(deps, log), log, opts...)
+	// ARCH-005 (scoped per the volatile-stores ADR): silences/acks are the
+	// ADR's documented exception — reload them so a restart does not drop
+	// operator state, and delete the row when the episode resolves.
+	restoreCtx, cancelRestore := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelRestore()
+	err := tenancy.InTenant(tenancy.WithTenant(restoreCtx, tenant), pool,
+		func(ctx context.Context, sc tenancy.Scope) error {
+			ops, lerr := (store.AlertOps{}).List(ctx, sc)
+			if lerr != nil {
+				return lerr
+			}
+			if len(ops) == 0 {
+				return nil
+			}
+			restored := make(map[string]alert.RestoredOp, len(ops))
+			for _, op := range ops {
+				r := alert.RestoredOp{AckedBy: op.AckedBy}
+				if op.SilencedUntil != nil {
+					r.SilencedUntil = *op.SilencedUntil
+				}
+				if op.AckedAt != nil {
+					r.AckedAt = *op.AckedAt
+				}
+				restored[op.Fingerprint] = r
+			}
+			engine.RestoreOps(restored)
+			log.Info("alert silences/acks restored", "tenant", tenant.String(), "ops", len(ops))
+			return nil
+		})
+	if err != nil {
+		// Degrade loudly, never block alerting on the ops table.
+		log.Warn("alert ops reload failed (silences/acks from before the restart are lost)",
+			"tenant", tenant.String(), "error", err.Error())
+	}
+	engine.SetResolveHook(func(fingerprint string) {
+		hctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tenancy.InTenant(tenancy.WithTenant(hctx, tenant), pool,
+			func(ctx context.Context, sc tenancy.Scope) error {
+				return (store.AlertOps{}).Delete(ctx, sc, fingerprint)
+			})
+	})
 	provider := tenantRuleProvider{pool: pool, tenant: tenant}
 	return alert.NewEvaluator(engine, provider, interval, log), true
 }

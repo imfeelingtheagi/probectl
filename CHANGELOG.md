@@ -9,6 +9,26 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 16: storage + OTLP plane (SCALE-006/010/014, ARCH-005). Path
+  tables get retention: chmigrate v2 re-creates them with (tenant_id,
+  day) partitioning — PARTITION BY is immutable in ClickHouse, and
+  pre-GA the snapshot discard is deliberate (paths are re-discoverable)
+  — plus a boot-applied delete-TTL (PROBECTL_PATH_RETENTION_DAYS,
+  default 90, the flowstore pattern). The OTLP topic finally has a
+  CONSUMER: externally-ingested metrics (gauge+sum; histograms counted
+  and skipped until the Sprint 22 plane) land in the TSDB tenant-
+  labeled exactly like native planes, with bounded label sets and a
+  push→query round-trip test. The in-memory TSDB query is sub-linear:
+  a per-metric position index (eviction advances a base offset; tenant
+  erasure rebuilds) replaces the all-samples scan — one metric of 200
+  answers in ~4.4µs. ARCH-005 lands EXACTLY as the volatile-stores ADR
+  scoped it (founder decision: topology/detections rebuild-on-restart
+  stands): ONLY operator silences/acks persist (alert_ops, RLS-forced),
+  restored ops re-apply when their series fires after a restart
+  (expired silences skipped), resolve deletes the row so restored
+  state never outlives episode semantics — restart-survival test at
+  the engine seam.
+
 - Sprint 15: cardinality + fairness layer (SCALE-003/004/005/007/011).
   The cardinality limiter is BOUNDED: identities idle past 1h evict
   via an amortized sweep (live series refresh their slot; empty

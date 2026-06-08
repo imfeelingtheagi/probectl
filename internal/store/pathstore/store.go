@@ -19,7 +19,11 @@ type Store interface {
 // New builds a Store for the given mode. "memory" (or empty) is in-process;
 // "clickhouse" writes to a ClickHouse HTTP endpoint at url (e.g.
 // http://localhost:8123).
-func New(mode, url string) (Store, error) {
+func New(mode, url string) (Store, error) { return NewRetained(mode, url, 0) }
+
+// NewRetained is New plus the per-deployment retention TTL (SCALE-006;
+// clickhouse mode only — the memory store is already window-bounded).
+func NewRetained(mode, url string, retentionDays int) (Store, error) {
 	switch mode {
 	case "", "memory":
 		return NewMemory(), nil
@@ -27,7 +31,7 @@ func New(mode, url string) (Store, error) {
 		if url == "" {
 			return nil, errors.New("pathstore: clickhouse mode requires PROBECTL_PATHSTORE_URL")
 		}
-		return NewClickHouse(url)
+		return NewClickHouseRetained(url, retentionDays)
 	default:
 		return nil, fmt.Errorf("pathstore: unknown mode %q (want memory|clickhouse)", mode)
 	}

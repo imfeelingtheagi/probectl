@@ -22,20 +22,27 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
-// tenant_id is the partition key so a tenant's path data is physically separated
-// (CLAUDE.md §4); it leads every ORDER BY so tenant-scoped reads prune by it.
-const createHops = `CREATE TABLE IF NOT EXISTS probectl_path_hops (
+// (tenant_id, day) is the partition key (Sprint 16, SCALE-006 — the flowstore
+// pattern): a tenant's path data is physically separated (CLAUDE.md §4) AND
+// the retention TTL drops whole day-parts cheaply instead of mutating rows.
+// tenant_id leads every ORDER BY so tenant-scoped reads prune by it.
+const (
+	hopsTable  = "probectl_path_hops2"
+	linksTable = "probectl_path_links2"
+)
+
+const createHops = `CREATE TABLE IF NOT EXISTS ` + hopsTable + ` (
   tenant_id String, path_id String, target String, target_ip String, mode String,
   ts DateTime64(3), ttl UInt8, responder String,
   sent UInt32, received UInt32, loss_ratio Float64,
   rtt_min_ms Float64, rtt_avg_ms Float64, rtt_max_ms Float64,
   mpls_labels Array(UInt32)
-) ENGINE = MergeTree PARTITION BY tenant_id ORDER BY (tenant_id, target, ts, ttl, responder)`
+) ENGINE = MergeTree PARTITION BY (tenant_id, toYYYYMMDD(ts)) ORDER BY (tenant_id, target, ts, ttl, responder)`
 
-const createLinks = `CREATE TABLE IF NOT EXISTS probectl_path_links (
+const createLinks = `CREATE TABLE IF NOT EXISTS ` + linksTable + ` (
   tenant_id String, path_id String, target String, ts DateTime64(3),
   ttl UInt8, from_ip String, to_ip String
-) ENGINE = MergeTree PARTITION BY tenant_id ORDER BY (tenant_id, target, ts, ttl, from_ip, to_ip)`
+) ENGINE = MergeTree PARTITION BY (tenant_id, toYYYYMMDD(ts)) ORDER BY (tenant_id, target, ts, ttl, from_ip, to_ip)`
 
 // ClickHouse persists paths to a ClickHouse HTTP endpoint. TLS in transit is
 // supported by using an https URL (CLAUDE.md §7 guardrail 12).
@@ -51,9 +58,34 @@ type ClickHouse struct {
 // idempotent (IF NOT EXISTS / additive) statements.
 func chMigrations() []chmigrate.Migration {
 	return []chmigrate.Migration{
-		{Version: 1, Name: "create_path_tables", Statements: []string{createHops, createLinks}},
+		{Version: 1, Name: "create_path_tables", Statements: []string{createHopsV1, createLinksV1}},
+		// v2 (Sprint 16, SCALE-006): (tenant_id, day) partitioning so the
+		// retention TTL drops whole parts. PARTITION BY is immutable in
+		// ClickHouse, so v2 creates NEW tables and DROPS the v1 ones —
+		// pre-GA, with path snapshots being re-discoverable caches, the
+		// discard is deliberate and recorded (CHANGELOG + register).
+		{Version: 2, Name: "path_tables_day_partitioned", Statements: []string{
+			createHops, createLinks,
+			"DROP TABLE IF EXISTS probectl_path_hops",
+			"DROP TABLE IF EXISTS probectl_path_links",
+		}},
 	}
 }
+
+// v1 DDL stays VERBATIM (shipped versions are immutable — the ledger checksum
+// refuses drift); v2 supersedes it.
+const createHopsV1 = `CREATE TABLE IF NOT EXISTS probectl_path_hops (
+  tenant_id String, path_id String, target String, target_ip String, mode String,
+  ts DateTime64(3), ttl UInt8, responder String,
+  sent UInt32, received UInt32, loss_ratio Float64,
+  rtt_min_ms Float64, rtt_avg_ms Float64, rtt_max_ms Float64,
+  mpls_labels Array(UInt32)
+) ENGINE = MergeTree PARTITION BY tenant_id ORDER BY (tenant_id, target, ts, ttl, responder)`
+
+const createLinksV1 = `CREATE TABLE IF NOT EXISTS probectl_path_links (
+  tenant_id String, path_id String, target String, ts DateTime64(3),
+  ttl UInt8, from_ip String, to_ip String
+) ENGINE = MergeTree PARTITION BY tenant_id ORDER BY (tenant_id, target, ts, ttl, from_ip, to_ip)`
 
 // chExec adapts the store's HTTP client to the chmigrate runner.
 type chExec struct{ c *ClickHouse }
@@ -67,12 +99,25 @@ func (e chExec) Query(ctx context.Context, sql string, p chmigrate.Params) ([]ma
 
 // NewClickHouse connects to a ClickHouse HTTP endpoint and ensures the schema
 // via versioned, ledger-recorded migrations (U-046).
-func NewClickHouse(rawURL string) (*ClickHouse, error) {
+func NewClickHouse(rawURL string) (*ClickHouse, error) { return NewClickHouseRetained(rawURL, 0) }
+
+// NewClickHouseRetained is NewClickHouse plus the boot-applied retention TTL
+// (Sprint 16, SCALE-006 — the flowstore pattern: runtime config, not schema).
+// retentionDays > 0 ALTERs a delete-TTL onto both path tables, idempotently.
+func NewClickHouseRetained(rawURL string, retentionDays int) (*ClickHouse, error) {
 	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: &http.Client{Timeout: 30 * time.Second}, breaker: breaker.New(0, 0)}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if _, err := chmigrate.Apply(ctx, chExec{c}, "pathstore", chMigrations(), nil); err != nil {
 		return nil, fmt.Errorf("pathstore: migrate: %w", err)
+	}
+	if retentionDays > 0 {
+		for _, table := range []string{hopsTable, linksTable} {
+			ttl := fmt.Sprintf("ALTER TABLE %s MODIFY TTL toDateTime(ts) + INTERVAL %d DAY DELETE", table, retentionDays)
+			if err := c.exec(ctx, ttl, nil, nil); err != nil {
+				return nil, fmt.Errorf("pathstore: apply retention TTL: %w", err)
+			}
+		}
 	}
 	return c, nil
 }
@@ -120,7 +165,7 @@ func (c *ClickHouse) EnsureRowPolicies(ctx context.Context, serviceUser string) 
 	if !chUserRe.MatchString(serviceUser) {
 		return fmt.Errorf("pathstore: refusing malformed ClickHouse user identifier %q", serviceUser)
 	}
-	for _, table := range []string{"probectl_path_hops", "probectl_path_links"} {
+	for _, table := range []string{hopsTable, linksTable} {
 		for _, ddl := range []string{
 			fmt.Sprintf("CREATE ROW POLICY IF NOT EXISTS probectl_tenant_isolation ON %s FOR SELECT USING tenant_id = currentUser() TO ALL EXCEPT %s", table, serviceUser),
 			fmt.Sprintf("CREATE ROW POLICY IF NOT EXISTS probectl_service_access ON %s FOR SELECT USING 1 TO %s", table, serviceUser),
@@ -179,12 +224,12 @@ func (c *ClickHouse) SaveBatch(ctx context.Context, items []PathItem) error {
 		}
 	}
 	if hops.Len() > 0 {
-		if err := c.exec(ctx, "INSERT INTO probectl_path_hops FORMAT JSONEachRow", nil, &hops); err != nil {
+		if err := c.exec(ctx, "INSERT INTO "+hopsTable+" FORMAT JSONEachRow", nil, &hops); err != nil {
 			return err
 		}
 	}
 	if links.Len() > 0 {
-		if err := c.exec(ctx, "INSERT INTO probectl_path_links FORMAT JSONEachRow", nil, &links); err != nil {
+		if err := c.exec(ctx, "INSERT INTO "+linksTable+" FORMAT JSONEachRow", nil, &links); err != nil {
 			return err
 		}
 	}
@@ -201,7 +246,7 @@ func (c *ClickHouse) DeleteTenant(ctx context.Context, tenantID string) (deleted
 		return 0, 0, ErrNoTenant
 	}
 	tp := chParams{"tenant": tenantID}
-	for _, table := range []string{"probectl_path_hops", "probectl_path_links"} {
+	for _, table := range []string{hopsTable, linksTable} {
 		out, qerr := c.query(ctx, "SELECT count() AS n FROM "+table+" WHERE tenant_id={tenant:String}", tp)
 		if qerr != nil {
 			return deleted, -1, qerr
@@ -224,7 +269,7 @@ func (c *ClickHouse) Latest(ctx context.Context, tenantID, target string) (*path
 		return nil, false, ErrNoTenant
 	}
 	meta, err := c.query(ctx,
-		`SELECT path_id, target_ip, mode FROM probectl_path_hops WHERE tenant_id={tenant:String} AND target={target:String} ORDER BY ts DESC LIMIT 1`,
+		"SELECT path_id, target_ip, mode FROM "+hopsTable+" WHERE tenant_id={tenant:String} AND target={target:String} ORDER BY ts DESC LIMIT 1",
 		chParams{"tenant": tenantID, "target": target})
 	if err != nil {
 		return nil, false, err
@@ -236,8 +281,7 @@ func (c *ClickHouse) Latest(ctx context.Context, tenantID, target string) (*path
 	p := &path.Path{Target: target, TargetIP: chToString(meta[0]["target_ip"]), Mode: chToString(meta[0]["mode"])}
 
 	hopRows, err := c.query(ctx,
-		`SELECT ttl, responder, sent, received, loss_ratio, rtt_min_ms, rtt_avg_ms, rtt_max_ms, mpls_labels
-		 FROM probectl_path_hops WHERE tenant_id={tenant:String} AND path_id={path:String} ORDER BY ttl, responder`,
+		"SELECT ttl, responder, sent, received, loss_ratio, rtt_min_ms, rtt_avg_ms, rtt_max_ms, mpls_labels FROM "+hopsTable+" WHERE tenant_id={tenant:String} AND path_id={path:String} ORDER BY ttl, responder",
 		chParams{"tenant": tenantID, "path": pathID})
 	if err != nil {
 		return nil, false, err
@@ -276,7 +320,7 @@ func (c *ClickHouse) Latest(ctx context.Context, tenantID, target string) (*path
 	p.MaxHops = maxTTL
 
 	linkRows, err := c.query(ctx,
-		`SELECT ttl, from_ip, to_ip FROM probectl_path_links WHERE tenant_id={tenant:String} AND path_id={path:String} ORDER BY ttl, from_ip, to_ip`,
+		"SELECT ttl, from_ip, to_ip FROM "+linksTable+" WHERE tenant_id={tenant:String} AND path_id={path:String} ORDER BY ttl, from_ip, to_ip",
 		chParams{"tenant": tenantID, "path": pathID})
 	if err != nil {
 		return nil, false, err

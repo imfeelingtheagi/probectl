@@ -194,6 +194,8 @@ type Config struct {
 	FlowStoreMode     string
 	FlowStoreURL      string
 	FlowRetentionDays int
+	// PathRetentionDays bounds the path/traceroute tables (SCALE-006).
+	PathRetentionDays int
 	FlowEnrichASN     bool
 	// FlowCHTenantScoping (TENANT-102) attaches a per-request tenant custom
 	// setting to ClickHouse reads so a reader row policy can constrain the
@@ -532,6 +534,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		FlowStoreMode:            l.enum("PROBECTL_FLOWSTORE_MODE", "memory", "memory", "clickhouse"),
 		FlowStoreURL:             l.str("PROBECTL_FLOWSTORE_URL", ""),
 		FlowRetentionDays:        l.intRange("PROBECTL_FLOW_RETENTION_DAYS", 0, 0, 3650),
+		PathRetentionDays:        l.intRange("PROBECTL_PATH_RETENTION_DAYS", 90, 0, 3650),
 		FlowEnrichASN:            l.boolean("PROBECTL_FLOW_ENRICH_ASN", false),
 		FlowCHTenantScoping:      l.boolean("PROBECTL_FLOWSTORE_TENANT_SCOPING", false),
 		FlowCHReaderUser:         l.str("PROBECTL_FLOWSTORE_READER_USER", ""),

@@ -181,3 +181,69 @@ func TestAcknowledgeAndErrors(t *testing.T) {
 		t.Fatalf("clear silence: %+v err=%v", a, err)
 	}
 }
+
+// ARCH-005 (Sprint 16, the volatile-stores ADR's documented exception): a
+// persisted silence/ack RESTORED into a FRESH engine re-applies the first
+// time its series fires again — operator state survives a control-plane
+// restart. This is the engine half of the restart-survival contract; the
+// store half (alert_ops) rides the integration suite.
+func TestPersistedOpsRestoreSurvivesRestart(t *testing.T) {
+	// "Before the restart": fire + silence + ack, capture what the API layer
+	// persists (fingerprint, deadline, acker).
+	h1, rule := newActiveHarness(t)
+	h1.value = 250
+	h1.eval(t, rule)
+	fp := h1.en.Active()[0].Fingerprint
+	if _, err := h1.en.Silence(fp, 30*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h1.en.Acknowledge(fp, "oncall@example"); err != nil {
+		t.Fatal(err)
+	}
+	silencedUntil := h1.now.Add(30 * time.Minute)
+
+	// "After the restart": a FRESH engine restores the persisted ops; the
+	// series fires again and arrives silenced + acked WITHOUT new operator
+	// action — and the silence suppresses the notification.
+	h2, rule2 := newActiveHarness(t)
+	h2.en.RestoreOps(map[string]RestoredOp{
+		fp: {SilencedUntil: silencedUntil, AckedBy: "oncall@example", AckedAt: h1.now},
+	})
+	h2.value = 250
+	h2.eval(t, rule2)
+	if h2.sinked != 0 {
+		t.Fatalf("restored silence must suppress the firing notification, sinked=%d", h2.sinked)
+	}
+	act := h2.en.Active()
+	if len(act) != 1 {
+		t.Fatalf("active = %d, want 1 (silence suppresses notify, not state)", len(act))
+	}
+	if act[0].SilencedUntil == nil || act[0].AckedBy != "oncall@example" {
+		t.Fatalf("restored op not applied: %+v", act[0])
+	}
+
+	// An EXPIRED restored silence is skipped (fires + notifies normally).
+	h3, rule3 := newActiveHarness(t)
+	h3.en.RestoreOps(map[string]RestoredOp{
+		fp: {SilencedUntil: h3.now.Add(-time.Minute)},
+	})
+	h3.value = 250
+	h3.eval(t, rule3)
+	if h3.sinked != 1 {
+		t.Fatalf("expired restored silence must not suppress: sinked=%d", h3.sinked)
+	}
+
+	// Resolve fires the cleanup hook (the API layer deletes the row).
+	resolved := make(chan string, 1)
+	h2.en.SetResolveHook(func(f string) { resolved <- f })
+	h2.value = 0 // recovers
+	h2.eval(t, rule2)
+	select {
+	case got := <-resolved:
+		if got != fp {
+			t.Fatalf("resolve hook fingerprint = %q, want %q", got, fp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("resolve hook never fired (persisted row would leak)")
+	}
+}

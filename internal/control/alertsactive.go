@@ -9,6 +9,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/alert"
 	"github.com/imfeelingtheagi/probectl/internal/apierror"
 	"github.com/imfeelingtheagi/probectl/internal/auth"
+	"github.com/imfeelingtheagi/probectl/internal/store"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
 )
 
@@ -99,10 +100,21 @@ func (s *Server) handleSilenceAlert(w http.ResponseWriter, r *http.Request) erro
 	}
 	if s.pool != nil {
 		if aerr := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
+			// ARCH-005: persist the operator action so it survives a restart.
+			if req.DurationMinutes <= 0 && a.AckedBy == "" {
+				if derr := (store.AlertOps{}).Delete(ctx, sc, a.Fingerprint); derr != nil {
+					return derr
+				}
+			} else if perr := (store.AlertOps{}).Upsert(ctx, sc, store.AlertOp{
+				Fingerprint: a.Fingerprint, RuleID: a.RuleID,
+				SilencedUntil: a.SilencedUntil, AckedBy: a.AckedBy, AckedAt: a.AckedAt,
+			}); perr != nil {
+				return perr
+			}
 			return s.recordAudit(ctx, sc, r, "alert.silence", a.RuleID,
 				map[string]any{"fingerprint": a.Fingerprint, "duration_minutes": req.DurationMinutes})
 		}); aerr != nil {
-			s.log.Warn("alert.silence audit failed", "error", aerr)
+			s.log.Warn("alert.silence persist/audit failed", "error", aerr)
 		}
 	}
 	writeJSON(w, http.StatusOK, a)
@@ -147,6 +159,13 @@ func (s *Server) handleAckAlert(w http.ResponseWriter, r *http.Request) error {
 	}
 	if s.pool != nil {
 		if auErr := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
+			// ARCH-005: persist the ack so it survives a restart.
+			if perr := (store.AlertOps{}).Upsert(ctx, sc, store.AlertOp{
+				Fingerprint: a.Fingerprint, RuleID: a.RuleID,
+				SilencedUntil: a.SilencedUntil, AckedBy: a.AckedBy, AckedAt: a.AckedAt,
+			}); perr != nil {
+				return perr
+			}
 			return s.recordAudit(ctx, sc, r, "alert.acknowledge", a.RuleID,
 				map[string]any{"fingerprint": a.Fingerprint, "by": by})
 		}); auErr != nil {

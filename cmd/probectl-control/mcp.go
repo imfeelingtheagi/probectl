@@ -34,7 +34,7 @@ func runMCPStdio(cfg *config.Config, log *slog.Logger, db *store.DB) error {
 	if err != nil {
 		return fmt.Errorf("authenticate mcp token: %w", err)
 	}
-	pathStore, err := pathstore.New(cfg.PathStoreMode, cfg.PathStoreURL)
+	pathStore, err := pathstore.NewRetained(cfg.PathStoreMode, cfg.PathStoreURL, cfg.PathRetentionDays)
 	if err != nil {
 		return fmt.Errorf("path store: %w", err)
 	}

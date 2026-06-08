@@ -258,7 +258,7 @@ func run(cmd string) error {
 	}
 	defer tsdbWriter.Close()
 
-	pathStore, err := pathstore.New(cfg.PathStoreMode, cfg.PathStoreURL)
+	pathStore, err := pathstore.NewRetained(cfg.PathStoreMode, cfg.PathStoreURL, cfg.PathRetentionDays)
 	if err != nil {
 		return fmt.Errorf("path store: %w", err)
 	}
@@ -832,6 +832,10 @@ func run(cmd string) error {
 			return fmt.Errorf("otlp receiver: %w", err)
 		}
 		g.Go(func() error { return otlpSrv.Run(gctx) })
+		// SCALE-010: the topic finally has a CONSUMER — externally-ingested
+		// OTLP metrics land in the TSDB instead of being published and
+		// silently dropped.
+		g.Go(func() error { return pipeline.NewOTLPConsumer(resultBus, tsdbWriter, log).Run(gctx) })
 	}
 
 	// MCP server (S25): the Model Context Protocol HTTP transport — TLS + bearer-

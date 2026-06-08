@@ -32,7 +32,40 @@ type Engine struct {
 
 	mu     sync.Mutex
 	states map[string]*seriesState
+
+	// Persisted operator state (Sprint 16, ARCH-005 — the volatile-stores
+	// ADR's documented exception): silences/acks restored from the store are
+	// re-applied when their series fires again; onResolve lets the API layer
+	// delete the persisted row when an episode ends.
+	restored  map[string]RestoredOp
+	onResolve func(fingerprint string)
 }
+
+// RestoredOp is one persisted silence/ack awaiting its series to fire again.
+type RestoredOp struct {
+	SilencedUntil time.Time
+	AckedBy       string
+	AckedAt       time.Time
+}
+
+// RestoreOps seeds persisted operator actions (boot reload). An op applies
+// the first time its fingerprint fires; expired silences are skipped.
+func (en *Engine) RestoreOps(ops map[string]RestoredOp) {
+	en.mu.Lock()
+	defer en.mu.Unlock()
+	if en.restored == nil {
+		en.restored = map[string]RestoredOp{}
+	}
+	for fp, op := range ops {
+		en.restored[fp] = op
+	}
+}
+
+// SetResolveHook wires the persisted-op cleanup: called (outside the lock)
+// whenever a firing episode resolves, so the store row is deleted and a
+// FUTURE episode starts clean — restart-restored state never outlives the
+// episode semantics the in-memory engine always had.
+func (en *Engine) SetResolveHook(fn func(fingerprint string)) { en.onResolve = fn }
 
 // EngineOption configures an Engine.
 type EngineOption func(*Engine)
@@ -94,6 +127,7 @@ func (en *Engine) Evaluate(ctx context.Context, rule Rule) ([]Alert, error) {
 func (en *Engine) evalSample(rule Rule, s Sample) (Alert, bool) {
 	en.mu.Lock()
 	defer en.mu.Unlock()
+	key := stateKey(rule.ID, s.Labels)
 	st := en.stateForLocked(rule, s.Labels)
 	breached, reason := en.breached(rule, st, s.Value)
 
@@ -104,7 +138,7 @@ func (en *Engine) evalSample(rule Rule, s Sample) (Alert, bool) {
 	st.lastValue, st.lastReason = s.Value, reason
 	st.lastSeen = en.clock()
 
-	return en.transition(rule, st, s, breached, reason)
+	return en.transition(key, rule, st, s, breached, reason)
 }
 
 // stateForLocked returns (creating if needed) the per-series state. en.mu held.
@@ -141,7 +175,7 @@ func (en *Engine) breached(rule Rule, st *seriesState, value float64) (bool, str
 
 // transition advances the series state machine and returns an alert to notify (if
 // any), applying ForN debounce, renotify dedupe, and resolved transitions.
-func (en *Engine) transition(rule Rule, st *seriesState, s Sample, breached bool, reason string) (Alert, bool) {
+func (en *Engine) transition(key string, rule Rule, st *seriesState, s Sample, breached bool, reason string) (Alert, bool) {
 	forN := rule.ForN
 	if forN < 1 {
 		forN = 1
@@ -157,6 +191,17 @@ func (en *Engine) transition(rule Rule, st *seriesState, s Sample, breached bool
 		now := en.clock()
 		if firstFiring {
 			st.since = now // a new firing episode
+			// ARCH-005: re-apply a persisted silence/ack the first time this
+			// series fires after a restart (expired silences are skipped).
+			if op, ok := en.restored[key]; ok {
+				delete(en.restored, key)
+				if op.SilencedUntil.After(now) {
+					st.silencedUntil = op.SilencedUntil
+				}
+				if op.AckedBy != "" {
+					st.ackedBy, st.ackedAt = op.AckedBy, op.AckedAt
+				}
+			}
 		}
 		// A silence (S-FE1) suppresses firing notifications until its deadline;
 		// the series keeps evaluating and stays visible as firing.
@@ -179,6 +224,10 @@ func (en *Engine) transition(rule Rule, st *seriesState, s Sample, breached bool
 		// The episode is over: operator state does not leak into the next one.
 		st.silencedUntil = time.Time{}
 		st.ackedBy, st.ackedAt = "", time.Time{}
+		if en.onResolve != nil {
+			// Delete the persisted op so a future episode starts clean.
+			go en.onResolve(key)
+		}
 		return en.alert(rule, s, StateResolved, "value recovered"), true
 	}
 	return Alert{}, false
