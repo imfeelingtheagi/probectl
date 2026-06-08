@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     set -eux; \
     bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/bpf/vmlinux.h; \
     (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf -go-package ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf); \
-    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target amd64,arm64 -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf); \
+    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target "${TARGETARCH}" -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf); \
     (cd internal/ebpf && go run ./gendigests .); \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
     go build -trimpath -tags ebpf \

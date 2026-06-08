@@ -5,9 +5,14 @@
 package ebpf
 
 // sslsniff uses uprobes (BPF_UPROBE → PT_REGS_PARM*), which need a concrete
-// register layout: bpf2go compiles one object per supported arch
-// (amd64→x86, arm64), unlike the arch-neutral tracepoint in l4flow.
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target amd64,arm64 -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf
+// register layout, so it builds for the HOST arch only (-target $GOARCH; go
+// generate expands $GOARCH to amd64/arm64). The agent ships per-platform, and
+// a host-dumped vmlinux.h only describes that host's arch — cross-compiling
+// amd64↔arm64 from a single host can't resolve the other arch's struct
+// pt_regs. (A committed multi-arch vmlinux.h would lift that limit — tracked
+// in known-risks for the release cross-build.) l4flow is arch-neutral
+// (-target bpfel), so it needs no per-arch build.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target $GOARCH -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf
 
 import (
 	"context"

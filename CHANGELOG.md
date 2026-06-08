@@ -9,6 +9,22 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 3 (eBPF cross-arch): with the round-2 fixes in, the eBPF
+  jobs advanced to the BPF compile and hit a real cross-arch limit —
+  `sslsniff` is a uprobe program (`BPF_UPROBE`/`PT_REGS_PARM*`) whose register
+  layout is arch-specific, but it was compiled `-target amd64,arm64` against a
+  `vmlinux.h` dumped from a single build host, so the foreign arch's
+  `struct pt_regs` lacked the expected register fields (`di/si/dx/ax` vs
+  `regs[]`). Fixed by building sslsniff for the **host arch only** —
+  `-target $(go env GOARCH)` (Makefile, CI kernel-matrix), `-target ${TARGETARCH}`
+  (Dockerfile.ebpf), `-target $GOARCH` (go:generate) — since `ebpf-image-live`
+  and each kernel-matrix runner build a single arch anyway. `l4flow` is
+  arch-neutral (`-target bpfel`) and was unaffected. The committed multi-arch
+  `vmlinux.h` needed for `release.yml`'s arm64-from-amd64 cross-build is tracked
+  as a follow-up in `known-risks.md` (it needs clang + both-arch BTF, which the
+  dev sandbox lacks). Verified the target values + GOARCH resolution locally;
+  the BPF compile itself is CI-verified (no clang in the sandbox).
+
 - Removed Dependabot at the operator's request: deleted `.github/dependabot.yml`
   (it drove the weekly version-update PRs for SHA-pinned actions, digest-pinned
   images, and the analyzer's hash-locked pip lock). No CI gate depended on it —
