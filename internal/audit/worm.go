@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -76,10 +77,47 @@ func NewWormExporter(source WormSource, objects objectstore.Store, privPEM, pubP
 }
 
 // NewWormExporterPG is the production wiring over the provider audit table.
-func NewWormExporterPG(pool *pgxpool.Pool, objects objectstore.Store, log *slog.Logger) (*WormExporter, error) {
+// The signing key (privPEM/pubPEM) is resolved by the caller via
+// ResolveWormSigningKey (KEYS-002 / D2) and MUST be persisted — passing empty
+// PEMs lets NewWormExporter mint an ephemeral key, which is test/dev only.
+func NewWormExporterPG(pool *pgxpool.Pool, objects objectstore.Store, privPEM, pubPEM []byte, log *slog.Logger) (*WormExporter, error) {
 	return NewWormExporter(func(ctx context.Context, afterSeq int64, limit int) ([]Event, error) {
 		return ListProvider(ctx, pool, afterSeq, limit)
-	}, objects, nil, nil, log)
+	}, objects, privPEM, pubPEM, log)
+}
+
+// ResolveWormSigningKey resolves the Ed25519 key that signs WORM segments
+// (KEYS-002 / decision D2). Precedence: an explicit base64-PEM env key wins
+// (KMS / secret-manager injection); else a key FILE is loaded — generated +
+// persisted on first boot like the envelope KEK, so it is STABLE across
+// restarts; else, when WORM export is enabled but no key is configured, it
+// FAILS CLOSED. A control-plane restart must NOT silently mint a new key:
+// that would break cross-restart verification of the tamper-evident chain
+// (the entire point of the signed export). regulated only enriches the error.
+func ResolveWormSigningKey(envKeyB64, keyFile string, regulated bool) (privPEM, pubPEM []byte, generated bool, err error) {
+	switch {
+	case strings.TrimSpace(envKeyB64) != "":
+		raw, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(envKeyB64))
+		if derr != nil {
+			return nil, nil, false, fmt.Errorf("audit: PROBECTL_WORM_SIGNING_KEY is not valid base64: %w", derr)
+		}
+		pub, perr := crypto.PublicPEMFromPrivate(raw)
+		if perr != nil {
+			return nil, nil, false, fmt.Errorf("audit: PROBECTL_WORM_SIGNING_KEY is not a valid Ed25519 private-key PEM: %w", perr)
+		}
+		return raw, pub, false, nil
+	case keyFile != "":
+		return crypto.LoadOrGenerateEd25519KeyFile(keyFile)
+	default:
+		reg := ""
+		if regulated {
+			reg = " (and at-rest encryption is required)"
+		}
+		return nil, nil, false, fmt.Errorf(
+			"audit: WORM export is enabled but no signing key is configured%s — set PROBECTL_WORM_SIGNING_KEY_FILE "+
+				"(generated + persisted on first boot) or PROBECTL_WORM_SIGNING_KEY; refusing to mint an ephemeral "+
+				"per-boot key, which would break cross-restart chain verification (KEYS-002)", reg)
+	}
 }
 
 // Run exports on the interval and verifies the exported chain after each

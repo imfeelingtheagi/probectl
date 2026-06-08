@@ -40,6 +40,16 @@ cycle re-verifies signatures, seq continuity, and the cross-segment hash
 chain — a purge or gap logs an unmissable error. Third parties can verify
 segments with nothing but the published key.
 
+The signing key is **persisted, not ephemeral** (KEYS-002): set
+`PROBECTL_WORM_SIGNING_KEY_FILE` to a PEM path (generated + persisted 0600 on
+first boot, reused thereafter) or inject `PROBECTL_WORM_SIGNING_KEY` (base64
+PEM) from your secret manager. **Back this key up like the envelope key** — it
+is the identity the whole exported history is signed under; losing it forfeits
+cross-restart verification of segments signed before the loss. Enabling WORM
+export (`PROBECTL_AUDIT_WORM_DIR`) with no key configured **fails closed** —
+the control plane refuses to start rather than mint a fresh key each boot
+(which would silently break verification of every prior segment).
+
 ## 0c. At-rest encryption — who encrypts what (SEC-002 / COMPLY-004)
 
 probectl is self-hosted: some at-rest encryption is the product's job, some is

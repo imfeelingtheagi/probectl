@@ -646,7 +646,19 @@ func run(cmd string) error {
 		if werr != nil {
 			return fmt.Errorf("audit worm store: %w", werr)
 		}
-		worm, werr := audit.NewWormExporterPG(db.Pool(), wormStore, log)
+		// KEYS-002 (D2): resolve a PERSISTED signing key — env base64 wins, else a
+		// key file (generated + persisted on first boot); fail closed if WORM
+		// export is on but no key resolves (never an ephemeral per-boot key, which
+		// would break cross-restart verification of the chain).
+		wormPriv, wormPub, wormKeyGen, kerr := audit.ResolveWormSigningKey(cfg.WormSigningKey, cfg.WormSigningKeyFile, cfg.RequireAtRestEncryption)
+		if kerr != nil {
+			return fmt.Errorf("audit worm signing key: %w", kerr)
+		}
+		if wormKeyGen {
+			log.Warn("GENERATED a new WORM audit signing key — back this file up like any key material; losing it forfeits cross-restart verification of the exported chain",
+				"key_file", cfg.WormSigningKeyFile)
+		}
+		worm, werr := audit.NewWormExporterPG(db.Pool(), wormStore, wormPriv, wormPub, log)
 		if werr != nil {
 			return fmt.Errorf("audit worm exporter: %w", werr)
 		}

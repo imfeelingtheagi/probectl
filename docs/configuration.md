@@ -62,6 +62,8 @@ migrations and exit), `probectl-control version`.
 | `PROBECTL_TSDB_MEMORY_MAX_BYTES` | `268435456` | U-018: byte wall for the in-memory TSDB; oldest-first eviction, usage + eviction counters exposed |
 | `PROBECTL_AUDIT_WORM_DIR` | (none) | U-041: enable WORM export — the provider audit chain is exported as Ed25519-signed segments into this directory (mount an S3/MinIO **object-lock** bucket for true WORM) and chain-verified each cycle |
 | `PROBECTL_AUDIT_WORM_INTERVAL` | `1h` | export + chain-verify cadence |
+| `PROBECTL_WORM_SIGNING_KEY_FILE` | (none) | KEYS-002: path to the Ed25519 WORM signing key (PKCS#8 PEM) — loaded, or GENERATED+persisted (0600) on first boot, so the key is **stable across restarts** (an ephemeral per-boot key would break cross-restart chain verification). Required when `PROBECTL_AUDIT_WORM_DIR` is set unless `PROBECTL_WORM_SIGNING_KEY` is. **Back it up like the envelope key** |
+| `PROBECTL_WORM_SIGNING_KEY` | (none) | KEYS-002: base64-encoded Ed25519 private-key PEM (KMS/secret-manager injection) — wins over `PROBECTL_WORM_SIGNING_KEY_FILE`. Enabling WORM export with neither set **fails closed** (no silent ephemeral key) |
 | `PROBECTL_TSDB_MODE`                | `memory`                                                         | time-series writer: `memory` (in-process) \| `prometheus`  |
 | `PROBECTL_TSDB_URL`                 | (none)                                                           | Prometheus/VictoriaMetrics base URL for remote-write (required for `prometheus`) |
 | `PROBECTL_ALERT_EVAL_INTERVAL`      | `30s`                                                            | how often the alerting engine evaluates rules over the TSDB (S16) |

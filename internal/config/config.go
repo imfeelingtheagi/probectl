@@ -146,8 +146,18 @@ type Config struct {
 	// WORM) and chain-verified; gaps alert loudly.
 	AuditWORMDir      string
 	AuditWORMInterval time.Duration
-	TSDBMode          string
-	TSDBURL           string
+	// WORM signing key (KEYS-002 / D2): the Ed25519 key that signs WORM
+	// segments. WormSigningKey is a base64-encoded PKCS#8 PEM private key
+	// (KMS/secret-manager injected, like EnvelopeKey); WormSigningKeyFile is a
+	// PEM path the control plane loads — generating + persisting one on first
+	// boot like the envelope KEK, so the key is STABLE across restarts. When
+	// WORM export is enabled (AuditWORMDir) but neither resolves, the control
+	// plane FAILS CLOSED rather than minting an ephemeral per-boot key (which
+	// breaks cross-restart chain verification). Back it up like the envelope key.
+	WormSigningKey     string
+	WormSigningKeyFile string
+	TSDBMode           string
+	TSDBURL            string
 
 	// Alerting (S16): how often the engine evaluates enabled rules over the TSDB.
 	AlertEvalInterval time.Duration
@@ -543,6 +553,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		TSDBMemoryMaxBytes:       l.intRange("PROBECTL_TSDB_MEMORY_MAX_BYTES", 0, 0, 1<<31-1),
 		AuditWORMDir:             l.str("PROBECTL_AUDIT_WORM_DIR", ""),
 		AuditWORMInterval:        l.dur("PROBECTL_AUDIT_WORM_INTERVAL", time.Hour),
+		WormSigningKey:           l.str("PROBECTL_WORM_SIGNING_KEY", ""),
+		WormSigningKeyFile:       l.str("PROBECTL_WORM_SIGNING_KEY_FILE", ""),
 		TSDBMode:                 l.enum("PROBECTL_TSDB_MODE", "memory", "memory", "prometheus"),
 		TSDBURL:                  l.str("PROBECTL_TSDB_URL", ""),
 		PathStoreMode:            l.enum("PROBECTL_PATHSTORE_MODE", "memory", "memory", "clickhouse"),

@@ -9,6 +9,25 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 3 (plan v2): persist the WORM audit signing key (KEYS-002 /
+  COMPLY-008). The provider audit WORM export minted a FRESH Ed25519 key on
+  every boot (`NewWormExporterPG` passed no key → `NewWormExporter`
+  generated one), so a control-plane restart silently changed the signing
+  identity and broke cross-restart verification of the tamper-evident chain
+  (SOC2/forensic blast radius). Fix (decision D2): `ResolveWormSigningKey`
+  resolves a PERSISTED key — `PROBECTL_WORM_SIGNING_KEY` (base64 PEM,
+  KMS/secret-manager injected) wins, else `PROBECTL_WORM_SIGNING_KEY_FILE`
+  (generated + persisted 0600 on first boot like the envelope KEK, reused
+  thereafter) — threaded through `NewWormExporterPG` → `NewWormExporter`;
+  the public key is still published next to the segments. Enabling WORM
+  export with no key configured FAILS CLOSED (no silent ephemeral key);
+  regulated profiles get explicit context. New internal/crypto helpers
+  `LoadOrGenerateEd25519KeyFile` + `PublicPEMFromPrivate`. Tests: a
+  persisted key yields the same public key across a simulated restart and
+  the exported chain verifies, while a fresh ephemeral key cannot.
+  Documented in configuration.md + hardening (back it up like the envelope
+  key).
+
 - Build hotfix (SUPPLY-007, pulled forward from Sprint 13): align go.work's
   language version to `go 1.26.4` to match both modules' go.mod. A bare
   `go 1.26` in go.work is OLDER than the modules' `go >= 1.26.4`, which Go

@@ -1,12 +1,16 @@
 package audit
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/objectstore"
 )
 
@@ -95,6 +99,87 @@ func TestWormTamperedSegmentFailsVerification(t *testing.T) {
 	err := w.VerifyWORMChain(ctx)
 	if err == nil || !strings.Contains(err.Error(), "signature INVALID") {
 		t.Fatalf("tampered segment passed: %v", err)
+	}
+}
+
+// KEYS-002 (D2): the resolved signing key is STABLE across restarts (a key
+// FILE is generated once then reused), an env base64 key passes through, and
+// the resolver FAILS CLOSED when WORM export is enabled with no key — the
+// control plane must never silently mint an ephemeral per-boot key.
+func TestResolveWormSigningKeyStableAndFailClosed(t *testing.T) {
+	keyFile := filepath.Join(t.TempDir(), "worm-signing.pem")
+
+	// First boot generates + persists; second boot REUSES the same key.
+	priv1, pub1, gen1, err := ResolveWormSigningKey("", keyFile, false)
+	if err != nil || !gen1 {
+		t.Fatalf("first resolve: gen=%v err=%v", gen1, err)
+	}
+	priv2, pub2, gen2, err := ResolveWormSigningKey("", keyFile, false)
+	if err != nil || gen2 {
+		t.Fatalf("second resolve: gen=%v err=%v", gen2, err)
+	}
+	if !bytes.Equal(priv1, priv2) || !bytes.Equal(pub1, pub2) {
+		t.Fatal("a persisted key file must yield the SAME keypair across restarts")
+	}
+
+	// An env base64 PEM private key passes through and derives its public half.
+	pemPriv, _, gerr := crypto.GenerateEd25519KeyPEM()
+	if gerr != nil {
+		t.Fatal(gerr)
+	}
+	ep, epub, egen, eerr := ResolveWormSigningKey(base64.StdEncoding.EncodeToString(pemPriv), "", false)
+	if eerr != nil || egen || len(epub) == 0 {
+		t.Fatalf("env key resolve: gen=%v err=%v", egen, eerr)
+	}
+	if !bytes.Equal(ep, pemPriv) {
+		t.Fatal("env-supplied private PEM must pass through unchanged")
+	}
+
+	// No key configured but WORM export enabled → FAIL CLOSED (both profiles).
+	if _, _, _, e := ResolveWormSigningKey("", "", false); e == nil || !strings.Contains(e.Error(), "ephemeral") {
+		t.Fatalf("no key must fail closed (non-regulated): %v", e)
+	}
+	if _, _, _, e := ResolveWormSigningKey("", "", true); e == nil || !strings.Contains(e.Error(), "at-rest encryption is required") {
+		t.Fatalf("no key in regulated profile must fail closed with context: %v", e)
+	}
+}
+
+// The exported chain VERIFIES after a restart that reuses the persisted key,
+// and FAILS under a fresh (ephemeral) key — the exact regression KEYS-002
+// closes (a per-boot key broke cross-restart verification).
+func TestWormChainVerifiesAcrossRestartWithPersistedKey(t *testing.T) {
+	ctx := context.Background()
+	store := objectstore.NewMemory()
+	keyFile := filepath.Join(t.TempDir(), "worm-signing.pem")
+
+	// Boot 1: resolve (generate) the key, export segments.
+	priv1, pub1, _, err := ResolveWormSigningKey("", keyFile, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w1, err := NewWormExporter(sourceOf(chainedEvents(5)), store, priv1, pub1, testLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w1.ExportOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Boot 2: the SAME persisted key → the exported chain verifies.
+	priv2, pub2, _, err := ResolveWormSigningKey("", keyFile, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w2, _ := NewWormExporter(sourceOf(nil), store, priv2, pub2, testLog())
+	if err := w2.VerifyWORMChain(ctx); err != nil {
+		t.Fatalf("chain must verify across a restart with the persisted key: %v", err)
+	}
+
+	// A fresh ephemeral key (the OLD per-boot behavior) CANNOT verify it.
+	ephPriv, ephPub, _ := crypto.GenerateEd25519KeyPEM()
+	w3, _ := NewWormExporter(sourceOf(nil), store, ephPriv, ephPub, testLog())
+	if err := w3.VerifyWORMChain(ctx); err == nil {
+		t.Fatal("an ephemeral key must NOT verify the chain signed by the persisted key")
 	}
 }
 
