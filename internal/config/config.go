@@ -93,6 +93,12 @@ type Config struct {
 	// hardened/regulated profiles.
 	RequireAtRestEncryption bool
 
+	// RequireMFA (SEC-005): when true, every authenticated /v1 request must
+	// carry a session the IdP asserted a SECOND factor for (amr/acr) — a
+	// single-factor session gets 403. Off by default (no change for
+	// single-factor deployments); set in hardened/regulated profiles.
+	RequireMFA bool
+
 	// Agent transport (gRPC). Enabled when the address and all three TLS files
 	// are set; the transport is mTLS-only (never plaintext).
 	AgentGRPCAddr    string
@@ -517,6 +523,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		MigrateOnBoot:            l.boolean("PROBECTL_MIGRATE_ON_BOOT", false),
 		LogLevel:                 l.enum("PROBECTL_LOG_LEVEL", "info", "debug", "info", "warn", "error"),
 		LogFormat:                l.enum("PROBECTL_LOG_FORMAT", "json", "json", "text"),
+		RequireMFA:               l.boolean("PROBECTL_REQUIRE_MFA", false),
 		HSTSEnabled:              l.boolean("PROBECTL_HSTS_ENABLED", true),
 		HSTSMaxAge:               l.dur("PROBECTL_HSTS_MAX_AGE", 365*24*time.Hour),
 		TLSCertFile:              l.str("PROBECTL_TLS_CERT_FILE", ""),

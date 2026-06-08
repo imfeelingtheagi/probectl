@@ -9,6 +9,19 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 10 (plan v2): MFA wired end-to-end (SEC-005). `Identity.MFASatisfied`
+  was plumbed through session/middleware/audit/ABAC, but the OIDC callback
+  never parsed the `amr` claim, so it was always false — MFA could neither
+  be asserted nor enforced. Fix (decision D7): the OIDC Exchange now parses
+  `amr` (RFC 8176) + `acr` and sets `Identity.MFASatisfied` (a strong second
+  factor — otp/hwk/sms/mfa/… — or an `acr` naming aal2+/loa2+), which flows
+  Identity→Session→Principal→the `mfa` ABAC attribute. A new optional
+  `PROBECTL_REQUIRE_MFA` (default off) makes `requirePermission` return 403
+  for any single-factor session at request time (so pre-existing
+  single-factor sessions are caught too, not just new logins). Tests: an
+  amr/acr→flag truth table, and the require-MFA gate (403s single-factor,
+  passes MFA-satisfied, default unchanged). Documented in configuration.md.
+
 - Sprint 9 (plan v2): shard the fairness Gate to cut admit-path lock
   contention (SCALE-001). The Gate took a single process-wide mutex on the
   admit hot path (`AdmitN`/`BeginQuery`), so under high tenant fan-in every

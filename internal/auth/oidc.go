@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -69,10 +70,12 @@ func (p *oidcProvider) Exchange(ctx context.Context, code string) (*Identity, er
 		return nil, fmt.Errorf("oidc: verify id_token: %w", err)
 	}
 	var claims struct {
-		Subject           string `json:"sub"`
-		Email             string `json:"email"`
-		Name              string `json:"name"`
-		PreferredUsername string `json:"preferred_username"`
+		Subject           string   `json:"sub"`
+		Email             string   `json:"email"`
+		Name              string   `json:"name"`
+		PreferredUsername string   `json:"preferred_username"`
+		AMR               []string `json:"amr"` // RFC 8176 authentication methods
+		ACR               string   `json:"acr"` // authentication context class
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, fmt.Errorf("oidc: parse claims: %w", err)
@@ -81,5 +84,36 @@ func (p *oidcProvider) Exchange(ctx context.Context, code string) (*Identity, er
 	if name == "" {
 		name = claims.PreferredUsername
 	}
-	return &Identity{Subject: claims.Subject, Email: claims.Email, DisplayName: name, Nonce: idToken.Nonce}, nil
+	return &Identity{
+		Subject:      claims.Subject,
+		Email:        claims.Email,
+		DisplayName:  name,
+		MFASatisfied: mfaFromAuthContext(claims.AMR, claims.ACR),
+		Nonce:        idToken.Nonce,
+	}, nil
+}
+
+// secondFactorAMR is the set of RFC 8176 amr values that assert a SECOND factor
+// (SEC-005) — "mfa" itself, plus the strong-factor methods (a one-time code,
+// hardware/software key, biometric, SMS/phone, proof-of-possession). "pwd",
+// "pin", "kba", "geo", "rba", "user" alone are NOT a second factor.
+var secondFactorAMR = map[string]bool{
+	"mfa": true, "otp": true, "hwk": true, "swk": true, "sms": true, "tel": true,
+	"phr": true, "phrh": true, "fpt": true, "face": true, "iris": true, "retina": true,
+	"vbm": true, "pop": true, "mca": true, "sc": true,
+}
+
+// mfaFromAuthContext reports whether the ID token's authentication-context
+// claims assert multi-factor authentication. amr (RFC 8176) is authoritative:
+// any second-factor method (or the explicit "mfa") satisfies it. acr is a
+// secondary hint — a level-of-assurance naming mfa/aal2+/loa2+.
+func mfaFromAuthContext(amr []string, acr string) bool {
+	for _, m := range amr {
+		if secondFactorAMR[strings.ToLower(strings.TrimSpace(m))] {
+			return true
+		}
+	}
+	la := strings.ToLower(strings.TrimSpace(acr))
+	return strings.Contains(la, "mfa") || strings.Contains(la, "aal2") ||
+		strings.Contains(la, "aal3") || strings.Contains(la, "loa2") || strings.Contains(la, "loa3")
 }

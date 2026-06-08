@@ -255,6 +255,13 @@ func (s *Server) requirePermission(perm string, h apiHandler) apiHandler {
 		if err := s.checkTenantLifecycle(r, p.TenantID); err != nil {
 			return err
 		}
+		// SEC-005: when the deployment requires MFA (PROBECTL_REQUIRE_MFA), a
+		// session the IdP did not assert a second factor for is refused — at
+		// REQUEST time, so even single-factor sessions minted before the flag
+		// was set are rejected. Default off (no change for single-factor deploys).
+		if s.requireMFA && !p.MFASatisfied {
+			return apierror.Forbidden("multi-factor authentication required")
+		}
 		if perm != "" {
 			if !p.Has(perm) {
 				return apierror.Forbidden("missing permission: " + perm)
@@ -378,10 +385,11 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	token, err := s.sessions.Issue(r.Context(), auth.Session{
-		TenantID:    tid.String(),
-		UserID:      user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
+		TenantID:     tid.String(),
+		UserID:       user.ID,
+		Email:        user.Email,
+		DisplayName:  user.DisplayName,
+		MFASatisfied: ident.MFASatisfied, // SEC-005: from the ID token's amr/acr
 	})
 	if err != nil {
 		return err

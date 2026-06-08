@@ -18,6 +18,10 @@ type Identity struct {
 	Subject     string
 	Email       string
 	DisplayName string
+	// MFASatisfied is set from the ID token's amr/acr claims (SEC-005): true
+	// when the IdP asserts a SECOND factor was used. It flows into the session
+	// → principal → the "mfa" ABAC attribute, and gates PROBECTL_REQUIRE_MFA.
+	MFASatisfied bool
 	// Nonce is the ID token's nonce claim (SEC-004): the callback compares it
 	// to the value minted at login — a mismatch/replayed token is refused.
 	Nonce string

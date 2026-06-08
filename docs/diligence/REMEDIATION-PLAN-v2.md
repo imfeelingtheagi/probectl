@@ -96,7 +96,7 @@ the diffs. If you disagree with one at runtime, still implement it (reversible) 
 | [x] 7 | B | Flow store-failure DLQ + drop counter | CORRECT-001 (SCALE-012 reconciled ↑High) | High | M |
 | [x] 8 | B | Bound the DNS pending-map (eviction cap) | FUZZ-001 | High | M |
 | [x] 9 | B | Reduce fairness Gate lock contention | SCALE-001 | High | M |
-| [ ] 10 | C | MFA wired end-to-end (amr → MFASatisfied) | SEC-005 | Medium | M |
+| [x] 10 | C | MFA wired end-to-end (amr → MFASatisfied) | SEC-005 | Medium | M |
 | [ ] 11 | C | CGNAT 100.64/10 internal classification (NDR) | THREAT-001 | Medium | S |
 | [ ] 12 | C | Branch-protection required-checks + review note | TEST-002 / SUPPLY-005 | Medium | S |
 | [ ] 13 | C | Hygiene bundle: security headers, go-version skew, down-migration policy | SEC-006, SUPPLY-007, SCHEMA-001 | Low–Med | M |

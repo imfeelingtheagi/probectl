@@ -212,6 +212,11 @@ type Server struct {
 	// (OPS-005). Process/aggregate health only — never tenant data.
 	metrics *metrics.Registry
 
+	// requireMFA (SEC-005): when set (PROBECTL_REQUIRE_MFA), requirePermission
+	// refuses any session the IdP did not assert a second factor for. Default
+	// off — single-factor deployments are unaffected.
+	requireMFA bool
+
 	// draining flips true at the start of a graceful shutdown so /readyz reports 503
 	// and the load balancer drains this replica before it exits (S34 zero-downtime).
 	draining atomic.Bool
@@ -299,7 +304,7 @@ func New(cfg *config.Config, log *slog.Logger, pinger store.Pinger, pool *pgxpoo
 	v := version.Get()
 	s := &Server{cfg: cfg, log: log, pinger: pinger, pool: pool, pathStore: pathStore, discover: discover,
 		flowStore: flowstore.NewMemory(), otelStore: otelstore.NewMemory(), startedAt: time.Now(),
-		metrics: metrics.New(v.Version, v.Commit)}
+		requireMFA: cfg.RequireMFA, metrics: metrics.New(v.Version, v.Commit)}
 
 	// Identity & access (S18). The SSO provider factory is always present; the
 	// session manager + authenticator need a DB (nil in operational-only tests).

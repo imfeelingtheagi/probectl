@@ -67,6 +67,30 @@ func TestRequirePermission(t *testing.T) {
 	}
 }
 
+// SEC-005: when the server requires MFA, an authenticated single-factor
+// session is refused (403) even with the permission; an MFA-satisfied session
+// passes; and the default (off) never blocks a single-factor session.
+func TestRequireMFA(t *testing.T) {
+	h := apiHandler(func(http.ResponseWriter, *http.Request) error { return nil })
+	base := httptest.NewRequest(http.MethodGet, "/v1/tests", nil)
+	noMFA := base.WithContext(auth.WithPrincipal(base.Context(),
+		&auth.Principal{TenantID: "t", Permissions: map[string]bool{permTestRead: true}}))
+	withMFA := base.WithContext(auth.WithPrincipal(base.Context(),
+		&auth.Principal{TenantID: "t", MFASatisfied: true, Permissions: map[string]bool{permTestRead: true}}))
+
+	srv := &Server{requireMFA: true}
+	if err := srv.requirePermission(permTestRead, h)(httptest.NewRecorder(), noMFA); errKind(t, err) != apierror.KindForbidden {
+		t.Fatalf("single-factor under require-MFA: want 403, got %v", err)
+	}
+	if err := srv.requirePermission(permTestRead, h)(httptest.NewRecorder(), withMFA); err != nil {
+		t.Fatalf("mfa-satisfied under require-MFA must pass: %v", err)
+	}
+	off := &Server{}
+	if err := off.requirePermission(permTestRead, h)(httptest.NewRecorder(), noMFA); err != nil {
+		t.Fatalf("require-MFA off must not block a single-factor session: %v", err)
+	}
+}
+
 // Dev auth flows ONLY through the compiled-in hook (the test binary installs
 // one in main_test.go; release binaries have none — RED-001). The hook
 // synthesizes an all-permissions principal with an optional X-Probectl-Tenant

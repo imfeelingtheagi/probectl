@@ -78,6 +78,7 @@ migrations and exit), `probectl-control version`.
 | `PROBECTL_OIDC_CLIENT_ID`          | (none)                                                           | OIDC client ID registered with the IdP (S18)               |
 | `PROBECTL_OIDC_CLIENT_SECRET`      | (none)                                                           | OIDC client secret (kept out of logs/URLs; S18)            |
 | `PROBECTL_OIDC_REDIRECT_URL`       | (none)                                                           | the control plane's `/auth/callback` URL registered with the IdP (S18) |
+| `PROBECTL_REQUIRE_MFA`             | `false`                                                         | SEC-005: require multi-factor auth. The session's MFA state comes from the ID token's `amr`/`acr` claims (a second factor like `otp`/`hwk`/`mfa`, or `acr` aal2+/loa2+). When `true`, every authenticated `/v1` request from a single-factor session gets 403 (enforced at request time). Off by default |
 
 Invalid values fail fast: `probectl-control` reports **all** configuration problems
 at once and exits non-zero. The database password is redacted from logs.
