@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -25,11 +26,15 @@ type Stats struct {
 	TemplateMisses atomic.Uint64
 	QueueDrops     atomic.Uint64
 	EmitErrors     atomic.Uint64
+	// DroppedRecords counts records LOST after emit retries were exhausted
+	// (CORRECT-001) — distinct from EmitErrors (failed flush attempts). Telemetry
+	// loss is never silent: it rides the stats snapshot + the periodic stats log.
+	DroppedRecords atomic.Uint64
 }
 
 // StatsSnapshot is a point-in-time copy for logging/tests.
 type StatsSnapshot struct {
-	Packets, Records, DecodeErrors, TemplateMisses, QueueDrops, EmitErrors uint64
+	Packets, Records, DecodeErrors, TemplateMisses, QueueDrops, EmitErrors, DroppedRecords uint64
 }
 
 // Collector binds the configured UDP listeners, decodes datagrams into
@@ -50,6 +55,15 @@ type Collector struct {
 	queue chan Record
 	stats Stats
 
+	// emit resilience (CORRECT-001): a bounded local retry absorbs transient bus
+	// blips before a batch is dropped. The flow agent emits TO the bus, so the
+	// bus is the failing dependency — there is no separate bus DLQ to route to
+	// (it would hit the same outage); local retry + a dropped-records counter is
+	// the honest contract (D4 second clause).
+	emitMaxRetries int
+	emitRetryBase  time.Duration
+	sleep          func(context.Context, time.Duration) // injectable for tests
+
 	mu    sync.Mutex
 	conns map[string]net.PacketConn // protocol name -> bound socket
 	done  chan struct{}
@@ -66,15 +80,19 @@ func New(cfg *Config, em Emitter, log *slog.Logger) (*Collector, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Collector{
-		cfg:   cfg,
-		emit:  em,
-		log:   log,
-		dec:   NewDecoder(cfg.TemplateTTL, cfg.MaxTemplates),
-		queue: make(chan Record, cfg.QueueSize),
-		conns: make(map[string]net.PacketConn),
-		done:  make(chan struct{}),
-	}, nil
+	c := &Collector{
+		cfg:            cfg,
+		emit:           em,
+		log:            log,
+		dec:            NewDecoder(cfg.TemplateTTL, cfg.MaxTemplates),
+		queue:          make(chan Record, cfg.QueueSize),
+		emitMaxRetries: 2,
+		emitRetryBase:  50 * time.Millisecond,
+		conns:          make(map[string]net.PacketConn),
+		done:           make(chan struct{}),
+	}
+	c.sleep = c.defaultSleep
+	return c, nil
 }
 
 // Start binds the enabled listeners and launches the read + flush loops. It
@@ -169,6 +187,7 @@ func (c *Collector) StatsSnapshot() StatsSnapshot {
 		TemplateMisses: c.stats.TemplateMisses.Load(),
 		QueueDrops:     c.stats.QueueDrops.Load(),
 		EmitErrors:     c.stats.EmitErrors.Load(),
+		DroppedRecords: c.stats.DroppedRecords.Load(),
 	}
 }
 
@@ -228,12 +247,7 @@ func (c *Collector) flushLoop(ctx context.Context) {
 		if len(batch) == 0 {
 			return
 		}
-		if err := c.emit.Emit(ctx, batch); err != nil {
-			c.stats.EmitErrors.Add(1)
-			c.log.Error("flow: emit failed", "records", len(batch), "error", err.Error())
-		} else {
-			c.stats.Records.Add(uint64(len(batch)))
-		}
+		c.flushBatch(ctx, batch)
 		batch = make([]Record, 0, c.cfg.BatchSize)
 	}
 
@@ -257,8 +271,50 @@ func (c *Collector) flushLoop(ctx context.Context) {
 			c.log.Info("flow: collector stats",
 				"packets", s.Packets, "records", s.Records, "decode_errors", s.DecodeErrors,
 				"template_misses", s.TemplateMisses, "queue_drops", s.QueueDrops,
-				"emit_errors", s.EmitErrors, "templates", c.dec.TemplateCount())
+				"emit_errors", s.EmitErrors, "dropped_records", s.DroppedRecords,
+				"templates", c.dec.TemplateCount())
 		}
+	}
+}
+
+// flushBatch emits one batch with a bounded local retry; on exhaustion the
+// batch is dropped and COUNTED (DroppedRecords) + logged — never silently lost
+// (CORRECT-001). Success counts the records.
+func (c *Collector) flushBatch(ctx context.Context, batch []Record) {
+	if err := c.emitWithRetry(ctx, batch); err != nil {
+		c.stats.EmitErrors.Add(1)
+		c.stats.DroppedRecords.Add(uint64(len(batch)))
+		c.log.Error("flow: emit failed after retries — batch dropped (telemetry loss)",
+			"records", len(batch), "attempts", c.emitMaxRetries+1, "error", err.Error(),
+			"dropped_records_total", c.stats.DroppedRecords.Load())
+		return
+	}
+	c.stats.Records.Add(uint64(len(batch)))
+}
+
+// emitWithRetry attempts the emit up to 1+emitMaxRetries times with jittered
+// exponential backoff. A canceled context stops retrying immediately.
+func (c *Collector) emitWithRetry(ctx context.Context, batch []Record) error {
+	var err error
+	for attempt := 0; ; attempt++ {
+		if err = c.emit.Emit(ctx, batch); err == nil {
+			return nil
+		}
+		if attempt >= c.emitMaxRetries || ctx.Err() != nil {
+			return err
+		}
+		backoff := c.emitRetryBase << attempt
+		c.sleep(ctx, backoff+time.Duration(rand.Int64N(int64(backoff)/2+1)))
+	}
+}
+
+// defaultSleep waits dur or until ctx is done (overridable in tests).
+func (c *Collector) defaultSleep(ctx context.Context, dur time.Duration) {
+	t := time.NewTimer(dur)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
 	}
 }
 

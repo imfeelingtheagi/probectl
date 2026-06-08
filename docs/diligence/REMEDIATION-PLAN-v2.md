@@ -93,7 +93,7 @@ the diffs. If you disagree with one at runtime, still implement it (reversible) 
 | [x] 4 | A | Vault AppRole token-cache data race | KEYS-001 | High | M |
 | [x] 5 | A | Handle ignored `json.Unmarshal` in store hydration | CODE-005 (miss) + Sprint-2 leftover | Medium | M |
 | [x] 6 | B | OTLP consumer retry + DLQ (durability parity) | SCALE-003 / ARCH-002 | High | M |
-| [ ] 7 | B | Flow store-failure DLQ + drop counter | CORRECT-001 (SCALE-012 reconciled ↑High) | High | M |
+| [x] 7 | B | Flow store-failure DLQ + drop counter | CORRECT-001 (SCALE-012 reconciled ↑High) | High | M |
 | [ ] 8 | B | Bound the DNS pending-map (eviction cap) | FUZZ-001 | High | M |
 | [ ] 9 | B | Reduce fairness Gate lock contention | SCALE-001 | High | M |
 | [ ] 10 | C | MFA wired end-to-end (amr → MFASatisfied) | SEC-005 | Medium | M |

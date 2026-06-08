@@ -9,6 +9,21 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 7 (plan v2): flow collector emit retry + dropped-records counter
+  (CORRECT-001; reconciles the under-rated SCALE-012). The flow collector
+  dropped a batch on emit failure with no retry — only an `EmitErrors`
+  counter (failed flushes), no count of LOST records and no replay — on the
+  highest-volume, billing-relevant plane. Fix (decision D4, second clause):
+  the collector emits TO the bus, so the bus is the failing dependency and
+  there is no separate bus DLQ to route to (it would hit the same outage);
+  `flushBatch` now does a bounded local retry (1+2 attempts, jittered
+  backoff) to absorb transient blips, and on exhaustion drops the batch AND
+  counts it in a new `DroppedRecords` stat (distinct from `EmitErrors`),
+  logged at ERROR and surfaced in `StatsSnapshot` + the periodic stats line
+  (the flow-agent's observable surface — it has no /metrics endpoint). Test:
+  a transient failure retries to success with no loss; a permanent failure
+  drops + counts the records.
+
 - Sprint 6 (plan v2): retry + DLQ for the OTLP consumers (SCALE-003,
   ARCH-002). The OTLP metrics/traces/logs consumers dropped
   externally-ingested data best-effort on a store-write failure
