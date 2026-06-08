@@ -9,6 +9,24 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- Sprint 21: RCA resilience + blocking eval gate (AIRCA-004, TEST-003).
+  The remote-model path now rides ResilientModel: circuit breaker
+  (internal/breaker — 3 consecutive failures open the circuit 30s,
+  short-circuiting instead of stacking timeouts), ctx-enforced model
+  timeout, and a content-keyed response cache (10m TTL, 256 entries)
+  whose cached citations remap positionally onto the current session's
+  random evidence IDs — grounding still validates every one. On
+  breaker-open/timeout/provider error the air-gapped builtin answers
+  instead, clearly marked: degraded=true on the Answer and a "PARTIAL
+  RESULT — remote model unavailable (reason)" banner, with the
+  builtin's own grounded citations (RED-005 holds while degraded).
+  Authoring's Complete seam shares the same breaker (one provider, one
+  health view). TEST-003 flipped per founder decision: rca-eval is
+  BLOCKING — continue-on-error removed (zero occurrences repo-wide),
+  floors answer_accuracy >= 0.85 AND citation_precision >= 0.85
+  enforced from the JSON report (locally verified 0.913/0.924 against
+  the 0.91/0.92 baseline); the report artifact uploads on failure too.
+
 - Sprint 20: AI/MCP egress controls, redaction & audit (AIRCA-001/002/
   003/005, RED-005). ONE egress gate now fronts every external-AI door:
   the remote RCA model, MCP tool results, and the test-authoring model

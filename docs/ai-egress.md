@@ -64,3 +64,29 @@ PROBECTL_AI_EGRESS_ACK=yes-send-tenant-data-to-the-remote-model
 # then, per tenant that may use it:
 # PUT /provider/v1/tenants/{id}/governance  {"ai_remote_egress": true, ...}
 ```
+
+
+## Remote-provider resilience (Sprint 21 — AIRCA-004)
+
+A slow or down provider degrades RCA gracefully, never takes it down. The
+configured-model path is wrapped (`internal/ai.ResilientModel`) with:
+
+- **circuit breaker** (`internal/breaker`, U-078): 3 consecutive failures
+  open the circuit for 30s — calls short-circuit instead of stacking
+  timeouts;
+- **timeout**: the configured model timeout (`PROBECTL_AI_MODEL_TIMEOUT`)
+  is ctx-enforced at the wrapper regardless of client settings;
+- **response cache**: identical question+evidence within 10 minutes is
+  answered without a provider round-trip (256 entries). Evidence IDs are
+  session-random (U-037), so entries key on CONTENT and cached citations
+  are remapped positionally onto the current session's IDs — citation
+  grounding still validates them;
+- **graceful degradation**: on breaker-open/timeout/error the air-gapped
+  BUILTIN answers instead — the answer carries `degraded: true` and the
+  root cause is prefixed `PARTIAL RESULT — remote model unavailable (…)`,
+  with the builtin's own grounded citations (RED-005 holds while degraded).
+
+The consent gate is unchanged: a remote-CONFIGURED deployment requires
+tenant consent before any synthesis, including cache hits and fallback
+answers (strict reading: the configuration, not the individual packet,
+is the consent subject). The builtin default path is never wrapped.

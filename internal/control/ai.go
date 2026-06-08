@@ -149,7 +149,10 @@ func buildModel(cfg *config.Config, log *slog.Logger) ai.ModelAdapter {
 		log.Warn("ai model adapter unavailable; using the built-in air-gapped synthesizer", "error", err)
 		return ai.NewBuiltinModel()
 	}
-	return m
+	// AIRCA-004: the configured-model path rides breaker + timeout + response
+	// cache and degrades to the air-gapped builtin (clearly marked) when the
+	// provider is slow or down. The builtin default above needs none of it.
+	return ai.NewResilientModel(m, ai.NewBuiltinModel(), cfg.AIModelTimeout)
 }
 
 // incidentEntitiesSource is an ai.EntitiesSource backed by the incident store. It

@@ -52,6 +52,11 @@ type Synthesis struct {
 	Confidence           Confidence
 	Findings             []Finding
 	InsufficientEvidence bool
+	// Degraded marks an answer served by the FALLBACK (air-gapped builtin)
+	// because the remote provider was unavailable (AIRCA-004). The root
+	// cause carries the partial-result banner; the flag makes it machine-
+	// readable for the UI.
+	Degraded bool
 }
 
 // ModelAdapter is the pluggable synthesis backend: the built-in deterministic

@@ -28,8 +28,11 @@ type Answer struct {
 	// claim (RED-005); RootCauseGrounded is false when the model's root
 	// cause was rejected for citing nothing real (the claim is replaced,
 	// never surfaced).
-	RootCauseCitations   []Citation    `json:"root_cause_citations,omitempty"`
-	RootCauseGrounded    bool          `json:"root_cause_grounded"`
+	RootCauseCitations []Citation `json:"root_cause_citations,omitempty"`
+	RootCauseGrounded  bool       `json:"root_cause_grounded"`
+	// Degraded: the remote model was unavailable and the air-gapped builtin
+	// answered (AIRCA-004) — the root cause carries the banner.
+	Degraded             bool          `json:"degraded,omitempty"`
 	Confidence           Confidence    `json:"confidence"`
 	Findings             []Finding     `json:"findings"`
 	Evidence             []Evidence    `json:"evidence"`
@@ -198,6 +201,7 @@ func (a *Analyzer) Analyze(ctx context.Context, p *auth.Principal, q Question) (
 		RootCause:            syn.RootCause,
 		RootCauseCitations:   rcCitations,
 		RootCauseGrounded:    rootCauseGrounded && !insufficient,
+		Degraded:             syn.Degraded,
 		Confidence:           syn.Confidence,
 		Findings:             syn.Findings,
 		Evidence:             evidence,
