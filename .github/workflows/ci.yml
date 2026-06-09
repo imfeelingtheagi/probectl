@@ -610,6 +610,12 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: timed failover drill (kill primary → promote replica)
+        # dr-drill.yml's pg-replica interpolates ${POSTGRES_PASSWORD} (OPS-003,
+        # fail-closed if unset) to stream from the primary. Supply the dev-stack
+        # password so the drill (and its compose teardown) can interpolate —
+        # value matches deploy/compose/dev.yml's postgres (probectl).
+        env:
+          POSTGRES_PASSWORD: probectl
         run: make failover-drill
 
   load-smoke:

@@ -295,7 +295,10 @@ func TestTokenStores(t *testing.T) {
 		return nil
 	})
 	mcp := NewMCPTokens(pool)
-	h1 := crypto.Hash([]byte("mcp-secret-1"))
+	// mcp_tokens.token_hash is GLOBAL-unique (auth lookup is pre-tenant), so a fixed
+	// fixture secret collides with a leftover row in the reused CI DB even though the
+	// tenant is unique — make the secret (hence the hash) unique per run.
+	h1 := crypto.Hash([]byte(fmt.Sprintf("mcp-secret-%d", time.Now().UnixNano())))
 	if _, err := mcp.Create(ctx, tn.ID, userID, "cli", h1); err != nil {
 		t.Fatalf("mcp create: %v", err)
 	}
@@ -312,7 +315,7 @@ func TestTokenStores(t *testing.T) {
 
 	// SCIM tokens (create/auth/list/revoke).
 	scim := NewScimTokens(pool)
-	h2 := crypto.Hash([]byte("scim-secret-1"))
+	h2 := crypto.Hash([]byte(fmt.Sprintf("scim-secret-%d", time.Now().UnixNano()))) // global-unique hash → unique per run
 	id, err := scim.Create(ctx, tn.ID, "okta", h2)
 	if err != nil {
 		t.Fatalf("scim create: %v", err)

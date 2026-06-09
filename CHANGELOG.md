@@ -9,10 +9,28 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 13 (post-trivy: three independent reds + one transient): with
+  round 12 in, run #215 surfaced three unrelated failures plus an infra blip — none
+  shared a root cause. (1) **secret-scan** — self-inflicted: the round-12 CHANGELOG
+  entry planted the literal `sk_live_abc123def456`, which gitleaks (now the sole
+  secret gate) flagged in a non-allowlisted file; redacted to the `sk_live_…` form
+  (the literal belongs only in the allowlisted `egressgate_test.go`). (2)
+  **integration / TestTokenStores** — `mcp_tokens.token_hash` is GLOBAL-unique
+  (pre-tenant auth lookup), but the test fixed the secret (`mcp-secret-1`) so the
+  hash collided with a leftover row in the reused CI Postgres even though the tenant
+  was already unique; the MCP + SCIM fixture secrets are now unique per run
+  (`UnixNano`), matching the unique-tenant pattern already in the file. Test-only, no
+  production change. (3) **failover-drill** — `dr-drill.yml`'s streaming replica
+  interpolates `${POSTGRES_PASSWORD}` (OPS-003, fail-closed if unset), which the job
+  never set; it now exports the dev-stack password (`probectl`, matching `dev.yml`)
+  so the standby can stream from the primary. (4) **perf-smoke** — a transient Docker
+  Hub pull timeout (`postgres:16`, `context deadline exceeded`), not a code defect;
+  resolved by re-run. No guardrail touched.
+
 - CI greening, round 12 (dependency-scan — trivy secret-scanner false positive):
   the red was not a vulnerability. `dependency-scan` runs `govulncheck` (passed),
   then trivy `fs` with `scanners: vuln,secret`; the **secret** half matched
-  `sk_live_abc123def456` — an *intentional* redaction-test fixture in
+  a fake Stripe-style key (`sk_live_…`) — an *intentional* redaction-test fixture in
   `internal/ai/egressgate_test.go` that exists to prove the AI egress redactor
   masks API keys (AIRCA-002), and which the dedicated `secret-scan` gate (gitleaks)
   already allowlists in `.gitleaks.toml`. Trivy is a second secret scanner with no
