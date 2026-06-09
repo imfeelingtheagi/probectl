@@ -9,6 +9,29 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 4 (eBPF — the *actual* `ebpf-image-live` blocker): round 3
+  correctly fixed the cross-arch `pt_regs` error on the **kernel-matrix**
+  runners, but `ebpf-image-live` (the shipped-agent image build) stayed red for a
+  *different* reason round 3 conflated with it. The build image
+  (`golang:1.26-bookworm`) installs **libbpf 1.1.0**, and `BPF_UPROBE`/
+  `BPF_URETPROBE` (used by `sslsniff.bpf.c`) are **libbpf ≥ 1.2.0** macros — so
+  clang failed with `use of undeclared identifier 'BPF_UPROBE'`. The `-target`
+  arch was irrelevant; each job in the pipeline carried a different libbpf
+  (bookworm 1.1, Ubuntu runners ~1.3), so the compile passed in some and broke in
+  others. Fixed by **vendoring** the libbpf BPF-program headers (pinned
+  **v1.5.0**) under `internal/ebpf/bpf/headers/` and `-I`-ing them into every
+  `bpf2go` call (Makefile, both `//go:generate`s, `ci.yml`, `Dockerfile.ebpf`),
+  and dropping the `libbpf-dev` apt install from the image and the kernel-matrix
+  job — the BPF compile is now hermetic and independent of the host's libbpf. A
+  toolchain-free unit test (`internal/ebpf/vendored_headers_test.go`) guards the
+  vendored set so a regression fails the fast unit job, not just the slow image
+  build. Verified locally by reproducing the exact `BPF_UPROBE` failure against a
+  1.1-equivalent header set and confirming both BPF objects compile clean against
+  the vendored set for amd64 **and** arm64 (`-fsyntax-only`; the full BPF object
+  build remains CI-verified). This also unblocks `release.yml`'s amd64-host arm64
+  cross-build — the arm64 register file comes from `bpf/arch_compat.h`, so **no**
+  committed multi-arch `vmlinux.h` is needed (see `known-risks.md`).
+
 - CI greening, round 3 (eBPF cross-arch): with the round-2 fixes in, the eBPF
   jobs advanced to the BPF compile and hit a real cross-arch limit —
   `sslsniff` is a uprobe program (`BPF_UPROBE`/`PT_REGS_PARM*`) whose register
@@ -24,6 +47,11 @@ link work to findings.
   as a follow-up in `known-risks.md` (it needs clang + both-arch BTF, which the
   dev sandbox lacks). Verified the target values + GOARCH resolution locally;
   the BPF compile itself is CI-verified (no clang in the sandbox).
+  **Correction (see round 4):** this diagnosis held for `ebpf-kernel-matrix`, but
+  `ebpf-image-live` was actually blocked earlier — the build image's libbpf 1.1
+  lacks `BPF_UPROBE` — and the host-arch change did not green it; vendoring the
+  libbpf headers did. The multi-arch `vmlinux.h` follow-up is no longer needed
+  (`arch_compat.h` supplies the arm64 register file).
 
 - Removed Dependabot at the operator's request: deleted `.github/dependabot.yml`
   (it drove the weekly version-update PRs for SHA-pinned actions, digest-pinned

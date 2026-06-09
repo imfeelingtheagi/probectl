@@ -1130,7 +1130,7 @@ Tasks:
 1. Generate a committed dependency-license inventory for Go (go-licenses), npm (license-checker), and Python (pip-licenses); commit to docs/legal/third-party-licenses.md + a machine-readable SBOM-linked list. Add a CI gate (go-licenses check) that fails on disallowed licenses (e.g. unexpected GPL/AGPL in the OSS-distributed binary).
 2. eBPF GPL boundary: document the boundary — the kernel-side BPF programs (bpf/*.bpf.c, GPL-licensed for GPL-only helpers) vs the userspace loader (your chosen license). Confirm no GPL symbol leaks into userspace linkage; write docs/legal/ebpf-gpl-boundary.md with the analysis + the SEC("license") declarations.
 3. MaxMind GeoLite2 (LICENSE-005): resolve CC BY-SA commercial/redistribution terms — either switch to a redistributable data source, require operators to supply their own license/key, or obtain a commercial MaxMind license; document the decision.
-4. Add the NOTICE file for vendored gNMI (LICENSE-006) and any other Apache-2.0 vendored code; centralize attributions.
+4. Add the NOTICE file for vendored gNMI (LICENSE-006) and any other vendored third-party code — including the vendored libbpf BPF headers (`internal/ebpf/bpf/headers/`, LGPL-2.1 OR BSD-2-Clause; provenance in their `VENDOR.md`); centralize attributions. NOTE: `gen_third_party.sh`/`NOTICE` only enumerate Go modules, so vendored non-Go source (gNMI, libbpf headers) must be added separately.
 
 Acceptance:
 - Committed third-party license inventory + CI license gate; documented eBPF GPL boundary with no contamination; MaxMind terms resolved; NOTICE file present.

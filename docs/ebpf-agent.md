@@ -160,7 +160,7 @@ container/K8s securityContext examples.
 | Build | Command | Source | Needs |
 |---|---|---|---|
 | Default (any OS) | `make build` | FixtureSource / stub | nothing extra |
-| Live eBPF (Linux) | `make ebpf-agent` | CO-RE loader | clang + bpftool + libbpf headers + a BTF kernel |
+| Live eBPF (Linux) | `make ebpf-agent` | CO-RE loader | clang + bpftool + a BTF kernel (libbpf BPF headers are vendored in-repo under `internal/ebpf/bpf/headers/` — no `libbpf-dev` needed) |
 
 **Fixture mode is dev/test-only (EBPF-004).** The SHIPPED agent image is the
 live `-tags ebpf` build: `deploy/docker/Dockerfile.ebpf` runs the same

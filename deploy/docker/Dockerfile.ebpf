@@ -28,10 +28,13 @@ ARG COMMIT=unknown
 ARG DATE=unknown
 WORKDIR /src
 
-# libbpf-dev supplies the bpf/bpf_helpers.h that the BPF objects #include
-# (same package the kernel-matrix job installs); clang/bpf2go fail without it.
+# clang compiles the BPF objects; bpftool dumps the build host's BTF → vmlinux.h.
+# The libbpf BPF headers are vendored (internal/ebpf/bpf/headers, -I'd into bpf2go
+# below), so NO libbpf-dev: the compile is independent of the distro's libbpf
+# version. (bookworm's libbpf 1.1 lacked BPF_UPROBE — the exact break this fixes;
+# see internal/ebpf/bpf/headers/VENDOR.md.)
 RUN apt-get update -q && apt-get install -y -q --no-install-recommends \
-      clang llvm libbpf-dev bpftool && rm -rf /var/lib/apt/lists/*
+      clang llvm bpftool && rm -rf /var/lib/apt/lists/*
 
 # Cache dependencies first for faster rebuilds.
 COPY go.mod go.sum ./
@@ -46,8 +49,8 @@ RUN test -r /sys/kernel/btf/vmlinux || { echo "build host kernel has no BTF (/sy
 RUN --mount=type=cache,target=/root/.cache/go-build \
     set -eux; \
     bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/bpf/vmlinux.h; \
-    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf -go-package ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf); \
-    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target "${TARGETARCH}" -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf); \
+    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf -go-package ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf -I./bpf/headers); \
+    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target "${TARGETARCH}" -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf -I./bpf/headers); \
     (cd internal/ebpf && go run ./gendigests .); \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
     go build -trimpath -tags ebpf \
