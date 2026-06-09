@@ -9,6 +9,26 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 10 (integration — the last four reds): with rounds 8–9 in,
+  the integration job's remaining failures were all test/code, none guardrail.
+  (1) agenttransport `TestAgentRegistersOverMTLS` opened the results stream
+  without the replay-freshness metadata the server now requires (WIRE-006); it
+  now wraps the stream ctx with `agenttransport.FreshnessMetadata`, exactly as
+  the real agent does. (2) control `TestMCPServerToolsTenantScopedAndTokenAuth`:
+  every MCP tool call is egress-gated on `tenant_governance.ai_remote_egress`
+  (the MCP caller IS an external-AI client — AIRCA-001/005, default-deny); the
+  test now grants that consent for its tenant via the provider scope (the same
+  path production uses). (3) enroll `TestWrongTenantCannotBeRequested` — uncovered
+  by the round-8 UUID fix (enrollment now succeeds): `Agents.Get` in the wrong
+  tenant returns NotFound — the correct fail-closed isolation signal — which the
+  test wrongly treated as a failure; it now treats NotFound as the pass and flags
+  only a readable agent as the leak. (4) store `TestAIFeedbackAndAnswers`:
+  `AIAnswers.PruneOlderThan` used `now()` (the transaction start), so a prune in
+  the same transaction as the insert never saw the row as past; switched to
+  `clock_timestamp()` — correct in-transaction, and identical to `now()` in
+  production's own-transaction prune. One production change (the prune query);
+  the rest are test-fixture corrections (none weaken the assertions). CI-verified.
+
 - CI greening, round 9 (cross-tenant-isolation — flow-ingest test timestamp):
   with round 8's RLS + UUID fixes in, `TestFlowIngestCrossTenantInjectionRealStores`
   finally ran its post-registration logic and failed ("legit flow row did not

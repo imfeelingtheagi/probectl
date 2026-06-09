@@ -181,7 +181,14 @@ func TestAgentRegistersOverMTLS(t *testing.T) {
 	}
 	scCancel()
 
-	rs, err := client.StreamResults(rpcCtx)
+	// The results stream envelope carries replay-freshness metadata
+	// (x-probectl-sent-at / x-probectl-nonce); the real agent attaches it before
+	// opening the stream, and the server refuses an envelope without it (WIRE-006).
+	freshCtx, ferr := agenttransport.FreshnessMetadata(rpcCtx)
+	if ferr != nil {
+		t.Fatalf("freshness metadata: %v", ferr)
+	}
+	rs, err := client.StreamResults(freshCtx)
 	if err != nil {
 		t.Fatalf("stream results: %v", err)
 	}

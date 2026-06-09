@@ -46,8 +46,13 @@ func (AIAnswers) Save(ctx context.Context, s tenancy.Scope, in AIAnswerInput) er
 // window (U-093), returning how many were removed. Called opportunistically on
 // save — answer volume is low, so retention needs no scheduler.
 func (AIAnswers) PruneOlderThan(ctx context.Context, s tenancy.Scope, retention time.Duration) (int64, error) {
+	// clock_timestamp() (the actual statement time), not now() (which is the
+	// TRANSACTION start) — so a prune run in the SAME transaction as a freshly
+	// inserted row still sees that row as older than the cutoff (retention=0
+	// means "everything up to now"). In production prune runs in its own tx, so
+	// the two are equivalent there; this only matters in-transaction.
 	tag, err := s.Q.Exec(ctx,
-		`DELETE FROM ai_answers WHERE tenant_id = $1 AND created_at < now() - make_interval(secs => $2)`,
+		`DELETE FROM ai_answers WHERE tenant_id = $1 AND created_at < clock_timestamp() - make_interval(secs => $2)`,
 		s.Tenant.String(), retention.Seconds())
 	if err != nil {
 		return 0, mapWriteErr("ai_answers", err)

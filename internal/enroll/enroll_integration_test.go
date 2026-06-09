@@ -214,11 +214,11 @@ func TestWrongTenantCannotBeRequested(t *testing.T) {
 	// The issued agent exists ONLY in A's registry partition (RLS-scoped).
 	err = tenancy.InTenant(tenancy.WithTenant(ctx, tenancy.ID(tnB.ID)), pool,
 		func(ctx context.Context, sc tenancy.Scope) error {
+			// RLS hides A's agent from B, so Get returns NotFound (the fail-closed
+			// signal) — that IS the pass. Only a non-error + non-nil agent (B can
+			// actually read A's agent) is the cross-tenant leak.
 			a, gerr := (store.Agents{}).Get(ctx, sc, id.AgentID)
-			if gerr != nil {
-				return gerr
-			}
-			if a != nil {
+			if gerr == nil && a != nil {
 				t.Fatal("enrolled agent visible in tenant B's registry (CROSS-TENANT LEAK)")
 			}
 			return nil

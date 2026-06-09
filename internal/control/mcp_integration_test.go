@@ -67,6 +67,18 @@ func TestMCPServerToolsTenantScopedAndTokenAuth(t *testing.T) {
 		t.Fatalf("create tenant: %v", err)
 	}
 	tenant := tnA.ID
+	// The MCP caller is an external-AI client, so every tool call is egress-gated
+	// on the tenant's ai_remote_egress consent (AIRCA-001/005, default-deny). This
+	// test exercises tool RBAC + tenant scoping, not the egress gate, so grant the
+	// consent for this tenant — via the provider scope, the path production uses.
+	if err := tenancy.InProvider(ctx, db.Pool(), func(ctx context.Context, q tenancy.Querier) error {
+		_, e := q.Exec(ctx,
+			`INSERT INTO tenant_governance (tenant_id, ai_remote_egress) VALUES ($1, true)
+			 ON CONFLICT (tenant_id) DO UPDATE SET ai_remote_egress = true`, tenant)
+		return e
+	}); err != nil {
+		t.Fatalf("grant ai_remote_egress consent: %v", err)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
 
 	inc, err := c.Ingest(ctx, incident.Signal{
