@@ -49,8 +49,12 @@ RUN test -r /sys/kernel/btf/vmlinux || { echo "build host kernel has no BTF (/sy
 RUN --mount=type=cache,target=/root/.cache/go-build \
     set -eux; \
     bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/bpf/vmlinux.h; \
-    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf -go-package ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf -I./bpf/headers); \
-    (cd internal/ebpf && go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target "${TARGETARCH}" -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf -I./bpf/headers); \
+    # Single source of truth for the bpf2go compile. sslsniff builds for the
+    # image's target arch (${TARGETARCH}); gen_bpf.sh auto-detects whether this
+    # build host's vmlinux.h already has struct user_pt_regs and sets the
+    # arch_compat opt-out accordingly (here it's an amd64 host, so the arm64
+    # image is a cross-build and the shim is needed → opt-out NOT set).
+    (cd internal/ebpf && bash gen_bpf.sh all "${TARGETARCH}"); \
     (cd internal/ebpf && go run ./gendigests .); \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
     go build -trimpath -tags ebpf \

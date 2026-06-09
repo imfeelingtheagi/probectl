@@ -5,17 +5,19 @@
 package ebpf
 
 // sslsniff uses uprobes (BPF_UPROBE → PT_REGS_PARM*). BPF_UPROBE is a libbpf
-// ≥1.2 macro, so the libbpf BPF headers are vendored under bpf/headers (the
-// -I below) — the compile no longer depends on the build host's libbpf-dev
-// version (bookworm's 1.1 lacked BPF_UPROBE; see bpf/headers/VENDOR.md).
+// ≥1.2 macro, so the libbpf BPF headers are vendored under bpf/headers and the
+// compile no longer depends on the build host's libbpf-dev (bookworm's 1.1
+// lacked BPF_UPROBE; see bpf/headers/VENDOR.md).
 //
-// `go generate` builds for the HOST arch ($GOARCH → amd64/arm64); for local
-// dev that's the only arch you need. The arm64 register file (struct
-// user_pt_regs), absent from an x86-dumped vmlinux.h, is supplied by
-// bpf/arch_compat.h — so the release image's amd64-host arm64 cross-build
-// (Dockerfile.ebpf, -target $TARGETARCH) resolves too. l4flow is arch-neutral
-// (-target bpfel) and needs no per-arch build.
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target $GOARCH -tags ebpf -go-package ebpf sslsniff ./bpf/sslsniff.bpf.c -- -I./bpf -I./bpf/headers
+// Every bpf2go invocation (here, the Makefile, ci.yml, Dockerfile.ebpf) goes
+// through gen_bpf.sh — one source of truth for the -I flags, the per-arch
+// target, and the arch_compat opt-out. The arm64 register file (struct
+// user_pt_regs) is absent from an x86-dumped vmlinux.h (supplied then by
+// bpf/arch_compat.h) but PRESENT in an arm64-dumped one; gen_bpf.sh inspects
+// vmlinux.h and sets -DPROBECTL_VMLINUX_HAS_USER_PT_REGS when the real struct
+// is there, so native-arm64 builds and the x86→arm64 cross-build both compile.
+// l4flow is arch-neutral (-target bpfel) and needs no per-arch build.
+//go:generate bash gen_bpf.sh sslsniff
 
 import (
 	"context"

@@ -10,11 +10,15 @@
  * the arm64 UAPI register file (uapi/asm/ptrace.h) -- stable kernel ABI,
  * so defining it here is safe.
  *
- * Building the objects on an arm64 host instead? Its vmlinux.h already
- * defines the struct: pass -DPROBECTL_VMLINUX_HAS_USER_PT_REGS to skip
- * this shim (the x86 leg would then need the mirrored treatment for x86's
- * struct pt_regs -- the supported object-build hosts are x86_64, which is
- * what CI and the release pipeline use).
+ * Building the objects on an arm64 host (e.g. the arm64 kernel-matrix runner,
+ * or an arm64 dev laptop)? Its vmlinux.h ALREADY defines struct user_pt_regs,
+ * so this shim would redefine it and clang fails. The build must then pass
+ * -DPROBECTL_VMLINUX_HAS_USER_PT_REGS to skip the shim. gen_bpf.sh does this
+ * automatically: it greps the freshly-dumped vmlinux.h and sets the flag iff
+ * the real struct is present -- so native-arm64, native-amd64, and the
+ * amd64-host -> arm64 cross-build (release.yml) all compile from one rule. The
+ * mirror case (an arm64 host cross-building an x86 object) would need an x86
+ * struct pt_regs shim and is not done by any pipeline.
  */
 #ifndef PROBECTL_BPF_ARCH_COMPAT_H
 #define PROBECTL_BPF_ARCH_COMPAT_H

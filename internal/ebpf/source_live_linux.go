@@ -4,7 +4,7 @@
 
 package ebpf
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -target bpfel -tags ebpf l4flow ./bpf/l4flow.bpf.c -- -I./bpf -I./bpf/headers
+//go:generate bash gen_bpf.sh l4flow
 
 import (
 	"bytes"

@@ -9,6 +9,27 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 5 (eBPF — arm64-native `user_pt_regs` redefinition): with
+  round 4 in, the amd64 `ebpf-image-live` build went green and the compile
+  finally reached the *next* latent bug, on the arm64-native `ebpf-kernel-matrix`
+  runner: `arch_compat.h` unconditionally defines `struct user_pt_regs` for any
+  arm64 target to cover x86 build hosts (whose `vmlinux.h` lacks it) — but an
+  **arm64** build host's `vmlinux.h` already has the real struct, so the two
+  collide (`redefinition of 'struct user_pt_regs'`). It was masked until now
+  because every build died earlier on `BPF_UPROBE`. Fixed by **auto-detecting**:
+  a new `internal/ebpf/gen_bpf.sh` greps the freshly-dumped `vmlinux.h` and sets
+  `-DPROBECTL_VMLINUX_HAS_USER_PT_REGS` (arch_compat's existing opt-out) only
+  when the real struct is present — correct for native-arm64, native-amd64, and
+  the amd64-host→arm64 cross-build with one rule. The same script is now the
+  **single source of truth** for every `bpf2go` call (Makefile, both
+  `//go:generate`s, `ci.yml`, `Dockerfile.ebpf`), collapsing the five
+  near-identical copies that made each of these eBPF fixes sprawl across files.
+  Guarded by `gen_bpf_test.go`. Verified locally for all four host/target
+  combinations (native arm64 + flag, native amd64, x86→arm64 cross, and the
+  negative control reproducing the redefinition). A structural follow-up —
+  building each arch on a native runner so `arch_compat.h` can be deleted
+  outright — is noted in `known-risks.md`.
+
 - CI greening, round 4 (eBPF — the *actual* `ebpf-image-live` blocker): round 3
   correctly fixed the cross-arch `pt_regs` error on the **kernel-matrix**
   runners, but `ebpf-image-live` (the shipped-agent image build) stayed red for a
