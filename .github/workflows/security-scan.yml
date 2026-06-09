@@ -67,7 +67,7 @@ jobs:
           path: npm-audit-*.json
 
   trivy-fs:
-    name: trivy fs (lockfiles + secrets)
+    name: trivy fs (lockfiles)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -76,6 +76,7 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          scanners: vuln # secrets are the gitleaks secret-scan job's responsibility (it owns the allowlist)
           format: json
           output: trivy-fs.json
           exit-code: "0" # the gate is the second pass; this one is evidence
@@ -90,5 +91,6 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          scanners: vuln # secrets are the gitleaks secret-scan job's responsibility (it owns the allowlist)
           severity: CRITICAL
           exit-code: "1"

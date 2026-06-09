@@ -11,7 +11,7 @@ release branch).
 |---|---|---|
 | `coverage-receipt` | `coverage` | `coverage.out` (atomic profile over the gated packages) + `coverage-summary.txt` (per-function tail + total) |
 | `test-go-log` | `test-go` | full `make test` output (`-race`, all workspace modules) |
-| `dependency-scan-receipts` | `dependency-scan` | `govulncheck-report.txt` + `trivy-fs-report.txt` (CRITICAL/HIGH, vuln+secret scanners) |
+| `dependency-scan-receipts` | `dependency-scan` | `govulncheck-report.txt` + `trivy-fs-report.txt` (CRITICAL/HIGH, vuln scanner; secrets are the gitleaks secret-scan job) |
 | `rca-eval-report` | `rca-eval` | RCA quality scores (answer accuracy / citation precision), tracked since U-049 |
 
 PRs additionally get a best-effort coverage summary comment.

@@ -9,6 +9,23 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 12 (dependency-scan — trivy secret-scanner false positive):
+  the red was not a vulnerability. `dependency-scan` runs `govulncheck` (passed),
+  then trivy `fs` with `scanners: vuln,secret`; the **secret** half matched
+  `sk_live_abc123def456` — an *intentional* redaction-test fixture in
+  `internal/ai/egressgate_test.go` that exists to prove the AI egress redactor
+  masks API keys (AIRCA-002), and which the dedicated `secret-scan` gate (gitleaks)
+  already allowlists in `.gitleaks.toml`. Trivy is a second secret scanner with no
+  view of that allowlist, so it re-flagged the fixture gitleaks was taught to ignore
+  — and would re-flag every future redaction fixture. Per operator decision (a
+  scalpel, not full trivy removal): trivy is now **vuln-only** (`scanners: vuln`)
+  everywhere it runs — `dependency-scan` + `image-scan` (ci.yml), the weekly
+  `trivy-fs` (security-scan.yml), and `scripts/verify_all.sh` — leaving **gitleaks
+  as the single curated secret gate**. No secret coverage is lost (gitleaks is
+  unchanged); trivy keeps its vulnerability scanning, including the only
+  container-image CVE scan (`image-scan`). CI-verified: no `vuln,secret` trivy
+  references remain, both workflows parse, and gitleaks still allowlists the fixture.
+
 - CI greening, round 11 (drop verify-branch-protection): the last remaining red
   was not a bug — `verify-branch-protection` checks that the committed ruleset is
   *enforced* on the default branch, which needs a one-time admin action the CI

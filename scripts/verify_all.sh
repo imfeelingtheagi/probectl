@@ -48,7 +48,9 @@ note "govulncheck (BLOCKING)"
 ( set -o pipefail; go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... 2>&1 | tee "$RECEIPTS/govulncheck.txt" )
 
 require trivy "install from https://aquasecurity.github.io/trivy (CI uses trivy-action v0.36.0 with the same flags)"
-run_step trivy-fs trivy fs --scanners vuln,secret --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 .
+# vuln-only: secret scanning is gitleaks' job (the CI secret-scan gate, which owns
+# the .gitleaks.toml allowlist for deliberate redaction-test fixtures).
+run_step trivy-fs trivy fs --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 .
 
 require clang "the eBPF object compile needs clang+llvm (apt install clang llvm bpftool)"
 require bpftool "needed to generate vmlinux.h from the build host's BTF"

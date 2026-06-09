@@ -716,12 +716,16 @@ jobs:
         run: |
           set -o pipefail
           go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... 2>&1 | tee govulncheck-report.txt
-      - name: Trivy filesystem scan (vulns + secrets)
+      - name: Trivy filesystem scan (vuln)
+        # Secret scanning is the dedicated secret-scan job (gitleaks), which owns
+        # the .gitleaks.toml allowlist for deliberate redaction-test fixtures.
+        # Trivy can't see that allowlist, so it stays vuln-only here — otherwise it
+        # re-flags intentional fixtures (e.g. egressgate_test.go's sk_live_ key).
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
-          scanners: vuln,secret
+          scanners: vuln
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
@@ -783,12 +787,14 @@ jobs:
             COMPONENT=probectl-control
           load: true
           tags: probectl/probectl-control:scan
-      - name: Trivy image scan (vulns + secrets)
+      - name: Trivy image scan (vuln)
+        # Vuln-only: secret scanning is gitleaks' job (the secret-scan job, with
+        # the .gitleaks.toml allowlist); see the dependency-scan step above.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: probectl/probectl-control:scan
-          scanners: vuln,secret
+          scanners: vuln
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
