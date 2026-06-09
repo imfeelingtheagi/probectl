@@ -9,6 +9,26 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 6 (eBPF kernel-matrix KVM + coverage gate): round 5 greened
+  the arm64 compile, and the run surfaced the last two reds.
+  (1) `ebpf-kernel-matrix (6.6-arm64)` reached its QEMU boot step and failed with
+  `qemu-system-aarch64: failed to initialize kvm` — GitHub's `ubuntu-24.04-arm`
+  runner has no `/dev/kvm` (the job comment wrongly assumed KVM is always
+  available). The boot step now probes `/dev/kvm` and, when it is missing, sets
+  `VIMTO_DISABLE_KVM=true` so vimto/QEMU falls back to software emulation (TCG) —
+  slower, but the arm64 live load+attach test runs rather than erroring; the
+  amd64 entries keep KVM. Non-required check; logic validated locally.
+  (2) Coverage gate: `internal/bus` (69.4% vs 70 floor) and `internal/otel/otlp`
+  (53.7% vs 65) were below floor. Fixed by **adding tests, not lowering floors**:
+  a new `internal/otel/otlp/signals_test.go` covers the previously-untested OTLP
+  traces+logs path (`signals.go` — tenant scoping, the gRPC `Export` handlers,
+  the bus sinks, and every HTTP-handler branch), and a new
+  `internal/bus/security_test.go` covers the broker-free policy helpers
+  (`SecurityFromEnv`, `MaxBufferedFromEnv`, `saslMechanism`, `tlsConfig`,
+  `kgoOpts`). (Coverage is CI-verified — the go1.26.4-pinned toolchain isn't
+  available in the dev sandbox; tests were cross-checked against the package's
+  existing patterns.)
+
 - CI greening, round 5 (eBPF — arm64-native `user_pt_regs` redefinition): with
   round 4 in, the amd64 `ebpf-image-live` build went green and the compile
   finally reached the *next* latent bug, on the arm64-native `ebpf-kernel-matrix`
