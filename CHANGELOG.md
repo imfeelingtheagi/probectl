@@ -9,6 +9,24 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 15 (store integration coverage 48.6% → 79.2%): with the suite
+  passing (round 14), the integration job advanced to the store-coverage floor step,
+  which had been masked for many rounds behind the failing store tests — and it was
+  red, 48.6% vs the 60% floor (U-057). The floor was met when set (68d7cfb); store
+  then grew (OTLP three-signal storage, retention, pipeline) without matching
+  store-PACKAGE integration tests, so coverage eroded while the failing tests hid it.
+  Per the standing rule (raise coverage, never lower the floor), added
+  `store_coverage_integration_test.go` exercising the untested store paths: the
+  DB/pool lifecycle (Open/Ping/Pool/ReadPool/WithReadReplica/Close), the full user
+  lifecycle, RBAC roles/bindings/permissions, sessions, agent enrollment
+  (tokens/identities/CA + the mapWriteErr conflict path), ABAC policies, alert ops,
+  provider operator get/list + break-glass, the org/team/project getters, tenant
+  listing, and agent heartbeat-batch — all against the real schema with RLS. New
+  fixtures are unique-per-run (UnixNano slugs, unique serials/hashes) and tenant- or
+  globally-scoped to stay deterministic under `./...`. Verified locally against a
+  real TLS Postgres: **79.2%** (was 48.6%), clearing the floor with margin; gofmt/vet
+  clean. Tests only; no production code, floor unchanged.
+
 - CI greening, round 14 (integration suite — proactive shared-DB hardening): rather
   than chase one nondeterministic `make test-integration` failure at a time, swept all
   39 `//go:build integration` test files for fixtures that collide in the single,
