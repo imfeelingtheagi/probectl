@@ -220,17 +220,30 @@ func (s *Service) Enroll(ctx context.Context, req Request) (*Identity, error) {
 	}
 	agentID := pinned
 	if agentID == "" {
-		r, err := crypto.Random(6)
+		agentID, err = newAgentID()
 		if err != nil {
 			return nil, err
 		}
-		agentID = "agent-" + hex.EncodeToString(r)
 	} else if revoked, rerr := store.NewAgentIdentities(s.pool).IsAgentRevoked(ctx, tenantID, agentID); rerr != nil {
 		return nil, rerr
 	} else if revoked {
 		return nil, ErrRevoked // a revoked identity cannot be re-enrolled (WIRE-003)
 	}
 	return s.issue(ctx, tenantID, agentID, hostname, req.Version, req.CSRPEM, "" /* first issuance */)
+}
+
+// newAgentID mints a random v4 UUID for an agent. The agents registry keys on
+// a uuid column (migrations/0006), so the id must be a UUID — not the old
+// "agent-<hex>" form. No external uuid dependency: 16 crypto-random bytes with
+// the version (4) and variant (10x) bits set, formatted canonically.
+func newAgentID() (string, error) {
+	b, err := crypto.Random(16)
+	if err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 // RotateRequest re-issues an identity over proof of the CURRENT one: the

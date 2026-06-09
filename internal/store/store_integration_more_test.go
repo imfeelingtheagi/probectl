@@ -32,32 +32,34 @@ func TestAgentsRegistry(t *testing.T) {
 		t.Fatalf("create tenant: %v", err)
 	}
 
+	// agents.id is a uuid column; mint a unique v4 UUID per run (global PK).
+	agentID := fmt.Sprintf("a8000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 	inTenant(ctx, t, pool, tn.ID, func(ctx context.Context, s tenancy.Scope) error {
-		spiffe := "spiffe://probectl/tenant/" + tn.ID + "/agent/agent-1"
-		a, err := (Agents{}).Register(ctx, s, "agent-1", "edge-1", "host-1", "1.0.0", spiffe, []string{"icmp", "tcp"})
+		spiffe := "spiffe://probectl/tenant/" + tn.ID + "/agent/" + agentID
+		a, err := (Agents{}).Register(ctx, s, agentID, "edge-1", "host-1", "1.0.0", spiffe, []string{"icmp", "tcp"})
 		if err != nil {
 			t.Fatalf("register: %v", err)
 		}
-		if a.ID != "agent-1" {
+		if a.ID != agentID {
 			t.Fatalf("registered id = %q", a.ID)
 		}
 		// Re-register = idempotent upsert (new version sticks).
-		if _, err := (Agents{}).Register(ctx, s, "agent-1", "edge-1", "host-1", "1.1.0", spiffe, []string{"icmp"}); err != nil {
+		if _, err := (Agents{}).Register(ctx, s, agentID, "edge-1", "host-1", "1.1.0", spiffe, []string{"icmp"}); err != nil {
 			t.Fatalf("re-register: %v", err)
 		}
-		if hb, err := (Agents{}).Heartbeat(ctx, s, "agent-1"); err != nil || hb == nil {
+		if hb, err := (Agents{}).Heartbeat(ctx, s, agentID); err != nil || hb == nil {
 			t.Fatalf("heartbeat: %v", err)
 		}
-		if got, err := (Agents{}).Get(ctx, s, "agent-1"); err != nil || got.AgentVersion != "1.1.0" {
+		if got, err := (Agents{}).Get(ctx, s, agentID); err != nil || got.AgentVersion != "1.1.0" {
 			t.Fatalf("get after upsert: %v / %+v", err, got)
 		}
-		if ren, err := (Agents{}).Rename(ctx, s, "agent-1", "edge-renamed"); err != nil || ren.Name != "edge-renamed" {
+		if ren, err := (Agents{}).Rename(ctx, s, agentID, "edge-renamed"); err != nil || ren.Name != "edge-renamed" {
 			t.Fatalf("rename: %v / %+v", err, ren)
 		}
 		if list, err := (Agents{}).List(ctx, s); err != nil || len(list) != 1 {
 			t.Fatalf("list: %v / %d", err, len(list))
 		}
-		if err := (Agents{}).Delete(ctx, s, "agent-1"); err != nil {
+		if err := (Agents{}).Delete(ctx, s, agentID); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
 		if list, err := (Agents{}).List(ctx, s); err != nil || len(list) != 0 {

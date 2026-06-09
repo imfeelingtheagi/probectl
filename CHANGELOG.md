@@ -9,6 +9,30 @@ link work to findings.
 
 ## Unreleased — second-audit remediation (post-triage plan)
 
+- CI greening, round 8 (cross-tenant-isolation — FORCE RLS on the auth/provider
+  tables): the boot-time isolation posture (TENANT-104) FATALs unless every
+  tenant_id table FORCES row security; `sessions`, `scim_tokens`, and
+  `break_glass_grants` predated that rule and had no RLS, because all three are
+  read OUTSIDE a tenant context (sessions/SCIM authenticate by token hash before
+  the tenant is known; break-glass is provider-plane cross-tenant). New migration
+  `0044_auth_provider_rls.sql` applies the exact pattern migration 0040 already
+  used for `mcp_tokens` ("the same shape as sessions"): ENABLE + FORCE RLS with a
+  `tenant_isolation` policy that is fail-closed when `probectl.tenant_id` is set
+  and unrestricted when it is unset — so the pre-tenant/provider raw-pool paths
+  keep working for ANY login role (superuser/CI or hardened non-super), while
+  every in-tenant query gets storage-layer isolation. No new roles, no app
+  changes; passes the expand/contract gate (`DROP POLICY` recreated in place).
+  Also UUID-ifies agent IDs: `agents.id` is a `uuid` column, but enrollment and
+  several integration tests registered string IDs (`agent-1`/`agent-<hex>`) →
+  `22P02`. Since the expand/contract gate forbids `ALTER COLUMN ... TYPE` (a
+  column-type swap on a PK), the fix mints real UUIDs instead of widening the
+  column: `enroll.go` now generates a v4 UUID (no new dependency — `crypto.Random`
+  + version/variant bits), and the affected test fixtures register unique UUIDs
+  (the global PK means each test needs its own). This keeps the column's free
+  format-validation. The remaining cross-tenant-isolation/integration reds (the
+  freshness + AI-consent integration tests, the ai_answers prune) are tracked
+  separately; none are from the eBPF/coverage rounds.
+
 - CI greening, round 7 (eBPF kernel-matrix — TCG too slow, skip instead): round
   6's `VIMTO_DISABLE_KVM=true` got the arm64 boot past the missing-KVM error, but
   on run #209 the TCG-emulated arm64 kernel boot stalled past the 11m `go test`

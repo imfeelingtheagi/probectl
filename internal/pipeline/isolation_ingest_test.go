@@ -64,10 +64,13 @@ func pgPool(ctx context.Context, t *testing.T) *pgxpool.Pool {
 
 // twoTenantsOneAgent creates tenants A and B and registers agent-1 under A ONLY
 // (B never knows agent-1). Returns (tenantA, tenantB) ids.
-func twoTenantsOneAgent(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (string, string) {
+func twoTenantsOneAgent(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (string, string, string) {
 	t.Helper()
 	tenants := store.NewTenants(pool)
 	suffix := time.Now().UnixNano()
+	// agents.id is a uuid column; mint a unique v4 UUID per call so repeated CI
+	// runs against the shared DB never collide on the global primary key.
+	agentID := fmt.Sprintf("a9000000-0000-4000-8000-%012x", suffix&0xffffffffffff)
 	a, err := tenants.Create(ctx, fmt.Sprintf("iso-ing-a-%d", suffix), "Iso Ingest A")
 	if err != nil {
 		t.Fatalf("create tenant A: %v", err)
@@ -78,12 +81,12 @@ func twoTenantsOneAgent(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (
 	}
 	if err := tenancy.InTenant(tenancy.WithTenant(ctx, tenancy.ID(a.ID)), pool,
 		func(ctx context.Context, s tenancy.Scope) error {
-			_, e := (store.Agents{}).Register(ctx, s, "agent-1", "Agent One", "host-a", "v1", "spiffe://probectl/iso/a/agent-1", nil)
+			_, e := (store.Agents{}).Register(ctx, s, agentID, "Agent One", "host-a", "v1", "spiffe://probectl/iso/a/"+agentID, nil)
 			return e
 		}); err != nil {
-		t.Fatalf("register agent-1 under A: %v", err)
+		t.Fatalf("register agent under A: %v", err)
 	}
-	return a.ID, b.ID
+	return a.ID, b.ID, agentID
 }
 
 type captureWriter struct {
@@ -114,15 +117,15 @@ func TestRegistryBindingLookupIsTenantScoped(t *testing.T) {
 	ctx := context.Background()
 	pool := pgPool(ctx, t)
 	defer pool.Close()
-	a, b := twoTenantsOneAgent(ctx, t, pool)
+	a, b, ag := twoTenantsOneAgent(ctx, t, pool)
 
 	binding := NewRegistryBinding(pool)
-	if err := binding.Verify(ctx, a, "agent-1"); err != nil {
+	if err := binding.Verify(ctx, a, ag); err != nil {
 		t.Fatalf("agent-1 IS registered under A — must verify: %v", err)
 	}
 	// The injection: claim tenant B for A's agent. The RLS-scoped lookup in B
 	// returns nothing → fail closed, even though agent-1 exists globally.
-	if err := binding.Verify(ctx, b, "agent-1"); err == nil {
+	if err := binding.Verify(ctx, b, ag); err == nil {
 		t.Fatal("CROSS-TENANT: agent-1 verified under tenant B (RLS lookup leaked)")
 	}
 }
@@ -146,7 +149,7 @@ func TestFlowIngestCrossTenantInjectionRealStores(t *testing.T) {
 	}
 	pool := pgPool(ctx, t)
 	defer pool.Close()
-	a, b := twoTenantsOneAgent(ctx, t, pool)
+	a, b, ag := twoTenantsOneAgent(ctx, t, pool)
 
 	ch, err := flowstore.NewClickHouse(os.Getenv("PROBECTL_FLOWSTORE_URL"), 0)
 	if err != nil {
@@ -164,7 +167,7 @@ func TestFlowIngestCrossTenantInjectionRealStores(t *testing.T) {
 	}
 
 	// RED TEAM: A's agent claims tenant B. Must be rejected; nothing under B.
-	if err := c.handleLane(ctx, flowBatchMsg(b, "agent-1"), ""); err != nil {
+	if err := c.handleLane(ctx, flowBatchMsg(b, ag), ""); err != nil {
 		t.Fatalf("handler must drop, not error: %v", err)
 	}
 	if c.RejectedBatches() != 1 {
@@ -175,7 +178,7 @@ func TestFlowIngestCrossTenantInjectionRealStores(t *testing.T) {
 	}
 
 	// Legit pair lands under A.
-	if err := c.handleLane(ctx, flowBatchMsg(a, "agent-1"), ""); err != nil {
+	if err := c.handleLane(ctx, flowBatchMsg(a, ag), ""); err != nil {
 		t.Fatalf("legit batch: %v", err)
 	}
 	if n := top(a); n == 0 {
@@ -183,7 +186,7 @@ func TestFlowIngestCrossTenantInjectionRealStores(t *testing.T) {
 	}
 
 	// Namespaced lane bound to A, payload claims B → re-stamped to A; B stays empty.
-	if err := c.handleLane(ctx, flowBatchMsg(b, "agent-1"), a); err != nil {
+	if err := c.handleLane(ctx, flowBatchMsg(b, ag), a); err != nil {
 		t.Fatalf("lane batch: %v", err)
 	}
 	if n := top(b); n != 0 {
@@ -202,7 +205,7 @@ func TestDeviceIngestCrossTenantInjection(t *testing.T) {
 	ctx := context.Background()
 	pool := pgPool(ctx, t)
 	defer pool.Close()
-	a, b := twoTenantsOneAgent(ctx, t, pool)
+	a, b, ag := twoTenantsOneAgent(ctx, t, pool)
 
 	w := &captureWriter{}
 	c := NewDeviceConsumer(nil, w, testLogger()).WithTenantBinding(NewRegistryBinding(pool))
@@ -216,14 +219,14 @@ func TestDeviceIngestCrossTenantInjection(t *testing.T) {
 	}
 
 	// Injection: dropped before any write.
-	if err := c.handleLane(ctx, mk(b, "agent-1"), ""); err != nil {
+	if err := c.handleLane(ctx, mk(b, ag), ""); err != nil {
 		t.Fatalf("device handler must drop, not error: %v", err)
 	}
 	if c.RejectedBatches() != 1 || w.count() != 0 {
 		t.Fatalf("device injection not contained: rejected=%d written=%d", c.RejectedBatches(), w.count())
 	}
 	// Legit pair is written.
-	if err := c.handleLane(ctx, mk(a, "agent-1"), ""); err != nil {
+	if err := c.handleLane(ctx, mk(a, ag), ""); err != nil {
 		t.Fatalf("device legit: %v", err)
 	}
 	if w.count() == 0 {
@@ -235,7 +238,7 @@ func TestResultIngestCrossTenantInjection(t *testing.T) {
 	ctx := context.Background()
 	pool := pgPool(ctx, t)
 	defer pool.Close()
-	a, b := twoTenantsOneAgent(ctx, t, pool)
+	a, b, ag := twoTenantsOneAgent(ctx, t, pool)
 
 	w := &captureWriter{}
 	c := NewConsumer(nil, w, "iso-results", testLogger()).WithTenantBinding(NewRegistryBinding(pool))
@@ -245,14 +248,14 @@ func TestResultIngestCrossTenantInjection(t *testing.T) {
 	}
 
 	// Agent-published lane (verify=true), payload claims B → rejected, no write.
-	if err := c.handleLane(ctx, mk(b, "agent-1"), topicGroup{topic: bus.EndpointResultsTopic, verify: true}); err != nil {
+	if err := c.handleLane(ctx, mk(b, ag), topicGroup{topic: bus.EndpointResultsTopic, verify: true}); err != nil {
 		t.Fatalf("result handler must drop, not error: %v", err)
 	}
 	if c.rejectedTenant.Load() != 1 || w.count() != 0 {
 		t.Fatalf("result injection not contained: rejected=%d written=%d", c.rejectedTenant.Load(), w.count())
 	}
 	// Legit pair on the same lane writes its series.
-	if err := c.handleLane(ctx, mk(a, "agent-1"), topicGroup{topic: bus.EndpointResultsTopic, verify: true}); err != nil {
+	if err := c.handleLane(ctx, mk(a, ag), topicGroup{topic: bus.EndpointResultsTopic, verify: true}); err != nil {
 		t.Fatalf("result legit: %v", err)
 	}
 	if w.count() == 0 {
@@ -261,7 +264,7 @@ func TestResultIngestCrossTenantInjection(t *testing.T) {
 	// Namespaced lane bound to A, payload claims B, A's agent → re-stamped to A
 	// and written (agent must still be registered in the lane tenant).
 	before := w.count()
-	if err := c.handleLane(ctx, mk(b, "agent-1"), topicGroup{topic: "probectl." + a + ".endpoint.results", verify: true, laneTenant: a}); err != nil {
+	if err := c.handleLane(ctx, mk(b, ag), topicGroup{topic: "probectl." + a + ".endpoint.results", verify: true, laneTenant: a}); err != nil {
 		t.Fatalf("result lane: %v", err)
 	}
 	if w.count() == before {

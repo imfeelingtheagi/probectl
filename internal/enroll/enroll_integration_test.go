@@ -134,8 +134,10 @@ func TestRotationKeepsIdentityAndRecordsNewSerial(t *testing.T) {
 	ctx := context.Background()
 	pool, svc, tenantID := setup(ctx, t)
 	_ = pool
+	// agents.id is a uuid column; pin a unique v4 UUID (global PK).
+	agentID := fmt.Sprintf("a7000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 
-	display, _, err := svc.MintToken(ctx, tenantID, "agent-rot", "", "test", time.Hour)
+	display, _, err := svc.MintToken(ctx, tenantID, agentID, "", "test", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +169,7 @@ func TestRotationKeepsIdentityAndRecordsNewSerial(t *testing.T) {
 	foreignCA, _ := crypto.GenerateRootCA("evil root", time.Hour)
 	foreignInter, _ := foreignCA.IssueIntermediate("evil inter", time.Hour)
 	fcsr, fkey, _ := crypto.CreateCSR("evil")
-	fleaf, _, err := foreignInter.SignCSR(fcsr, "spiffe://probectl/tenant/"+tenantID+"/agent/agent-rot", time.Hour)
+	fleaf, _, err := foreignInter.SignCSR(fcsr, "spiffe://probectl/tenant/"+tenantID+"/agent/"+agentID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,8 +245,10 @@ func TestRevokeAgentPersistsAndBlocksReissuance(t *testing.T) {
 	ctx := context.Background()
 	pool, svc, tenantID := setup(ctx, t)
 	_ = pool
+	// agents.id is a uuid column; pin a unique v4 UUID (global PK).
+	agentID := fmt.Sprintf("a6000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 
-	display, _, err := svc.MintToken(ctx, tenantID, "agent-rev", "", "test", time.Hour)
+	display, _, err := svc.MintToken(ctx, tenantID, agentID, "", "test", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +258,7 @@ func TestRevokeAgentPersistsAndBlocksReissuance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	serials, spiffeID, err := svc.Revoke(ctx, tenantID, "agent-rev", "test")
+	serials, spiffeID, err := svc.Revoke(ctx, tenantID, agentID, "test")
 	if err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
@@ -279,7 +283,7 @@ func TestRevokeAgentPersistsAndBlocksReissuance(t *testing.T) {
 		t.Fatalf("rotation of a revoked identity must refuse with ErrRevoked, got %v", err)
 	}
 	// ...and so does re-enrollment with a fresh token PINNED to the same id.
-	display2, _, err := svc.MintToken(ctx, tenantID, "agent-rev", "", "test", time.Hour)
+	display2, _, err := svc.MintToken(ctx, tenantID, agentID, "", "test", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
