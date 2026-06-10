@@ -141,7 +141,7 @@ Intelligence, security, and platform layers built across the planes:
 
 | Layer | What it does |
 |---|---|
-| **AI assistant** | cross-plane RCA grounded in correlated incidents, natural-language semantic query, AI test authoring, and an **MCP server** (read-only tools + a proposal-only remediation tool) — all **tenant- then RBAC-scoped**. **Default engine: a deterministic in-process heuristic — no LLM is involved or contacted unless you explicitly connect one** (local Ollama/vLLM for full air-gap, or a cloud provider as explicit opt-in; [`docs/ai-rca.md`](docs/ai-rca.md)) |
+| **AI assistant** | cross-plane RCA grounded in correlated incidents, natural-language semantic query, AI test authoring, and an **MCP server** (read-only tools + a proposal-only remediation tool) — all **tenant- then RBAC-scoped**. **Default engine: a deterministic in-process heuristic — no LLM is involved or contacted unless you explicitly connect one** (local Ollama/vLLM for full air-gap, or a cloud provider as explicit opt-in; start with [`docs/ai-quickstart.md`](docs/ai-quickstart.md)) |
 | **Topology** | a versioned, change-aware dependency graph with **what-if** impact simulation |
 | **Security / threat** | TLS/cert posture + NDR-lite, **confidence-scored detections** (a signal exported to your SIEM — never an inline IPS) |
 | **Cost / SLO** | FinOps egress-cost attribution, an OpenSLO engine, and segmentation/compliance validation with evidence |
@@ -364,6 +364,7 @@ zero-to-first-data journey in getting started. Going deeper:
 | Editions & licensing model | [`docs/editions.md`](docs/editions.md) |
 | Tenant isolation (pooled/siloed/hybrid) | [`docs/isolation.md`](docs/isolation.md) |
 | Provider / MSP plane | [`docs/provider-plane.md`](docs/provider-plane.md) |
+| Using the AI (ask → local model → MCP, in 10 min) | [`docs/ai-quickstart.md`](docs/ai-quickstart.md) |
 | AI RCA · semantic query · MCP | [`docs/ai-rca.md`](docs/ai-rca.md) · [`docs/ai-query.md`](docs/ai-query.md) · [`docs/mcp.md`](docs/mcp.md) |
 | Guarded remediation (policy) | [`docs/remediation.md`](docs/remediation.md) |
 | FIPS / hardening · multi-region HA · BYOK | [`docs/hardening.md`](docs/hardening.md) · [`docs/multi-region.md`](docs/multi-region.md) · [`docs/byok.md`](docs/byok.md) |
