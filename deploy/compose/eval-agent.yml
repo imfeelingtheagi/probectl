@@ -20,6 +20,13 @@ tls:
   ca_file: /certs/ca.crt
   server_name: "localhost"   # must match a SAN on the server cert
 
+identity:
+  # The control-plane HTTPS URL, used for BOTH first-boot enrollment
+  # (enroll-on-boot, when PROBECTL_AGENT_JOIN_TOKEN is set) and automatic SVID
+  # rotation. The canary shares the control plane's netns, so its loopback
+  # API is reachable here.
+  server: "https://127.0.0.1:8443"
+
 agent:
   capabilities: ["http"]
   heartbeat_interval: 30s
