@@ -262,7 +262,7 @@ plane **over HTTPS** with a bundled Postgres (a self-signed cert is generated on
 first boot), no evaluation weakenings.
 
 ```sh
-cp deploy/compose/.env.example deploy/compose/.env     # set PROBECTL_ENVELOPE_KEY etc.
+cp deploy/compose/.env.example deploy/compose/.env     # set POSTGRES_PASSWORD (required) + PROBECTL_ENVELOPE_KEY
 docker compose -f deploy/compose/probectl.yml up -d
 docker compose -f deploy/compose/probectl.yml cp control:/certs/ca.crt ./ca.crt
 curl --cacert ./ca.crt https://localhost:8443/readyz
@@ -303,7 +303,8 @@ proto/          # protobuf schemas (gRPC + bus) — buf-managed
 analyzer/       # Python BGP analyzer
 migrations/     # sequential, idempotent SQL migrations
 web/            # frontend (React + Vite + TypeScript, themeable design tokens)
-deploy/         # compose (dev stack), helm, terraform, docker, gitops
+deploy/         # compose (eval + production + dev stacks), docker, helm,
+                #   agent hardening profiles, terraform, gitops
 docs/           # configuration, development, architecture, runbooks
 test/           # integration harness (separate Go module)
 ```

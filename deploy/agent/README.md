@@ -2,7 +2,9 @@
 
 This directory holds the deployment artifacts that run the eBPF host agent
 under tight privilege limits — a systemd unit, a seccomp profile, a VM
-installer, and example configs.
+installer, and example configs. (For the catalog of every agent/collector and
+which one to deploy when, see
+[`docs/deploying-agents.md`](../../docs/deploying-agents.md).)
 
 The eBPF agent is **observe-only** (the CI gate refuses enforcing program
 types), but it loads kernel programs — so it runs with the smallest

@@ -26,8 +26,8 @@ docker build -f deploy/docker/Dockerfile --build-arg COMPONENT=probectl-control 
 ```
 
 Images target `linux/amd64` and `linux/arm64` and are tagged `<version>` and
-`latest` (CLAUDE.md §4). Multi-arch builds use Docker Buildx + QEMU (see
-`make images` and the release workflow).
+`latest`. Multi-arch builds use Docker Buildx + QEMU (see `make images` and the
+release workflow).
 
 ## Live eBPF agent image (`Dockerfile.ebpf`)
 
@@ -43,6 +43,9 @@ deployment kernel is relocated at load time by CO-RE.
 docker build -f deploy/docker/Dockerfile.ebpf -t probectl-ebpf-agent:dev .
 ```
 
-The release workflow publishes `probectl-ebpf-agent` from this file (the rest of
-the components from the generic `Dockerfile`); a CI job asserts the shipped
-binary actually records the `ebpf` tag so a fixture image can't ship by mistake.
+The release workflow publishes `probectl-ebpf-agent` from this file, and
+`probectl-control`, `probectl-agent`, `probectl-endpoint`, and `probectl` from
+the generic `Dockerfile` (the flow and device agents build the same way via
+`make images`, but are not yet in the release image matrix). A CI job asserts
+the shipped eBPF binary actually records the `ebpf` build tag so a fixture
+image can't ship by mistake.

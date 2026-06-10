@@ -57,11 +57,15 @@ token** per agent, and **redeem** it on the agent host.
 
 ```sh
 probectl-control agent-ca init
+probectl-control agent-ca export /etc/probectl/agent-ca.crt
 ```
 
-This prints the root private key **once** for offline custody and never stores
+`init` prints the root private key **once** for offline custody and never stores
 it; runtime operation never needs it. Re-running refuses to overwrite the trust
-root.
+root. `export` writes the CA's **public** trust bundle (root + intermediate
+certificates — never a key) to a file; point the control plane's
+`PROBECTL_AGENT_TLS_CA_FILE` at it so the gRPC listener can verify enrolling
+agents.
 
 **2. Mint a join token (one per agent; the *token* names the tenant):**
 
@@ -91,6 +95,14 @@ there is no trust-on-first-use fallback. `enroll` then prints the exact `tls:` /
 `identity:` config snippet to paste into the agent's config so it rotates
 automatically.
 
+For fleets where a separate enroll step is awkward (containers, cloud-init),
+the canary agent also **enrolls itself on first boot**: hand it the token via
+the `PROBECTL_AGENT_JOIN_TOKEN` environment variable or the `enroll.token_file`
+config key, and it redeems the token before starting. This is idempotent — an
+agent that already has an identity skips it — and fail-closed: a consumed or
+invalid token stops the agent with a clear error instead of running
+unauthenticated.
+
 For SVID rotation (every ~24h, automatic), revocation, and the full bootstrap
 threat model, see **[agent enrollment & rotation](agent/enrollment.md)**.
 
@@ -119,8 +131,9 @@ datagram sockets, so no `CAP_NET_RAW` and no root for the common case.
 
 **How it ships data.** It **streams straight to the control plane over
 gRPC/mTLS** — it does **not** use the bus. Point it at the control plane's gRPC
-listener via `control_plane.grpc_addr` (default port **9443**), using the mTLS
-identity from enrollment. Results buffer to a local disk queue while the control
+listener via `control_plane.grpc_addr` (required — there is no built-in default;
+the shipped examples and stacks use port **9443**), using the mTLS identity from
+enrollment. Results buffer to a local disk queue while the control
 plane is unreachable and drain on reconnect, so a network blip never loses data.
 **Infra it needs: just the control plane** (no Kafka, no ClickHouse).
 
@@ -221,8 +234,10 @@ macOS/Windows, run it inside a Linux VM. The shipped image is the live build;
 fixture-replay mode exists only for CI / no-kernel boxes.
 
 **How it ships data.** It **publishes to the bus** on `probectl.ebpf.flows`. The
-shipped artifacts default to **`bus.mode: kafka`**. **Infra it needs: Kafka**
-(and ClickHouse downstream once the consumer lands these flows). The agent
+shipped artifacts default to **`bus.mode: kafka`**. **Infra it needs: Kafka.**
+Control-plane consumers (topology, segmentation, NDR) read these flows live;
+raw flow-by-flow retention in ClickHouse is not wired yet, so there is no
+queryable per-flow history — only what the consumers derive. The agent
 **refuses plaintext Kafka** unless you explicitly opt in for a lab.
 
 **Deploy it (VM / bare metal).**

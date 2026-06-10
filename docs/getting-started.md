@@ -81,7 +81,7 @@ pipeline** — agent → Kafka → consumer → topology — proving the loop en
 It is clearly *sample input*, not traffic on your machine. (If you get a
 connection error, the control plane is still starting — wait a few seconds, or
 watch `docker compose -f deploy/compose/eval.yml logs control` for
-`agent gRPC listening` / `tenant isolation posture verified`.)
+`tenant isolation posture verified` followed by `starting probectl-control`.)
 
 Tear it all down with `docker compose -f deploy/compose/eval.yml down -v`.
 
@@ -110,10 +110,10 @@ docker compose -f deploy/compose/eval.yml --profile tools run --rm \
   -e URL=/v1/results/latest viewer
 ```
 
-> **The synthetic overlay is the most intricate part of the eval and ships
-> authored-but-unrun** — give it one real pass and expect to nudge a detail. If
-> it misbehaves, the **from-source walkthrough below** is the fully
-> ground-truthed canary path and needs none of this overlay.
+> **The synthetic overlay is the most intricate part of the eval stack and the
+> least exercised.** If a step misbehaves, don't fight it — the **from-source
+> walkthrough below** is the fully verified canary path and needs none of this
+> overlay.
 
 You already have data — you can jump to [where to go next](#you-have-data--where-to-go-next).
 The rest of this guide builds the same thing **by hand from source**, which is
@@ -187,6 +187,12 @@ PROBECTL_DATABASE_URL='postgres://probectl:probectl@localhost:5432/probectl?sslm
 # HTTPS with it, and Path 1's agent enrollment reuses it. SANs: localhost,127.0.0.1.
 ./bin/probectl-control gen-cert ./certs
 
+# Export the agent CA's PUBLIC trust bundle (root + intermediate certificates,
+# never a key) into that directory. This is the file the gRPC listener checks
+# agent certificates against.
+PROBECTL_DATABASE_URL='postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable' \
+  ./bin/probectl-control agent-ca export ./certs/agent-ca.crt
+
 # Run the control plane. (Run this in its own terminal; it stays in the foreground.)
 PROBECTL_AUTH_MODE=dev \
 PROBECTL_DEV_AUTH_ACK=i-understand \
@@ -200,14 +206,20 @@ PROBECTL_BUS_BROKERS=localhost:9092 \
 PROBECTL_BUS_ALLOW_PLAINTEXT=true \
 PROBECTL_FLOWSTORE_MODE=clickhouse \
 PROBECTL_FLOWSTORE_URL=http://localhost:8123 \
+PROBECTL_AGENT_GRPC_ADDR=127.0.0.1:9443 \
+PROBECTL_AGENT_TLS_CERT_FILE=./certs/tls.crt \
+PROBECTL_AGENT_TLS_KEY_FILE=./certs/tls.key \
+PROBECTL_AGENT_TLS_CA_FILE=./certs/agent-ca.crt \
   ./bin/probectl-control-devauth
 ```
 
-This control plane serves **HTTPS on loopback** (`https://127.0.0.1:8443`), with
-the **Kafka bus** and **ClickHouse** wired (Path 2 needs them) but **without** the
-agent gRPC listener yet — that listener needs a CA file that does not exist until
-you enroll your first agent, so **Path 1 turns it on with a restart** once the file
-exists. If you are only doing Path 2, you are already done; skip to it.
+This control plane serves **HTTPS on loopback** (`https://127.0.0.1:8443`), the
+agent **gRPC/mTLS listener** on `127.0.0.1:9443` (Path 1 needs it), and has the
+**Kafka bus** and **ClickHouse** wired (Path 2 needs them). The gRPC listener is
+all-or-nothing: all four `PROBECTL_AGENT_*` values must be set, and it reads the
+cert files **at startup** — which is exactly why `gen-cert` and `agent-ca export`
+ran first. One process now serves all three producer paths; if you only want
+Path 2, the agent lines are harmless.
 
 > ### ⚠️ `PROBECTL_AUTH_MODE=dev` is evaluation-only, and it is strict
 >
@@ -254,17 +266,20 @@ data."
 The agent connection is **mutually authenticated**: the control plane verifies the
 agent, *and* the agent verifies the control plane. The agent proves who it is with
 a short-lived certificate — an **SVID** — whose identity names its tenant
-(`spiffe://probectl/tenant/<t>/agent/<a>`). Those certificates are issued by an
-**agent CA** that you created once in the shared setup (`agent-ca init`). The
-control plane's gRPC listener checks every agent's certificate against that CA —
-which is why the shared setup pointed `PROBECTL_AGENT_TLS_CA_FILE` at
-`./certs/agent-ca.crt`. We will produce that file now, by enrolling an agent and
-copying out the trust bundle it receives.
+(`spiffe://probectl/tenant/<t>/agent/<a>`). Those certificates are issued by the
+**agent CA** you created once in the shared setup (`agent-ca init`), and
+`agent-ca export` wrote that CA's **public** trust bundle to
+`./certs/agent-ca.crt` — the file the shared setup pointed
+`PROBECTL_AGENT_TLS_CA_FILE` at, so the gRPC listener checks every agent
+certificate against it. The trust wiring is already done; all that's left is to
+give one agent an identity.
 
 ### 1. Mint a one-time join token
 
-The token, not the agent, names the tenant. Run this against the control plane's
-HTTPS API host (port 8443):
+The token, not the agent, names the tenant — that is why `-tenant` is required.
+This is an operator CLI that works directly against the control plane's
+database (hence `PROBECTL_DATABASE_URL`); pointing `PROBECTL_TLS_CERT_FILE` at
+the serving cert additionally makes it print the server-certificate **pin**:
 
 ```sh
 PROBECTL_DATABASE_URL='postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable' \
@@ -278,11 +293,12 @@ It prints a `pjt_…` token **once** (single-use, expires in ~1h) and — becaus
 pointed it at the server cert — the server certificate **pin** for first contact.
 Copy the token.
 
-### 2. Enroll the agent (this also hands you the agent CA bundle)
+### 2. Enroll the agent
 
 `enroll` generates the agent's private key **locally** (it never leaves the host),
 redeems the token over HTTPS, and writes three files into `--dir`:
-`cert.pem` (the SVID), `key.pem`, and `ca.pem` (**the agent CA trust bundle**).
+`cert.pem` (the SVID), `key.pem`, and `ca.pem` (the agent CA trust bundle — the
+same public bundle `agent-ca export` wrote, delivered to the agent side).
 
 ```sh
 ./bin/probectl-agent enroll \
@@ -294,45 +310,18 @@ redeems the token over HTTPS, and writes three files into `--dir`:
 
 The `--ca-file ./certs/ca.crt` tells the agent how to trust the control plane's
 self-signed certificate on first contact; alternatively pass `--ca-pin
-<hex-sha256>` using the pin the mint step printed.
+<hex-sha256>` using the pin the mint step printed. No control-plane restart is
+needed — the gRPC listener has been up since the shared setup, already trusting
+the agent CA.
 
-Now copy that trust bundle to where the control plane will read it as the gRPC
-client-verification CA, then **restart the control plane with the four
-`PROBECTL_AGENT_*` lines added** so the gRPC listener comes up:
-
-```sh
-cp ./identity/ca.pem ./certs/agent-ca.crt
-
-# Stop the control plane from the shared setup (Ctrl-C), then start it again with
-# the same environment PLUS the agent-transport lines below:
-PROBECTL_AUTH_MODE=dev \
-PROBECTL_DEV_AUTH_ACK=i-understand \
-PROBECTL_HTTP_ADDR=127.0.0.1:8443 \
-PROBECTL_TLS_CERT_FILE=./certs/tls.crt \
-PROBECTL_TLS_KEY_FILE=./certs/tls.key \
-PROBECTL_DATABASE_URL='postgres://probectl:probectl@localhost:5432/probectl?sslmode=disable' \
-PROBECTL_REQUIRE_AT_REST_ENCRYPTION=false \
-PROBECTL_BUS_MODE=kafka PROBECTL_BUS_BROKERS=localhost:9092 PROBECTL_BUS_ALLOW_PLAINTEXT=true \
-PROBECTL_FLOWSTORE_MODE=clickhouse PROBECTL_FLOWSTORE_URL=http://localhost:8123 \
-PROBECTL_AGENT_GRPC_ADDR=127.0.0.1:9443 \
-PROBECTL_AGENT_TLS_CERT_FILE=./certs/tls.crt \
-PROBECTL_AGENT_TLS_KEY_FILE=./certs/tls.key \
-PROBECTL_AGENT_TLS_CA_FILE=./certs/agent-ca.crt \
-  ./bin/probectl-control-devauth
-```
-
-The gRPC listener needs **all four** `PROBECTL_AGENT_*` values, and it reads the
-files at startup — so the `agent-ca.crt` you just copied must exist before this
-restart, which is exactly why enrollment came first.
-
-> **Why the copy?** Two independent trust checks happen on the gRPC handshake. The
-> agent verifies the *control plane's* server cert against its `tls.ca_file`
-> (here, the quickstart `ca.crt`). The control plane verifies the *agent's* client
-> cert against `PROBECTL_AGENT_TLS_CA_FILE` (the agent CA — the `ca.pem` you just
-> got). They are different CAs doing different jobs. In a real deployment you would
-> mint a proper gRPC server certificate and distribute the agent CA bundle through
-> your config management; on a laptop, reusing the quickstart server cert and
-> copying `ca.pem` across is the shortest honest path.
+> **Two CAs, two jobs.** Two independent trust checks happen on the gRPC
+> handshake. The agent verifies the *control plane's* server cert against its
+> `tls.ca_file` (here, the quickstart `ca.crt`). The control plane verifies the
+> *agent's* client cert against `PROBECTL_AGENT_TLS_CA_FILE` (the agent CA
+> bundle from `agent-ca export`). They are different CAs doing different jobs.
+> In a real deployment you would mint a proper gRPC server certificate and
+> distribute the agent CA bundle through your config management; on a laptop,
+> reusing the quickstart server cert is the shortest honest path.
 
 ### 3. Write a minimal agent config
 
@@ -507,12 +496,11 @@ Each path on its own is one plane. probectl's reason to exist is **cross-plane
 correlation**: when something breaks, you want **one incident** that pulls evidence
 from every plane at once, rather than five dashboards you have to mentally join.
 
-Once you have done Path 1, the control plane runs the gRPC listener **and** the
-Kafka bus — so you do not change it; just run **both producers at once**:
+The shared-setup control plane already runs the gRPC listener **and** the Kafka
+bus — nothing to reconfigure; just run **both producers at once**:
 
 ```sh
-# terminal 1 — the control plane, already restarted with the four PROBECTL_AGENT_*
-#              lines from Path 1 (so the gRPC listener is up) and the Kafka bus.
+# terminal 1 — the control plane from the shared setup (gRPC listener + Kafka bus on)
 # terminal 2 — the canary
 ./bin/probectl-agent -config agent.yml
 # terminal 3 — the eBPF agent (sample flows, any OS)

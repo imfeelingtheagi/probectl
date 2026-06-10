@@ -8,10 +8,10 @@ path, good for a single host or evaluation) and a Kubernetes Helm chart
 (production / multi-tenant).
 
 The rule that shapes both: probectl is **HTTPS-by-default**. Every shipped deploy
-serves the API over TLS, sends HSTS, and exposes **no plaintext listener at all**
-(CLAUDE.md §7 guardrail 12). This is deliberate — a network-observability control
-plane handles tenant data, so there is no "just turn off TLS for a sec" mode to
-trip over. The practical consequence: every example below talks to `https://`,
+serves the API over TLS, sends HSTS, and exposes **no plaintext listener at all**.
+This is deliberate — a network-observability control plane handles tenant data,
+so there is no "just turn off TLS for a sec" mode to trip over (see
+[`hardening.md`](hardening.md) for the full transport posture). The practical consequence: every example below talks to `https://`,
 and a plaintext request simply will not connect.
 
 For configuration keys, see [`configuration.md`](configuration.md). For day-2

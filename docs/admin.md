@@ -20,8 +20,10 @@ installation see [install.md](install.md); for every config key see
 probectl enforces a **two-level boundary** on every API path: the request first
 resolves to exactly one tenant, then RBAC decides whether the caller may perform
 that route's action. Authentication is **OIDC SSO**
-(`PROBECTL_AUTH_MODE=session`); the `dev` mode is for evaluation only and grants
-all access — never run it in production.
+(`PROBECTL_AUTH_MODE=session`). The `dev` mode grants every request all access
+with no authentication and is for local evaluation only — release binaries do
+not even contain it (setting it makes the control plane refuse to start; see
+[getting-started.md](getting-started.md) for the fenced evaluation path).
 
 Seeded system roles (one set per tenant):
 
