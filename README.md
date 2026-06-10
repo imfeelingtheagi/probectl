@@ -4,11 +4,10 @@
 | '_ \| '__/ _ \| '_ \ / _ \/ __| __| |
 | |_) | | | (_) | |_) |  __/ (__| |_| |
 | .__/|_|  \___/|_.__/ \___|\___|\__|_|
-|_|
+|_|        see everything · send nothing
 ```
 
-<p align="center"><strong>see everything · send nothing</strong><br>
-Self-hosted, multi-tenant network observability — five planes, one OpenTelemetry-native control plane,<br>
+<p align="center">Self-hosted, multi-tenant network observability — five planes, one OpenTelemetry-native control plane,<br>
 and an AI assistant that explains root cause <em>across</em> them. Telemetry never leaves your network.</p>
 
 <p align="center">
