@@ -1,8 +1,8 @@
 # Security Policy
 
-probectl is a network *security and observability* product that many operators
-run in regulated or air-gapped environments, so we hold its own posture to a high
-bar. This page tells you how to report a vulnerability privately, what we treat
+probectl is a self-hosted network observability platform — with a native
+security-signal layer — that many operators run in regulated or air-gapped
+environments, so we hold its own posture to a high bar. This page tells you how to report a vulnerability privately, what we treat
 as most serious, and what's in and out of scope. Thank you for helping keep
 probectl and its users safe.
 
@@ -38,9 +38,9 @@ We treat these as critical and ask for extra care in handling:
 
 - **Cross-tenant data leakage** — any path where one tenant can read, write, or
   infer another tenant's data is the highest-severity class in this codebase
-  (CLAUDE.md §7 guardrail 1). The control plane enforces tenant isolation at the
-  storage + query layer (Postgres RLS) with a CI isolation gate; a bypass is
-  critical.
+  (the first of the project's [non-negotiables](CONTRIBUTING.md)). The control
+  plane enforces tenant isolation at the storage + query layer (Postgres RLS)
+  with a CI isolation gate; a bypass is critical.
 - **Authentication / RBAC bypass**, **audit-log tampering** that evades the
   tamper-evident chain, **secret disclosure**, and **agent-transport (mTLS)
   compromise**.

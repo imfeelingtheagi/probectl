@@ -16,7 +16,7 @@ deliberately distinct:
 
 | Sev | Definition | Examples | Acknowledge | Mitigation target |
 |---|---|---|---|---|
-| **SEV-1** | Cross-tenant data exposure (guardrail §7.1 — the declared highest-severity failure); RCE in agent/control plane; compromised release artifact or signing path | tenant A reads B; malicious artifact signed | 4h | fix or kill-switch ≤ 24h; advisory ≤ 72h |
+| **SEV-1** | Cross-tenant data exposure (the declared highest-severity failure — tenant isolation is the outermost boundary); RCE in agent/control plane; compromised release artifact or signing path | tenant A reads B; malicious artifact signed | 4h | fix or kill-switch ≤ 24h; advisory ≤ 72h |
 | **SEV-2** | Auth/RBAC bypass within a tenant; audit-chain integrity break; secret exposure; AI egress gate bypass | consent gate skipped; WORM verify fails | 24h | ≤ 7 days |
 | **SEV-3** | Vulnerability with significant mitigating factors; DoS of a plane; dependency CVE in a reachable path | fairness bypass; exploitable parser crash | 72h | next patch release |
 | **SEV-4** | Hardening gap, defense-in-depth finding, non-reachable dep CVE | scanner findings | 7 days | scheduled |

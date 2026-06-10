@@ -1,7 +1,8 @@
 # Tenant isolation at the storage layer
 
-Tenant isolation is probectl's outermost security boundary (CLAUDE.md §7,
-guardrail 1): one tenant must never read another tenant's data, full stop.
+Tenant isolation is probectl's outermost security boundary — the first of the
+project's [non-negotiables](../../CONTRIBUTING.md): one tenant must never read
+another tenant's data, full stop.
 
 Most apps enforce that kind of rule in handler code — a `WHERE tenant_id = ?`
 on every query. That works right up until the day someone forgets the `WHERE`,

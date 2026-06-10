@@ -15,6 +15,17 @@ the programs relocate themselves against whatever kernel they land on, so there
 is no per-kernel build to trust.) The agent enforces nothing, captures payloads
 nowhere by default, never fetches code, and runs with two Linux capabilities.
 
+Five "nevers", each proven somewhere below:
+
+- **Never enforces** — physically cannot block, drop, or redirect traffic (§3).
+- **Never captures payloads by default** — bodies are zeroed even under
+  consented L7 capture (§4).
+- **Never fetches or executes code** — no self-update channel exists (§8).
+- **Never speaks in the clear** — plaintext transport is refused, not merely
+  discouraged (§7).
+- **Never emits as another tenant** — identity is bound to exactly one tenant
+  (§7).
+
 ## 2. Privilege posture — exact, declared, enforced
 
 A capability is a fine-grained slice of root's power. The agent takes the two it
@@ -44,8 +55,8 @@ that up:
   every pass — so the shipped bytecode is exactly what was reviewed, proven
   loadable, and proven incapable of enforcement.
 
-This is a hard product guardrail (CLAUDE.md §7.8–7.9): detection is a signal,
-never an inline IPS.
+This is a hard product guardrail: detection is a signal, never an inline IPS,
+and nothing probectl ships takes autonomous action on a network.
 
 **Object integrity.** A SHA-256 manifest of the compiled eBPF objects is baked
 into the binary at build time. Before the kernel ever sees a program, the loader
@@ -59,7 +70,7 @@ missing entry (`internal/ebpf/integrity.go`). A tampered object never loads.
 | L3/L4 flow metadata | **Yes** | 5-tuple, byte/packet counts, direction, state, PID/process name; tenant-stamped at emission |
 | Service edges | **Yes** | aggregated process↔service relationships (the service map) |
 | Packet payloads | **No** | no program captures packet bodies |
-| TLS-plaintext L7 metadata | **Off by default — double-keyed consent** | requires BOTH `l7_capture_enabled` AND `l7_capture_consent_tenant` naming this agent's exact tenant; the config refuses one without the other (`internal/ebpf/config.go`) |
+| TLS-plaintext L7 metadata | **Off by default — triple-keyed consent** | requires `l7_capture_enabled`, PLUS `l7_capture_consent_tenant` exactly matching this agent's bound tenant (a mismatch is refused, `internal/ebpf/l7policy.go`), PLUS an explicit `l7_capture_scope` naming the opted-in workloads (`pid:`/`exe:`/`cgroup:`) — host-wide capture is not even expressible; the config refuses any one key without the others (`internal/ebpf/config.go`) |
 | HTTP bodies under L7 capture | **No by default** | the redaction boundary zeroes bodies in place; headers and protocol metadata survive; non-HTTP traffic keeps only a 128-byte detection window (`internal/ebpf/l7policy.go`, CI-tested); a `full` mode exists for consented debugging only |
 | Host files, env, user data | **No** | no collection paths exist |
 
@@ -117,6 +128,35 @@ clear. Two transports are involved:
 Every emitted record carries the agent's single bound tenant, so an agent
 physically cannot emit data as another tenant.
 
+**How the mTLS agent gets that identity (first-boot bootstrap).** Enrollment is
+deliberately boring and fail-closed (`internal/enroll`,
+`internal/agent/identity.go`):
+
+1. The operator generates the agent CA hierarchy once
+   (`probectl-control agent-ca init`) and distributes only the **public** trust
+   bundle to hosts (`probectl-control agent-ca export`) — never a key.
+2. The operator mints a **single-use, tenant-scoped join token**
+   (`probectl-control enroll-token`; short-lived, stored server-side only as a
+   hash). The token names the tenant — an agent can never choose its own.
+3. The agent boots with `PROBECTL_AGENT_JOIN_TOKEN` (or `enroll.token_file`,
+   e.g. a mounted Secret), generates its keypair locally, and submits a CSR —
+   **the private key never leaves the host**. The server dictates every
+   certificate field (SAN/EKU/TTL; CSR-requested extensions are ignored) and
+   issues a short-lived (24 h) SPIFFE identity; renewal happens by rotation
+   against proof of the *current* identity and can never change who the agent is.
+
+The flow is **idempotent** — an existing identity is never re-enrolled or
+overwritten — and **fail-closed**: an expired, replayed, or unknown token is a
+fatal startup error (all invalid tokens are deliberately indistinguishable to
+the caller), and with no token and no identity the agent simply cannot
+authenticate — there is no unauthenticated fallback at any point.
+
+**When the control plane is unreachable**, the canary agent spools results into
+a disk-backed, bounded, FIFO store-and-forward buffer
+(`internal/agent/buffer.go`). At capacity the newest result is rejected with a
+counted error rather than growing without bound — and nothing is ever sent in
+the clear to compensate.
+
 ## 8. Updates and signing — deliberately boring
 
 **There is no self-update channel.** The agent never fetches or executes code —
@@ -142,7 +182,7 @@ Both paths are air-gap friendly: neither downloads anything at install time.
 
 ## 10. Review pointers
 
-The eBPF programs live in `internal/ebpf/` (the C is in `bpf/`, around 200 lines),
+The eBPF programs live in `internal/ebpf/` (the C is in `bpf/`, about 270 lines),
 the CI gates named throughout this doc are in `.github/workflows/ci.yml`, and the
 drills and benchmarks are listed under `make help`. Report vulnerabilities via
 [SECURITY.md](../../SECURITY.md).

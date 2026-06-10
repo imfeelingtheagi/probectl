@@ -12,8 +12,9 @@ The same machinery closes the loop with **trustctl** (the sibling
 certificate/identity product): agents present trustctl-issued machine identities
 for mTLS and pick up in-place certificate renewals without restarting.
 
-This addresses CLAUDE.md §7 guardrails 3 (crypto only through `internal/crypto`),
-6 (no hardcoded or logged secrets), and 12 (TLS on every channel).
+This serves three of the project's security
+[non-negotiables](../CONTRIBUTING.md): crypto only through `internal/crypto`,
+no hardcoded or logged secrets, and TLS on every channel.
 
 ## Three guarantees
 
@@ -52,7 +53,7 @@ unchanged — so existing plaintext configurations keep working while you migrat
 How probectl *reaches* each backend is configured through the **environment
 only** — never probectl config files, so the access credentials themselves never
 sit in a file probectl reads. Every backend call rides TLS with certificate
-verification (guardrail 12). No cloud SDKs are linked in: it is stdlib HTTP plus
+verification — never disabled. No cloud SDKs are linked in: it is stdlib HTTP plus
 SigV4 / OAuth2 / JWT signing through `internal/crypto`.
 
 | Backend | Variables |

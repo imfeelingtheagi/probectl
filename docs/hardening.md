@@ -5,11 +5,11 @@ posture: the FIPS 140-3 build, a STIG/CIS-style hardening checklist, and a
 secure-defaults review. It is written for operators of sovereign single-tenant
 and MSP/provider deployments alike.
 
-probectl is sovereign by design — it never phones home (guardrail 2), all
-crypto routes through one validated-swappable module (guardrail 3), and every
-listener is TLS with authenticated, untrusted-by-default ingestion (guardrail
-12). The defaults are already hardened; this guide makes the posture explicit
-and auditable.
+probectl is sovereign by design — it never phones home, all crypto routes
+through one validated-swappable module, and every listener is TLS with
+authenticated, untrusted-by-default ingestion (the project's security
+[non-negotiables](../CONTRIBUTING.md)). The defaults are already hardened; this
+guide makes the posture explicit and auditable.
 
 ---
 
@@ -175,7 +175,7 @@ the POST proves the probectl integration end-to-end.
 |---|---|
 | `make build-fips` (`GOFIPS140=v1.0.0`) | bakes `fips140=on` as the default — the artifact runs validated out of the box |
 | `GODEBUG=fips140=on` at runtime | enables the module for a normally-built binary |
-| `GODEBUG=fips140=only` | **enforced** mode — non-approved algorithms panic instead of being permitted |
+| `GODEBUG=fips140=only` | **enforced** mode — non-approved algorithms error or panic instead of being permitted. Upstream documents `only` as a best-effort testing/assessment mode, not a production requirement — use it to *prove* your deployment touches only approved algorithms, then run `fips140=on` |
 
 `/v1/editions` reports the live posture under `fips`: `build_tag`,
 `module_active`, `enforced`, `module_version`, `self_test_passed`. The Admin →
@@ -219,14 +219,15 @@ your accreditation scope (both are HMAC- or identifier-only uses).
 
 ## 2. STIG / CIS hardening checklist
 
-A condensed, auditable checklist mapped to the §7 guardrails. probectl ships
-these as defaults except where noted "operator action".
+A condensed, auditable checklist mapped to the project's security
+[non-negotiables](../CONTRIBUTING.md). probectl ships these as defaults except
+where noted "operator action".
 
-### Transport & network (guardrail 12)
+### Transport & network
 
 - [x] Every listener serves **TLS 1.2+** (1.3 preferred); AEAD-only suites.
-- [x] Agent ↔ control-plane is **mTLS** with SPIFFE-style tenant-bound identity
-      (guardrail 4); no plaintext agent transport.
+- [x] Agent ↔ control-plane is **mTLS** with SPIFFE-style tenant-bound
+      identity; no plaintext agent transport.
 - [x] REST API, web UI, OTLP, MCP are **HTTPS**; shipped compose + Helm are
       **HTTPS-by-default** (TLS-terminating ingress, HSTS).
 - [x] UI sets a **CSP** and **Secure + HttpOnly + SameSite** session cookies.
@@ -237,18 +238,25 @@ these as defaults except where noted "operator action".
 - [ ] **Operator action:** terminate TLS at a hardened ingress; restrict the
       management/provider plane to an admin network (NetworkPolicy / firewall).
 
-### Identity, access & tenancy (guardrails 1, 5)
+### Identity, access & tenancy
 
 - [x] **Tenant isolation** enforced at the storage + query layer (RLS /
       partitions / physical silo), not application code alone; AI/MCP enforce
       tenant **then** RBAC.
-- [x] Provider/MSP operators get **no implicit read** of tenant telemetry; access
-      is time-bounded, consented, separately-audited break-glass (guardrail 7).
+- [x] Provider/MSP operators get **no implicit read** of tenant telemetry;
+      access is time-bounded, consented, separately-audited break-glass.
 - [x] Passwords: PBKDF2-HMAC-SHA-256, 600k iterations. TOTP MFA available.
+- [x] Dev auth is **physically absent from release builds**: a release binary
+      refuses `PROBECTL_AUTH_MODE=dev` at boot with a fatal error — never a
+      warning. Even the local-evaluation build (`make build-devauth`,
+      `-tags devauth`) additionally requires
+      `PROBECTL_DEV_AUTH_ACK=i-understand` AND a loopback-only bind. The
+      `no-devauth-in-release` CI job proves both the symbol absence and the
+      boot refusal on every pass.
 - [ ] **Operator action:** wire per-tenant SSO/SCIM; require MFA for admin and
       all provider operators; set least-privilege RBAC roles.
 
-### Crypto & secrets (guardrails 3, 6)
+### Crypto & secrets
 
 - [x] All primitives via `internal/crypto`; FIPS-swappable (this guide).
 - [x] Sensitive config uses envelope encryption at rest; the control plane stores
@@ -262,7 +270,7 @@ these as defaults except where noted "operator action".
       regulated tenants; encrypt the bulk telemetry volumes (§0c —
       `preflight --strict`).
 
-### Audit and data lifecycle (guardrail 7)
+### Audit and data lifecycle
 
 - [x] Config changes and data-access actions write to an immutable,
       tamper-evident audit chain; provider/break-glass actions go to a **separate**
@@ -273,14 +281,15 @@ these as defaults except where noted "operator action".
 - [ ] **Operator action:** ship audit streams to your SIEM; set the backup-TTL
       statement (`PROBECTL_BACKUP_RETENTION_NOTE`) and retention policy.
 
-### Sovereignty (guardrails 2, 9, 10, 11)
+### Sovereignty
 
 - [x] **No phone-home** — no outbound telemetry/analytics on by default.
 - [x] Threat detection is a **signal**, not an inline IPS; never auto-blocks.
 - [x] Open-data/threat-intel is read-only, cached, ingested once, **degrades
       gracefully**; a down feed never breaks core function.
 - [x] The web UI is usable **without third-party calls** (no CDN fonts/beacons).
-- [x] Remediation is **observe-only / human-gated** by default (guardrail 8).
+- [x] Remediation is **observe-only / human-gated** by default — never
+      autonomous.
 - [ ] **Operator action:** for air-gapped installs, use the air-gapped bundle;
       point AI at a local model (Ollama / vLLM); disable external feeds if policy
       requires.
@@ -308,6 +317,7 @@ posture. A green default means no action needed.
 |---|---|---|---|
 | API / UI transport | HTTPS, TLS 1.2+, HSTS, CSP, secure cookies | Same; TLS 1.3-only at the ingress if clients allow | default ✓ |
 | Agent transport | mTLS, tenant-bound SPIFFE identity | Same | default ✓ |
+| Dev auth | absent from release binaries; `PROBECTL_AUTH_MODE=dev` is a boot refusal (§2) | Same (never deploy a `-tags devauth` build) | default ✓ |
 | Crypto module | stdlib (transparent-swappable) | FIPS build (`make build-fips`), `fips140=on` | operator |
 | Tenant isolation | pooled (RLS, storage-layer) | siloed/hybrid (see [isolation.md](isolation.md)) for regulated tenants | operator |
 | Password KDF | PBKDF2-HMAC-SHA-256 ×600k | Same | default ✓ |
@@ -372,4 +382,4 @@ Other day-2 surfaces, all chart-managed:
 - Tenant isolation models: [isolation.md](isolation.md)
 - Storage-layer isolation threat model: [security/tenant-isolation.md](security/tenant-isolation.md)
 - Lifecycle / verifiable deletion: [runbooks/tenant-offboarding.md](runbooks/tenant-offboarding.md)
-- Security guardrails: `CLAUDE.md` §7
+- Security non-negotiables: [../CONTRIBUTING.md](../CONTRIBUTING.md)
