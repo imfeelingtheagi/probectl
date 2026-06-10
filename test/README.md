@@ -4,8 +4,10 @@ Integration / end-to-end test harness.
 
 These are **black-box** tests: they exercise the running services over their
 public interfaces (REST, gRPC, the bus) against the real dev stack defined in
-[`deploy/compose/dev.yml`](../deploy/compose/README.md) — Postgres, Kafka,
-ClickHouse, and Prometheus — rather than importing `internal/` packages.
+[`deploy/compose/dev.yml`](../deploy/compose/dev.yml) — Postgres, Kafka,
+ClickHouse, and Prometheus (services and ports:
+[`deploy/compose/README.md`](../deploy/compose/README.md)) — rather than
+importing `internal/` packages.
 
 ```
 test/
@@ -33,5 +35,8 @@ compose dependencies, runs the real binaries, and asserts the public API and the
 **cross-tenant boundary** (no bleed in either direction); it is skipped unless
 `PROBECTL_E2E=1` is set.
 
-The unit-level **cross-tenant isolation** gate is separate — see
-`make test-isolation` and `internal/tenancy/` (CLAUDE.md §7 guardrail 1).
+The unit-level **cross-tenant isolation** gate is separate — `make
+test-isolation` runs the `isolation`-tagged suite across the main module, with
+`internal/tenancy/` as the enforcement choke point. Both exist for the same
+non-negotiable: see
+[CONTRIBUTING.md → Non-negotiables](../CONTRIBUTING.md#non-negotiables).

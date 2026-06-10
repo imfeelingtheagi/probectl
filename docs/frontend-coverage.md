@@ -24,7 +24,7 @@ different thing for each:
 
 | Kind | Meaning | What the gate verifies |
 | --- | --- | --- |
-| `native` | A first-class screen in the app. | The route renders a *real* screen (not the "lands in a later sprint" placeholder), has a `<main>` landmark and an `<h1>`, and passes the WCAG 2.2 AA accessibility bar (via `axe`). |
+| `native` | A first-class screen in the app. | The route renders a *real* screen (not the "coming soon" placeholder), has a `<main>` landmark and an `<h1>`, and passes the WCAG 2.2 AA accessibility bar (via `axe`). |
 | `federated` | Surfaced through an external tool by design — Grafana, Prometheus, OTLP, or the raw API. | The declared evidence actually exists: a `file:<repo path>` is present on disk, and/or an `openapi:<path>` is a real route in the control plane's OpenAPI spec (`internal/control/openapi.json`). Federated surfaces **count** — the gate cares that a capability is reachable, not that it lives inside the app. |
 | `placeholder` | The feature itself isn't built yet; the screen is a stub. | The route still renders the placeholder. When the real screen ships, the entry **must** be flipped to `native` — which keeps the registry honest in both directions. |
 

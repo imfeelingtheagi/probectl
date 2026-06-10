@@ -32,9 +32,11 @@ repo or its history.
 How it's enforced: the `secret-scan` CI job
 ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) runs
 [gitleaks](https://github.com/gitleaks/gitleaks) over the working tree on every
-push and pull request. The only strings it tolerates are the *deliberately fake*
-secrets inside redaction tests, allow-listed by SHA in
-[`.gitleaks.toml`](../../.gitleaks.toml) — nothing real.
+push to `main` and every pull request. The only strings it tolerates are the
+*deliberately fake* secrets inside redaction tests — allow-listed in
+[`.gitleaks.toml`](../../.gitleaks.toml) by the test files' paths, plus one
+named false-positive regex (SNMP protocol constants that trip the generic
+API-key rule). Nothing real, and never a real credential path.
 
 There is no real key material anywhere in the tree, including in tests. For
 example, the mock OIDC identity provider used in tests **generates its signing
@@ -44,6 +46,9 @@ has to hold one.
 
 ## History
 
-The repo has never cut a release from a dirty working tree, and published history
-is not rewritten. If a fresh clone looks bloated from dangling objects, that is
-the cloner's `git gc` to run — not a defect in the repository.
+Published history is not rewritten, and a release can only be cut from a
+commit that passed CI: the release workflow's `require-green-ci` job looks up
+the `ci` run for the exact tagged commit and refuses to build anything if it
+isn't green (see [`../releasing.md`](../releasing.md)). If a fresh clone looks
+bloated from dangling objects, that is the cloner's `git gc` to run — not a
+defect in the repository.

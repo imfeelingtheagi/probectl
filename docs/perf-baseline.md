@@ -86,9 +86,9 @@ make perf-smoke          # ingest baseline (no services) + pooled (uses PROBECTL
 The ingest baseline needs no services. The pooled smoke uses
 `PROBECTL_DATABASE_URL` and **skips** when no database is reachable, so the
 target is safe to run locally without the dev stack. In CI the `perf-smoke` job
-runs both against a Postgres service. The pooled run also exercises the
-cross-tenant isolation property under concurrency, complementing the dedicated
-cross-tenant-isolation gate.
+runs both against a TLS Postgres started for the run (`verify-full`, like
+production). The pooled run also exercises the cross-tenant isolation property
+under concurrency, complementing the dedicated cross-tenant-isolation gate.
 
 ## Scope / placement notes
 

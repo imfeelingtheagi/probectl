@@ -1,25 +1,28 @@
 # migrations/
 
-Sequential, numbered SQL migrations for the control-plane datastores.
+Sequential, numbered SQL migrations for the control-plane datastores. The
+numbered files in this directory — starting at `0001_baseline.sql` — *are* the
+schema; the directory listing is the authoritative sequence.
 
-## Status
-
-44 sequential migrations (`0001_baseline.sql` … `0044_auth_provider_rls.sql`)
-define the control-plane schema. They are embedded into the binary (`embed.go`,
-a `//go:embed *.sql`) and applied in ascending order by the migration runner —
-either `probectl-control migrate` (one-shot) or on boot when
+The files are embedded into the binary (`embed.go`, a `//go:embed *.sql`) and
+applied in ascending order by the migration runner — either
+`probectl-control migrate` (one-shot) or on boot when
 `PROBECTL_MIGRATE_ON_BOOT=true` — idempotently, so re-running is safe.
 
-## Conventions (CLAUDE.md §6)
+## Conventions
 
 - One change per file, named `NNNN_description.sql` (e.g.
   `0002_tenancy_core.sql`), applied in ascending numeric order.
 - **Idempotent**: use `IF NOT EXISTS`, `ON CONFLICT`, etc. so repeated execution
   is safe.
-- **Backward-compatible** for zero-downtime upgrades.
+- **Backward-compatible** for zero-downtime upgrades — the `migration-gate` CI
+  job (`make migration-gate`) rejects destructive or blocking changes (drop
+  column, type change, rename, adding `NOT NULL`), so release N's schema keeps
+  working under release N−1's code during a rolling upgrade.
 - Every new tenant-owned table carries a non-null `tenant_id` plus the
-  appropriate index/partition **from its first migration** — never added later
-  (CLAUDE.md §7 guardrail 1).
+  appropriate index/partition **from its first migration** — never added later.
+  This is the schema half of the tenant-isolation rule (see
+  [CONTRIBUTING.md → Non-negotiables](../CONTRIBUTING.md#non-negotiables)).
 
 ## Rollback policy — forward-only, expand/contract
 
@@ -41,9 +44,10 @@ To stay safely reversible, schema changes follow **expand/contract**
 3. **Contract** — only once no running version reads the old shape, a later
    migration drops it.
 
-Because every migration is backward-compatible (§6) and applied in ascending,
-idempotent order, the **previous binary keeps running against the new schema —
-so a binary rollback needs no schema rollback.**
+Because every migration is backward-compatible (the convention above, enforced
+by `migration-gate`) and applied in ascending, idempotent order, the **previous
+binary keeps running against the new schema — so a binary rollback needs no
+schema rollback.**
 
 ### Manual rollback procedure (operator)
 

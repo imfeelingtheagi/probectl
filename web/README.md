@@ -12,7 +12,7 @@ the AI **Ask** panel, the provider console, and more) are routes on top of it.
 | Concern | Choice | Why |
 | ------- | ------ | --- |
 | Framework | **React 18 + TypeScript + Vite** | Richest ecosystem for data-dense observability UIs (tables, charts, the path/topology hero visuals); strong typing and tooling. |
-| Styling/theming | **CSS custom properties + CSS Modules** | Tokens are read live, so per-tenant **white-label** is a *runtime token override*, not a per-screen rewrite. No utility-class lock-in; no external / "phone-home" fonts (sovereignty — CLAUDE.md §7 #11). |
+| Styling/theming | **CSS custom properties + CSS Modules** | Tokens are read live, so per-tenant **white-label** is a *runtime token override*, not a per-screen rewrite. No utility-class lock-in; no external / "phone-home" fonts (the sovereignty rule — [Non-negotiables](../CONTRIBUTING.md#non-negotiables)). |
 | Server state | **TanStack Query** | Caching/retries/loading-error states for the `/v1` API; UI state stays in React. |
 | Routing | **React Router** | Mature nested routing for the app-shell + outlet model. |
 | Tests | **Vitest + Testing Library + jest-axe** | Component, keyboard/focus, theme-swap, and an automated a11y gate — all runnable in CI without a browser. |
@@ -54,7 +54,8 @@ the AI **Ask** panel, the provider console, and more) are routes on top of it.
   (`test/a11y.test.tsx`).
 - **Surface coverage** — every user-facing capability declares a surface;
   `test/surface-coverage.test.tsx` (`npm run coverage-gate`) fails the build on
-  a capability with no surface (CLAUDE.md §8).
+  a capability with no surface (how and why:
+  [`docs/frontend-coverage.md`](../docs/frontend-coverage.md)).
 - **Sovereignty** — no third-party network calls or external fonts.
 - **Always-visible tenant indicator**; the shell resolves exactly one tenant.
 
@@ -73,11 +74,13 @@ The dev server proxies `/v1` and `/provider` to a locally-running control plane
 (`http://localhost:8080` by default — see `vite.config.ts`); production serves
 the bundle **same-origin behind the TLS ingress** (HTTPS/CSP/HSTS are enforced
 by the ingress, not Vite). HTTPS-by-default and no external origins are the
-sovereignty contract (CLAUDE.md §7 guardrails 11–12).
+sovereignty contract
+([Non-negotiables](../CONTRIBUTING.md#non-negotiables)).
 
 ## Editions boundary in the UI
 
 Commercial UI source lives in `ee/web` and is aliased as `@ee` (the editions
 boundary applies to the frontend too). The bundle always includes it; visibility
 is **runtime-gated** — unlicensed surfaces 404 at the API, so commercial features
-are hidden rather than shipped as lockware (CLAUDE.md §2).
+are hidden rather than shipped as lockware (the editions model:
+[`docs/editions.md`](../docs/editions.md)).

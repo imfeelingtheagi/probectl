@@ -2,7 +2,9 @@
 
 Protobuf schemas for probectl's gRPC services and bus messages. Protobuf is the
 wire format for both the message bus and gRPC; JSON is a development-only
-fallback (CLAUDE.md §4).
+fallback. These schemas are the contract between deployed agents, the bus (whose
+history is replayable), and the control plane — which is why they are treated as
+append-only (see below).
 
 ## Layout
 
@@ -34,4 +36,8 @@ make proto         # buf lint + buf generate (regenerate internal/gen)
 `make proto` runs `buf lint` then `buf generate` with **local** plugins (no
 remote BSR calls — sovereignty/air-gap posture). Schemas are **versioned and
 backward-compatible**: additive changes only, never renumber or reuse a field
-tag (CLAUDE.md §6); `buf breaking` guards this in CI.
+tag. The `proto` CI job enforces this with a blocking `buf breaking` check
+against `main` and then asserts the committed generated code in `internal/gen/`
+is current. If you genuinely need an incompatible change, ship a new versioned
+package instead — the process is in
+[CONTRIBUTING.md](../CONTRIBUTING.md#proto-schemas-are-append-only).

@@ -35,7 +35,7 @@ python -m probectl_analyzer --config config.json --mrt rib.20260101.0000.bz2.mrt
 # replay a recorded RIS Live capture (JSON Lines)
 python -m probectl_analyzer --config config.json --replay ris-capture.jsonl
 
-# stream live from RIS Live (writes JSONL to stdout)
+# stream live from RIS Live, writing JSONL to a file instead of stdout
 python -m probectl_analyzer --config config.json --ris-live --out /var/lib/probectl/bgp-events.jsonl
 ```
 
@@ -68,16 +68,26 @@ any event without one. `rpki_vrp_file` (or `rpki_vrp_url`) points at a
 - `structlog` for structured logging — no `print` in production code.
 - Stream-process MRT dumps; never load full RIB tables into memory.
 - Treat all fetched collector data as **untrusted**; fetch over TLS with
-  certificate validation; a down/rate-limited source degrades gracefully
-  (CLAUDE.md §7 guardrails 10, 12).
-- Detections are **signals** (confidence + severity, tunable), never actions
-  (guardrail 9).
+  certificate validation; a down/rate-limited source degrades gracefully and
+  never breaks core function.
+- Detections are **signals** (confidence + severity, tunable), never actions —
+  probectl is not an IPS.
 - RouteViews/RIS are open data; their AUP/provenance is tracked for MSP/commercial
-  resale (not for private development or single-tenant OSS use).
+  resale (not for private development or single-tenant OSS use) — see
+  [`docs/opendata-aup.md`](../docs/opendata-aup.md).
+
+These are project-wide rules, not analyzer quirks — the full list is
+[CONTRIBUTING.md → Non-negotiables](../CONTRIBUTING.md#non-negotiables).
 
 ## Development
 
 ```sh
-make lint-python          # ruff check + black --check   (from repo root)
-make test-python          # pytest                        (from repo root)
+make lint-python          # ruff check + black --check        (from repo root)
+make test-python          # pytest, with an 85% coverage floor (from repo root)
 ```
+
+The tests run entirely offline against **recorded fixtures** — hand-built MRT
+byte streams (`tests/mrt_fixtures.py`) and in-repo RIS Live message fixtures —
+so no test ever reaches a live collector. CI installs the analyzer from the
+hash-locked `requirements-dev.lock` and fails if that lock drifts from
+`pyproject.toml`.

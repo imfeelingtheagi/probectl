@@ -18,9 +18,16 @@ CI job (in `.github/workflows/ci.yml`) that creates it.
 | `test-go-log` | `test-go` | the full `make test` output — every Go workspace module, run with the race detector (`-race`) |
 | `dependency-scan-receipts` | `dependency-scan` | `govulncheck-report.txt` (Go vulnerability scan) + `trivy-fs-report.txt` (filesystem vuln scan, CRITICAL/HIGH only). Committed secrets are a *different* job — the `secret-scan` gitleaks gate. |
 | `rca-eval-report` | `rca-eval` | the AI root-cause-analysis quality scores — `answer_accuracy` and `mean_citation_precision` (plus the raw eval log) |
+| `sbom-cyclonedx` | `sbom` | a CycloneDX SBOM of the Go module graph (informational — not a merge gate; the *release* SBOM ships signed with the release artifacts) |
+| `verify-all-receipt` | `verify-all` | `verify-all-summary.json` — the gate→result map for the run, i.e. the receipt that every verification gate executed and what each concluded |
 
 On a pull request, the `coverage` job additionally posts a best-effort comment
 with the coverage summary, so you see the numbers without downloading anything.
+
+The scheduled workflows leave receipts too: `nightly.yml` uploads the
+`ingest-bench` results, and `security-scan.yml` uploads every scanner's raw
+output (`govulncheck-*`, `npm-audit-*`, `trivy-fs-*`) per run — that one exists
+precisely so the CVE posture stays *evidenced* between code changes.
 
 ## Fetching a receipt
 

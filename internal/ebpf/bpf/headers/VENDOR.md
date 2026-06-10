@@ -5,9 +5,11 @@ vendored so the eBPF object compile (`bpf2go` → clang) does **not** depend on
 whatever `libbpf-dev` version the build image or CI runner happens to ship.
 
 Why: `sslsniff.bpf.c` uses `BPF_UPROBE`/`BPF_URETPROBE`, which libbpf only added
-in **v1.2.0**. The shipped-agent build image (`golang:1.26-bookworm`) installs
+in **v1.2.0**. The Debian-bookworm-based build image originally pulled in distro
 libbpf **1.1.0**, which lacks those macros — so the compile failed. Vendoring a
-pinned header set removes that whole class of version-skew breakage.
+pinned header set removes that whole class of version-skew breakage; today the
+build image (`deploy/docker/Dockerfile.ebpf`) installs no `libbpf-dev` at all
+and compiles exclusively against these headers.
 
 - Source: https://github.com/libbpf/libbpf
 - Version: **v1.5.0**
@@ -37,3 +39,9 @@ NOT vendored — the Go side uses the `github.com/cilium/ebpf` library):
 Re-run `make install_headers` at the desired libbpf tag and copy the same five
 files here; bump the Version/Commit above. Keep the floor at **>= v1.2.0**
 (first release with BPF_UPROBE/BPF_URETPROBE).
+
+Both invariants are executable, not aspirational: `vendored_headers_test.go`
+(an ordinary unit test — no clang or kernel needed) fails if any of the five
+files goes missing or if `bpf_tracing.h` no longer defines
+`BPF_UPROBE`/`BPF_URETPROBE`, i.e. if the vendored set ever regresses below the
+v1.2.0 floor.
