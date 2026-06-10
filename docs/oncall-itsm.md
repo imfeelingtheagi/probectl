@@ -106,7 +106,7 @@ never logged.
 
 ## Configuration
 
-See [`configuration.md`](configuration.md#on-call--itsm-integration-s33) for the
+See [`configuration.md`](configuration.md#on-call--itsm-integration) for the
 key reference. Example (a tenant paging PagerDuty + ticketing Jira, with inbound
 sync from Jira):
 

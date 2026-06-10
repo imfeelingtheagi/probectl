@@ -14,9 +14,10 @@ All three are **core** (free, every deployment gets them) — better bug reports
 help everyone. The paid part is the support *organization and SLA* (the
 Enterprise entitlement); that's a contract, not code.
 
-**The non-negotiable property (guardrail 6 in `CLAUDE.md`): a support bundle
-never contains secrets, credentials, or PII.** Everything below is built to keep
-that true even if someone slips up.
+**The non-negotiable property: a support bundle never contains secrets,
+credentials, or PII** (it falls under the project's secrets-handling
+[non-negotiables](../CONTRIBUTING.md#non-negotiables)). Everything below is
+built to keep that true even if someone slips up.
 
 ---
 

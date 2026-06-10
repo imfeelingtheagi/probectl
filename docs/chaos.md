@@ -1,4 +1,4 @@
-# Network chaos / fault injection (S48, F47)
+# Network chaos / fault injection
 
 probectl's chaos injector answers one question about probectl itself: **if
 the network actually breaks, does this platform catch it?** It is a
@@ -11,10 +11,12 @@ the SLO alerts surface it.
 traffic explicitly addressed to its listener. Nothing is intercepted, no
 kernel/qdisc/iptables state is touched, no agent or tenant traffic is
 affected, and the injector is **not wired into the control plane** — it
-cannot be reached from any API (in the spirit of guardrail 8: no un-gated
-actions, ever; this one isn't even reachable).
+cannot be reached from any API. Actions against the network are human-gated
+by design in probectl (a project
+[non-negotiable](../CONTRIBUTING.md#non-negotiables)); this one isn't even
+reachable.
 
-## The fault config (the F47 contract)
+## The fault config (the contract)
 
 ```go
 chaos.Fault{
@@ -28,13 +30,13 @@ chaos.Fault{
 Faults validate fail-closed and are swappable mid-run (`SetFault`) — a
 chaos run is: healthy baseline → inject → observe → heal → observe.
 
-## The efficacy self-test (the 'Done when')
+## The efficacy self-test
 
 `go test -tags=integration ./internal/chaos/ -run Chaos`:
 
 1. **`TestChaosRunDetectedBySLO`** — real UDP canary probes flow through
    the proxy against a real echo server while an OpenSLO availability SLO
-   (S45) watches the target. Healthy baseline: nothing fires. **Inject a
+   (see [slo.md](slo.md)) watches the target. Healthy baseline: nothing fires. **Inject a
    partition**: probes fail for real, the multi-window burn alert fires,
    attainment drops. **Heal**: attainment recovers. A failure of this test
    is a failure of the platform's core promise.

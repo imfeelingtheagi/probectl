@@ -54,7 +54,7 @@ verifies each store reads zero afterward:
 | ClickHouse flows | pooled: synchronous lightweight delete (`SETTINGS mutations_sync=2`); siloed: `DROP DATABASE` | post-delete count == 0 |
 | Object store | `DeletePrefix` on `tenant/<id>/` and `silo/<id>/` | post-delete list is empty |
 | Tenant keys (BYOK editions) | **crypto-shred** — every key version's wrapped key is nulled and the chain marked `destroyed`, so any ciphertext (including in still-live backups) is permanently unreadable, and destroyed chains refuse re-keying | versions-destroyed count on the attestation; unlicensed deployments record "no per-tenant keyring installed" |
-| Time-series (TSDB) | memory mode: in-place series delete. **Prometheus mode: a MANUAL STEP** — run the admin `delete_series` API for `{tenant_id="<id>"}` (or let retention expire it); the attestation marks this store incomplete until then | per mode |
+| Time-series (TSDB) | memory mode: in-place series delete. Prometheus mode: the engine calls the admin `delete_series` API itself and verifies. **If that admin API is disabled, this becomes a MANUAL STEP** — run `delete_series` for `{tenant_id="<id>"}` yourself (or let retention expire it); the attestation marks this store incomplete until you do | per mode |
 
 > The engine also erases the other tenant-scoped planes the same way (path,
 > topology, and externally-ingested OTLP traces/logs) — they appear in the

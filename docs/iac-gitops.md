@@ -108,11 +108,13 @@ structurally validates the manifests (every doc has an `apiVersion` + `kind`).
 ## CI gates
 
 - `helm-gate` — lints every profile, asserts the hardening invariants above, and
-  validates the GitOps manifests and the compose config.
+  validates the GitOps manifests and the compose config. (This is the CI job
+  name to require in [branch protection](ops/branch-protection.md); `make
+  gitops-gate` runs inside it.)
 - `terraform-gate` — `terraform fmt -check` + `validate` of the module via the
   example root.
-- `gitops-gate` — the ArgoCD/Flux manifests are well-formed (`apiVersion` +
-  `kind`).
+- `gitops-gate` — a `make` target: the ArgoCD/Flux manifests are well-formed
+  (`apiVersion` + `kind`).
 
 ## Scope
 
@@ -121,5 +123,6 @@ Active-active **multi-region topology and DR** is documented separately
 ([multi-region.md](multi-region.md), [ops/dr.md](ops/dr.md),
 [runbooks/region-failover.md](runbooks/region-failover.md)) and is an Enterprise
 entitlement (the validated failover runbooks and support, not the fence itself).
-The **FIPS build variant** and **STIG/CIS hardening guides** are likewise
-Enterprise-tier.
+The **FIPS build** is likewise the Enterprise-distributed artifact; the
+STIG/CIS-style hardening checklist itself is public — see
+[hardening.md](hardening.md).

@@ -44,8 +44,10 @@ One normalized `Event` for every source:
 
 External events are **shared** (public data). Everything derived from customer
 telemetry — vantage events, `affected_tests` — is **tenant-scoped** and computed
-per caller (guardrail 1). The engine partitions all customer-derived state by
-tenant, and a tenant's `Snapshot` can reach nothing from any other tenant.
+per caller: tenant isolation is the outermost boundary (a project
+[non-negotiable](../CONTRIBUTING.md#non-negotiables)). The engine partitions all
+customer-derived state by tenant, and a tenant's `Snapshot` can reach nothing
+from any other tenant.
 
 ## Detection + correlation semantics
 
@@ -64,7 +66,8 @@ awareness*, not a pager. (All values live in `engine.go`.)
 
 Both are **signals** into the incident pipeline (plane `outage`, severity
 `warning`) — situational awareness, never a pager storm, and never an automated
-action (guardrail 9: detection is a signal, not an IPS).
+action: detection is a signal, not an IPS, so probectl never blocks traffic on
+the back of one.
 
 Scope resolution (peer IP → ASN / country) rides the open-data enricher, gated by
 `PROBECTL_FLOW_ENRICH_ASN`. Without it the external view still renders, and the
@@ -73,10 +76,10 @@ response says plainly that vantage detection and correlation are off.
 ## Feeds, AUP, sovereignty
 
 `PROBECTL_OUTAGE_FEEDS_ENABLED=false` by default: turning it on is what makes the
-outbound fetches (so the no-phone-home default holds — guardrail 2). Fetches use a
-hardened, certificate-validating TLS client; fetched bodies are untrusted input
-with size caps; and a down or rate-limited feed keeps its last-good events
-(guardrails 10, 12). Per-feed AUP / provenance is tracked and served, which matters
+outbound fetches, so the no-phone-home default holds. Fetches use a hardened,
+certificate-validating TLS client; fetched bodies are untrusted input with size
+caps; and a down or rate-limited feed keeps its last-good events rather than
+breaking the view. Per-feed AUP / provenance is tracked and served, which matters
 for MSP resale:
 
 | Feed | License / terms | Commercial use |

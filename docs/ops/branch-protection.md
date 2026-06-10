@@ -85,8 +85,8 @@ reason not to.
 | `no-devauth-in-release` | the eval-only `dev` auth mode cannot ship in a release build |
 | `lint-go` | gofmt + go vet + golangci-lint |
 | `lint-python` | ruff + black (the BGP analyzer) |
-| `editions-gate` | core never imports `ee/`; the core-only build stays green (CLAUDE.md §2) |
-| `fips-gate` | the FIPS artifact builds; the validated module is active (guardrail 3) |
+| `editions-gate` | core never imports `ee/`; the core-only build stays green (see [editions.md](../editions.md)) |
+| `fips-gate` | the FIPS artifact builds; the validated crypto module is active (see [hardening.md](../hardening.md)) |
 | `test-go` | unit tests, fuzz smoke, cross-compile, endpoint cross-OS |
 | `rca-eval` | AI root-cause-analysis quality eval |
 | `coverage` | per-package coverage floor |
@@ -98,7 +98,7 @@ reason not to.
 | `terraform-gate` | `terraform fmt` + `validate` |
 | `ebpf-kernel-matrix` | eBPF programs load across the supported kernel matrix |
 | `ebpf-image-live` | the shipped eBPF-agent image is the live (not fixture-replay) build |
-| `cross-tenant-isolation` | **permanent** RLS isolation gate (guardrail 1) — never remove |
+| `cross-tenant-isolation` | **permanent** RLS tenant-isolation gate — never remove (cross-tenant leakage is the highest-severity failure; see [isolation.md](../isolation.md)) |
 | `integration` | real Kafka/Postgres/ClickHouse stack |
 | `perf-smoke` | ingest-path performance floor |
 | `backup-drill` | backup → restore drill survives (see [backup-restore.md](backup-restore.md)) |

@@ -27,8 +27,9 @@ ClickHouse's `BACKUP TO File` runs *inside* the ClickHouse server, so it can't
 be piped through that filter; it is encrypted by the **backups volume** instead
 (the encrypted-volume operator duty in [hardening.md](../hardening.md) §0c, which
 `probectl-control preflight --strict` checks). Either way, restrict access to
-the backups and keep them inside the operator's network (sovereignty,
-CLAUDE.md §7.2).
+the backups and keep them inside the operator's network — telemetry never
+leaves it (one of the project's
+[non-negotiables](../../CONTRIBUTING.md#non-negotiables)).
 
 ## Taking backups
 
