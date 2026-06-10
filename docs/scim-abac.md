@@ -12,8 +12,9 @@ Two ideas carry the whole feature:
 2. an attribute policy can **narrow** what an RBAC role grants — never widen
    it.
 
-Where this sits relative to login: OIDC SSO (see `docs/auth/self-hosted-idp.md`)
-gets a user *in the door*; SCIM is what assigns and removes their *access*.
+Where this sits relative to login: OIDC SSO (see
+[`auth/self-hosted-idp.md`](auth/self-hosted-idp.md)) gets a user *in the
+door*; SCIM is what assigns and removes their *access*.
 probectl does not read group claims off the login token — group membership
 arrives via SCIM.
 

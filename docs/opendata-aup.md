@@ -24,12 +24,14 @@ Two reasons, and they pull in different directions:
    per-tenant to each flow or test result. The `opendata` package is
    deliberately tenant-agnostic — it returns plain data and the caller stores
    it on a tenant-scoped record, so the tenant boundary is enforced where the
-   data lands, not in the shared lookup (CLAUDE.md §3).
+   data lands, not in the shared lookup (see
+   [`security/tenant-isolation.md`](security/tenant-isolation.md)).
 2. **Licensing for resale.** The AUP terms below are **not a constraint on
    private development or single-tenant open-source use.** They become a gating
    item only for **commercial / MSP resale** — i.e. reselling probectl as a
-   service to many customers (CLAUDE.md §2). If you plan to run provider mode
-   commercially, resolve the reseller redistribution terms first.
+   service to many customers (see [`editions.md`](editions.md)). If you plan to
+   run provider mode commercially, resolve the reseller redistribution terms
+   first.
 
 ## How sources behave (the three guardrails)
 
@@ -38,7 +40,8 @@ Every source obeys the same safety rules, enforced in code:
 - **Fetched over TLS, treated as untrusted.** Outbound lookups use a hardened
   HTTPS client with **certificate validation that is never disabled**, and the
   fetched content is parsed as untrusted input — bounds-checked, malformed rows
-  skipped (CLAUDE.md §7, rules 10 and 12).
+  skipped (two of probectl's
+  [non-negotiables](../CONTRIBUTING.md#non-negotiables)).
 - **Graceful degradation.** A source that is disabled, rate-limited, or failing
   is **logged and skipped** — it never breaks a core path. The `Enricher` runs
   each source under a timeout and even recovers from a panicking plugin
@@ -51,17 +54,20 @@ Every source obeys the same safety rules, enforced in code:
 
 ## Matrix
 
-| Source | Kind | Provides | License / terms | Commercial use | Attribution required |
-| ------ | ---- | -------- | --------------- | -------------- | -------------------- |
-| **Team Cymru** IP-to-ASN | `asn` | ASN, prefix, registry, AS name | Team Cymru community service (free) | allowed-with-attribution | "IP-to-ASN mapping by Team Cymru" |
-| **MaxMind GeoLite2** | `geo` | country, city, lat/lon | GeoLite2 EULA (CC BY-SA 4.0 attribution) | allowed-with-attribution | "This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com" |
-| **PeeringDB** | `ixp` | IXP / facility presence | PeeringDB data (CC BY 4.0) | allowed-with-attribution | "Data from PeeringDB" |
-| **RIR delegated-stats** | `allocation` | RIR, country, allocation status/date | RIR delegated statistics (open data) | allowed | — |
-| **RIPE Atlas** (optional hook) | `measurement` | active ping/traceroute scheduling | RIPE Atlas terms (credit-based) | restricted (credits/terms) | per RIPE Atlas terms |
+| Source | `name` | Kind | Provides | License / terms | Commercial use | Attribution required |
+| ------ | ------ | ---- | -------- | --------------- | -------------- | -------------------- |
+| **Team Cymru** IP-to-ASN | `team-cymru` | `asn` | ASN, prefix, registry, AS name | Team Cymru community service (free) | allowed-with-attribution | "IP-to-ASN mapping by Team Cymru" |
+| **MaxMind GeoLite2** | `maxmind-geolite2` | `geo` | country, city, lat/lon | GeoLite2 EULA (CC BY-SA 4.0 attribution) | allowed-with-attribution | "This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com" |
+| **PeeringDB** | `peeringdb` | `ixp` | IXP / facility presence | PeeringDB data (CC BY 4.0) | allowed-with-attribution | "Data from PeeringDB" |
+| **RIR delegated-stats** | `rir-stats` | `allocation` | RIR, country, allocation status/date | RIR delegated statistics (open data) | allowed | — |
+| **RIPE Atlas** (optional hook) | — | `measurement` | active ping/traceroute scheduling | RIPE Atlas terms (credit-based) | restricted (credits/terms) | per RIPE Atlas terms |
 
-(The license, attribution, and commercial-use cells above are taken verbatim
-from each source's `Descriptor().AUP` in `internal/opendata` — `cymru.go`,
-`maxmind.go`, `peeringdb.go`, `rir.go`.)
+(The `name`, license, attribution, and commercial-use cells above are taken
+verbatim from each source's `Descriptor().AUP` in `internal/opendata` —
+`cymru.go`, `maxmind.go`, `peeringdb.go`, `rir.go`. The `name` is what
+`Enricher.Status()` reports per source at runtime. The RIPE Atlas row is the
+exception: it is a *scheduler hook*, not an enrichment source, so it has no
+descriptor — its terms come from RIPE's credit-based AUP, noted in `atlas.go`.)
 
 Notes:
 
@@ -84,7 +90,7 @@ Notes:
 
 Threat-intel feeds are a **separate** source set (with their own, often
 non-commercial, terms) layered on top of this same framework — see
-`docs/threat-intel.md` for that matrix. Cloud-pricing data for cost analytics
+[`threat-intel.md`](threat-intel.md) for that matrix. Cloud-pricing data for cost analytics
 reuses the same provenance/AUP model as well. The pattern is deliberate: every
 external dataset, whether for enrichment, threat-intel, or pricing, declares its
 provenance the same way.

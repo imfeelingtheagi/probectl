@@ -23,7 +23,8 @@ into the control plane in `internal/control/complianceapi.go`.
 > proven blocked — it might just be quiet. probectl therefore **never emits the
 > word "compliant"**; the strongest claim it will make is *"no violations
 > observed, with the stated coverage."* And probectl **validates, never
-> enforces** — it does not block anything, ever (CLAUDE.md §7, rule 9).
+> enforces** — it does not block anything, ever (one of probectl's
+> [non-negotiables](../CONTRIBUTING.md#non-negotiables)).
 
 This is the whole philosophy. An auditor who is told "compliant" when probectl
 merely *didn't see* any traffic has been misled. So the engine is built to
@@ -130,7 +131,7 @@ the signed document, so they cannot be quietly dropped either.
 
 The hashing goes through the internal crypto provider (`crypto.Default.Hash`),
 never a raw primitive — the same FIPS-swappable abstraction the rest of probectl
-uses (CLAUDE.md §7, rule 3).
+uses (all crypto routes through `internal/crypto`).
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
@@ -146,9 +147,12 @@ flowchart LR
 ```
 
 All validator state is **per tenant** (`tenantState` in `validator.go`), and
-the consumer drops any flow without a `tenant_id` (CLAUDE.md §7, rule 1). The
-`GET /v1/compliance` endpoint also returns a `compliance_running` flag so a
-caller can tell whether the validator is actually wired.
+the consumer drops any flow without a `tenant_id` (tenant isolation is the
+outermost boundary — see
+[`security/tenant-isolation.md`](security/tenant-isolation.md)). The
+`GET /v1/compliance` endpoint (RBAC `threat.read`) also returns a
+`compliance_running` flag so a caller can tell whether the validator is
+actually wired.
 
 ## Configuration
 
@@ -160,7 +164,25 @@ caller can tell whether the validator is actually wired.
 ## Out of scope by design
 
 - **Enforcement / blocking** — this is validation only; probectl never sits
-  inline (CLAUDE.md §7, rule 9).
+  inline.
 - **Config-based *intended* segmentation analysis** — probectl judges *observed*
   traffic. Statically analyzing firewall configs to predict what *would* be
   blocked is a different product.
+- **Certification claims** — probectl generates *evidence* (verdicts, coverage,
+  the hash-chained export). It does not and cannot make you "PCI certified" or
+  "SOC 2 compliant"; only your assessor can. Treat the export as input to an
+  audit, not the audit's conclusion.
+
+## Related compliance rights (separate features)
+
+Two adjacent obligations auditors ask about are **core (deliberately free)**
+features that live elsewhere, not in this validator:
+
+- **Per-tenant data export** — `GET /v1/lifecycle/export` (permission
+  `lifecycle.export`; add `?redact=true` for a PII-masked bundle, see
+  [`governance.md`](governance.md)).
+- **Verifiable deletion / offboarding** — cross-store erasure with a
+  recomputable attestation.
+
+Both are walked end-to-end in
+[`runbooks/tenant-offboarding.md`](runbooks/tenant-offboarding.md).

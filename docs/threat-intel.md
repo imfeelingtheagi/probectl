@@ -22,8 +22,10 @@ results and raises signals).
 ### The one rule that shapes everything: a signal, not an IPS
 
 probectl **never blocks traffic and never sits inline.** A match is a *lead* —
-scored, tunable, and suppressible — not an enforcement action (this is the
-guardrail in CLAUDE.md §7, rule 9). The wanted list tells the guard "keep an
+scored, tunable, and suppressible — not an enforcement action (detection is a
+signal, never an IPS — one of probectl's
+[non-negotiables](../CONTRIBUTING.md#non-negotiables)). The wanted list tells
+the guard "keep an
 eye on that person"; it does not let the guard slam a door. Why hold this line?
 Because an inline blocker that acts on a noisy public feed will eventually drop
 legitimate traffic (a CDN that once hosted malware, a Tor exit that is not
@@ -33,7 +35,8 @@ actually attacking you). probectl is an observability tool: it tells a human
 ## Status: off by default
 
 Enabling threat-intel makes **outbound fetches** to the configured feeds. That
-crosses the "no phone-home" guardrail (CLAUDE.md §7, rule 2), so it is gated
+crosses probectl's default of zero outbound calls (the no-phone-home
+[non-negotiable](../CONTRIBUTING.md#non-negotiables)), so it is gated
 behind `PROBECTL_THREATINTEL_ENABLED` and ships **off**. When disabled, no feed
 is ever contacted and no indicator-matching code runs — verified in
 `BuildThreatIntel`, which returns `(nil, nil, false)` unless the flag is set
@@ -94,8 +97,11 @@ list:
 - **IP / host** (`IOCConsumer`, over the `probectl.network.results` topic): for
   every result, probectl takes the peer address and scores it. An IP is matched
   two ways — exactly, and against any **containing CIDR** block (so a single
-  bad `/24` flags every address inside it). A hostname target is matched against
-  the domain feed. A trailing `:port` is stripped first (`peerHost` uses
+  bad `/24` flags every address inside it). A hostname target is matched
+  exactly (lowercased) against any **domain-type** indicators in the store —
+  the index exists and is scored, though none of today's built-in feeds emit
+  `domain` indicators (they emit IPs, CIDRs, URLs, and cert/JA3 fingerprints).
+  A trailing `:port` is stripped first (`peerHost` uses
   `net.SplitHostPort`), so `198.51.100.7:443` scores as `198.51.100.7`.
 - **Certificate / JA3** (`threat.Analyzer.WithIntel`, in
   `internal/threat/analyze.go`): the **already-captured** leaf certificate's
@@ -134,8 +140,8 @@ Each feed carries machine-readable provenance and acceptable-use (AUP) terms in
 its `Descriptor().AUP` (`internal/opendata/feeds.go`). As with open-data
 enrichment, **these terms are not a constraint on private development or
 single-tenant open-source use** — they gate only **commercial / MSP resale**
-(reselling probectl to many customers), per CLAUDE.md §2. Resolve redistribution
-terms before enabling provider mode commercially.
+(reselling probectl to many customers; see [`editions.md`](editions.md)).
+Resolve redistribution terms before enabling provider mode commercially.
 
 | Feed | `name` | IOC type | Category | Confidence | License / terms | Commercial use |
 | ---- | ------ | -------- | -------- | ---------- | --------------- | -------------- |
@@ -156,7 +162,8 @@ column, or leave it empty to load all built-in feeds.
 
 ## Reliability and accuracy caveats
 
-- **Graceful degradation** (CLAUDE.md §7, rule 10): the `IntelRefresher` keeps
+- **Graceful degradation** — a down or rate-limited external source must never
+  break core function: the `IntelRefresher` keeps
   each source's **last-good** indicators. A feed that is down, rate-limited, or
   malformed leaves the prior indicators in place — it never empties the store
   and never breaks a core path. (See `Refresh` in `intelrefresher.go`: a failed
@@ -170,8 +177,7 @@ column, or leave it empty to load all built-in feeds.
   tune/suppress noisy sources. This is **enrichment**, not adjudication.
 - **Untrusted input:** every feed is fetched over **TLS with certificate
   validation (never disabled)** via `crypto.HardenedHTTPClient` and parsed as
-  **untrusted** — malformed indicators are skipped, not trusted
-  (CLAUDE.md §7, rules 10 and 12).
+  **untrusted** — malformed indicators are skipped, not trusted.
 
 ## Configuration
 
@@ -183,26 +189,27 @@ column, or leave it empty to load all built-in feeds.
 
 ## Security guardrails upheld
 
+These are probectl's standing
+[non-negotiables](../CONTRIBUTING.md#non-negotiables), as they apply here:
+
 - **Signal, not IPS** — confidence-scored, tunable, suppressible; no inline
-  block (rule 9).
-- **No phone-home** — off by default; outbound only when explicitly enabled
-  (rule 2).
+  block.
+- **No phone-home** — off by default; outbound only when explicitly enabled.
 - **Tenant-scoped** — feeds are shared (ingested once); matches land on
-  tenant-scoped incidents, carrying each result's `tenant_id` (rule 1).
+  tenant-scoped incidents, carrying each result's `tenant_id`.
 - **Graceful and untrusted** — last-good caching; TLS-verified fetch; untrusted
-  parse (rules 10, 12).
-- **AUP/provenance tracked** per feed for MSP/commercial resale (rules 2, 10).
+  parse.
+- **AUP/provenance tracked** per feed for MSP/commercial resale.
 - **FIPS crypto abstraction** — the cert SHA-1 fingerprint goes through
-  `crypto.CertSHA1`; no hash primitive is imported outside `internal/crypto`
-  (rule 3).
+  `crypto.CertSHA1`; no hash primitive is imported outside `internal/crypto`.
 
 ## The triage surface
 
 Attributed matches are also retained as tenant-scoped, in-memory **detections**
 (newest first, bounded per tenant). The recognizer keys on threat-plane signals
 that carry `intel.*` provenance — and the same store accepts the NDR-lite
-detector signals (see `docs/ndr.md`) without a separate pipeline, because both
-flow through one recognizer (`DetectionFromSignal` in
+detector signals (see [`ndr.md`](ndr.md)) without a separate pipeline, because
+both flow through one recognizer (`DetectionFromSignal` in
 `internal/threat/detections.go`).
 
 They are served at `GET /v1/threat/detections` (RBAC `threat.read`; the
@@ -214,6 +221,7 @@ the incident timeline (`/incidents?incident=<id>` is a supported deep link).
 
 The web surface lives on `/security`, above the certificate inventory:
 severity/source/text filters, plus a provenance detail view that states plainly
-that feeds can list benign infrastructure and that probectl never blocks
-(guardrail 9). The detection store is in-memory and rebuilds from the stream;
-the durable trail is the incident record plus the SIEM export.
+that feeds can list benign infrastructure and that probectl never blocks.
+The detection store is in-memory and rebuilds from the stream;
+the durable trail is the incident record plus the SIEM export
+(see [`siem.md`](siem.md)).

@@ -2,8 +2,8 @@
 
 ## What this is
 
-The threat-intel layer (see `docs/threat-intel.md`) catches *known-bad* things
-by name. This engine catches *suspicious-looking behavior* — patterns that look
+The threat-intel layer (see [`threat-intel.md`](threat-intel.md)) catches
+*known-bad* things by name. This engine catches *suspicious-looking behavior* — patterns that look
 like an attack even when no name is on a list yet. That is the "NDR" idea:
 **Network Detection and Response**, the behavioral half of threat detection.
 
@@ -19,7 +19,9 @@ It lives in `internal/threat/` — the engine in `ndr.go`, the rule model in
 
 ### The one rule that shapes everything: signals, never blocks
 
-Like threat-intel, this engine is **never an IPS** (CLAUDE.md §7, rule 9). It
+Like threat-intel, this engine is **never an IPS** — detection is a signal,
+never an enforcement action, one of probectl's
+[non-negotiables](../CONTRIBUTING.md#non-negotiables). It
 does not block traffic, terminate connections, or act inline. The engine emits
 `incident.Signal` values and nothing else — there is literally no enforcement
 code path in the package. A behavioral detector firing on a public network will
@@ -140,7 +142,9 @@ flowchart LR
 Every observation and every piece of detector state is **partitioned by
 tenant** (`tenantState` in `ndr.go`); a record without a `tenant_id` is dropped
 at the boundary, so one tenant's entities can never influence another's
-detections (CLAUDE.md §7, rule 1). State is **bounded** — per-tenant entity maps
+detections (tenant isolation is the outermost boundary — see
+[`security/tenant-isolation.md`](security/tenant-isolation.md)). State is
+**bounded** — per-tenant entity maps
 cap out and evict the stalest entry, and windows are fixed-size rings — so a
 cardinality flood cannot exhaust memory. The whole engine is rebuildable from
 the stream; nothing here is the durable record.
@@ -160,4 +164,4 @@ Detections surface as `ndr.<kind>` threat-plane signals in three places: the
 **Security** triage view (`/security`) with rule/confidence/evidence
 provenance, the incident timeline, and the SIEM export. They share the
 detection store with threat-intel matches, because both are recognized by one
-signal recognizer (see `docs/threat-intel.md`).
+signal recognizer (see [`threat-intel.md`](threat-intel.md)).

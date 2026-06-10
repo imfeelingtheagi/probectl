@@ -8,7 +8,8 @@ into that SIEM, rendered in a standard wire format and pushed over hardened TLS.
 The important framing: it is a **forwarder, not a SIEM**. probectl does not store,
 search, or correlate these events for you, and it never blocks traffic or acts as
 an IPS. A threat finding is a confidence-scored *signal* that the SIEM correlates
-(guardrail 9: detection is a signal, not an action). The code is `internal/siem`
+(detection is a signal, never an enforcement action — one of probectl's
+[non-negotiables](../CONTRIBUTING.md#non-negotiables)). The code is `internal/siem`
 (pure — formatters, senders, a buffered forwarder), driven by `internal/control`
 which maps `audit.Event` + `incident.Signal` onto the canonical `siem.Event`.
 
@@ -102,7 +103,7 @@ the SIEM still sees the *shape* of the event without the sensitive value.
 
 ## Configuration
 
-See [`configuration.md`](configuration.md#siem-export-s32) for the full key table.
+See [`configuration.md`](configuration.md#siem-export) for the full key table.
 Minimal Splunk HEC example:
 
 ```

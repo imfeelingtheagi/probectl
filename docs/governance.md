@@ -13,6 +13,7 @@ sees one coherent governance view per tenant rather than five scattered settings
 | Configurable retention + cross-store erasure | `internal/tenantlife` | **core** (a compliance right) |
 | Residency controls | siloed stores / region topology | provider / core |
 | BYOK / HYOK + no-downtime rotation | `ee/tenantkeys` | `byok` (Enterprise) |
+| Remote-AI egress consent (enforcement) | `internal/ai` egress gate | core (fail-closed; consent is *set* via the governance policy) |
 | **The governance POLICY + composed view** | `ee/governance` | **`governance`** (Enterprise) |
 
 The split that matters: the classification + redaction **mechanism is core** — a
@@ -57,7 +58,8 @@ floor** (default `pii`) is masked. The strategies:
 
 `restricted` (credentials) **always drops** in clear — secrets never leave the
 deployment in a governed export, regardless of strategy. All hashing routes
-through the FIPS-swappable `internal/crypto` (guardrail 3).
+through the FIPS-swappable `internal/crypto` provider — no raw crypto
+primitives outside it.
 
 ## Redacted export
 
@@ -83,18 +85,31 @@ The provider plane exposes one place for a tenant's data governance
 (`governance`-gated; the routes 404 when unlicensed):
 
 - `GET /provider/v1/tenants/{id}/governance` — the **composed view**: the effective
-  classification of every category + the redaction policy + residency + isolation
-  model + retention + BYOK status.
+  classification of every category + the redaction policy + remote-AI egress
+  consent + residency + isolation model + retention + BYOK status.
 - `PUT /provider/v1/tenants/{id}/governance` — set the policy: classification
-  overrides, the redaction floor (`redact_from`), and `redact_export`. Audited
+  overrides, the redaction floor (`redact_from`), `redact_export`, and the
+  tenant's remote-AI egress consent (`ai_remote_egress`). Audited to the
+  separate, tamper-evident **provider audit stream**
   (`provider.governance_set`), admin-only, and blocked by the read-only license
   degrade.
 
-The policy persists in `tenant_governance` (migration `0033`): a tenant reads its
+The policy persists in `tenant_governance` (migration `0033`; migration `0037`
+adds the `ai_remote_egress` consent column): a tenant reads its
 own policy under RLS, the provider plane writes it. It is on the silo deny list
 (never copied into a per-tenant silo schema) and is erased with the tenant at
 offboarding. The resolver installs onto the core `govern` seam, so redacted
 exports honor per-tenant overrides.
+
+### Remote-AI egress consent
+
+`ai_remote_egress` is the tenant's opt-in for sending its telemetry summaries to
+a **remote** AI model. It defaults to **false**, and the core AI egress gate
+refuses remote synthesis for a non-consenting tenant — no consent row, no
+database, or a read error all resolve to *denied* (fail closed). The
+governance policy is only where the consent is **recorded**; the disclosure of
+exactly what a remote call sends, and the other gates in front of it, is
+[`ai-egress.md`](ai-egress.md).
 
 ## Retention, erasure & residency (composed, not re-implemented)
 

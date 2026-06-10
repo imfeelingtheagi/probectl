@@ -5,7 +5,8 @@ and point it at an issuer with `PROBECTL_OIDC_ISSUER` plus a client id/secret
 and redirect URL. Nothing in probectl requires a *cloud* IdP — any
 standards-compliant OIDC provider works, including one you run **inside the
 air-gap.** That removes the last external dependency from a sovereign
-deployment: telemetry never leaves the network (CLAUDE.md §7.2), and now
+deployment: telemetry never leaves the network — probectl's no-phone-home rule
+(see the [non-negotiables](../../CONTRIBUTING.md#non-negotiables)) — and now
 neither does the login flow.
 
 ## How probectl uses OIDC (and where roles come from)
@@ -27,14 +28,14 @@ door*; it does not decide what they can *do*.** probectl does **not** read a
 a user holds) is assigned one of two ways:
 
 - **SCIM group sync** — the IdP pushes group membership to probectl, where a
-  SCIM Group maps to a probectl role (see `docs/scim-abac.md`); or
+  SCIM Group maps to a probectl role (see [SCIM + ABAC](../scim-abac.md)); or
 - **an admin grants the role explicitly** in probectl.
 
 So the IdP's job here is narrow and well-defined: prove who the user is (and,
 for step-up policies, *how* they authenticated — probectl derives an `mfa` flag
 from the ID token's `amr`/`acr` claims). Everything about *permissions* is the
-SCIM/RBAC/ABAC path in `docs/scim-abac.md`, which is identical no matter which
-IdP you run — the self-hosted IdP is not a special case.
+SCIM/RBAC/ABAC path in [`scim-abac.md`](../scim-abac.md), which is identical no
+matter which IdP you run — the self-hosted IdP is not a special case.
 
 ## The contract
 
@@ -49,7 +50,7 @@ To be a valid IdP for probectl, the provider must:
 - redirect back to `${PROBECTL_OIDC_REDIRECT_URL}` over HTTPS.
 
 That's the whole requirement. Group/role plumbing is *not* part of this
-contract — it rides SCIM (`docs/scim-abac.md`).
+contract — it rides SCIM ([`scim-abac.md`](../scim-abac.md)).
 
 ## Reference: Dex (smallest air-gap footprint)
 
@@ -88,7 +89,8 @@ PROBECTL_OIDC_REDIRECT_URL=https://probectl.example/auth/callback
 ```
 
 The Dex image is digest-pinned in your registry mirror like every other
-air-gapped image (see the air-gapped bundle section of `docs/hardening.md`).
+air-gapped image (see the air-gapped bundle section of
+[`hardening.md`](../hardening.md)).
 
 ## Reference: Keycloak (full-feature)
 
@@ -98,12 +100,14 @@ For larger orgs already running **Keycloak**, create a realm and a confidential
 Keycloak's discovery and nonce handling satisfy the contract above unchanged.
 Run it on an in-network host with its own datastore; nothing crosses the
 air-gap. (If you want Keycloak to drive *roles*, do it via SCIM push, not OIDC
-claims — see `docs/scim-abac.md`.)
+claims — see [`scim-abac.md`](../scim-abac.md).)
 
 ## Trust & TLS
 
-The control plane validates the IdP's TLS certificate (guardrail 12, never
-disabled). For an internal CA, mount your CA bundle so the control plane trusts
+The control plane validates the IdP's TLS certificate — outbound certificate
+validation is never disabled anywhere in probectl (a
+[non-negotiable](../../CONTRIBUTING.md#non-negotiables)). For an internal CA,
+mount your CA bundle so the control plane trusts
 the IdP's cert — the same trust store the rest of probectl uses for outbound
 TLS. A self-signed IdP cert from a private CA is fine **as long as that CA is in
 the trust store** — probectl never skips verification.
