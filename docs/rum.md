@@ -107,7 +107,8 @@ The ingest endpoint treats every beacon as untrusted input
 RUM is only called *degraded* with **≥ 20 views in the 15-minute window** AND
 (error rate ≥ 10% OR p75 LCP ≥ 4000 ms — the web-vitals "poor" line). A trickle
 of views is never called an outage. The synthetic side is *degraded* at ≥ 50%
-failures over ≥ 2 samples for the host (web-facing types: http/https/browser).
+failures over ≥ 2 samples for the host (web-facing types only: `http`, `https`,
+`browser` — results real users could also hit).
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
@@ -131,6 +132,7 @@ flowchart LR
 | `PROBECTL_RUM_APPS` | (none) | the app-key registry: `pk_key1=tenant/app,pk_key2=tenant2/app2` (enabled but empty is a startup error — a mis-bound key could file beacons under the wrong tenant) |
 | `PROBECTL_RUM_RATE_PER_MIN` | `300` | per-key beacon rate limit (`0` = unlimited) |
 
-Deliberately out of scope (per the PRD): full APM — no traces, no session
-replay, no user-journey reconstruction. RUM here is page-level vitals and
-errors, converged with synthetics.
+Deliberately out of scope: full APM — no traces, no session replay, no
+user-journey reconstruction. RUM here is page-level vitals and errors,
+converged with synthetics; the strict beacon schema is what makes the privacy
+contract enforceable, and a richer payload would erode it.

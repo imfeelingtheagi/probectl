@@ -94,10 +94,13 @@ Because browser workers are CPU- and memory-heavy, the `Fleet`
 A failure artifact is uploaded to the pluggable **object store**
 (`internal/objectstore`) under a **tenant-prefixed key**
 (`tenant/<id>/browser/<script>-<ts>.png`), so one tenant's artifacts are
-isolated from another's at the storage layer. The store interface ships with a
-filesystem implementation (the default) and an in-memory one (tests); an S3 /
-MinIO implementation can slot in behind the same `Put`/`Get`/`Stat` interface
-(the object store is pluggable per the PRD).
+isolated from another's at the storage layer (siloed tenants get their own
+prefix via isolation routing; a routing failure stores nothing — fail closed).
+Two implementations ship today: **filesystem** (the default) and **in-memory**
+(tests). The store is a deliberately small `Store` interface
+(`Put`/`Get`/`Stat`/`List`/`DeletePrefix`), so an S3 / MinIO backend can slot
+in behind it — pluggable by design, but **not shipped yet**; don't plan a
+deployment around S3 support that isn't there.
 
 Successful runs store nothing by default (to bound storage); set
 `StoreOnSuccess` to keep them. Object-lifecycle / retention policy is applied at
@@ -111,15 +114,28 @@ non-root `pwuser`. The worker reads one Script as JSON on stdin and writes the
 Result as JSON on stdout; the fleet owns concurrency, isolation, and recycling.
 Scale the worker fleet horizontally, separately from the control plane. CI runs
 the worker's real-browser smoke test (a scripted login against a local app)
-inside the Playwright image.
+inside the Playwright image. For the surrounding stack — bringing up the control
+plane and bus, and the per-producer deployment journeys — start at
+[`getting-started.md`](getting-started.md) and
+[`deploying-agents.md`](deploying-agents.md).
 
 ## Notes
 
+- **Integration status (honest).** What ships today is the complete transaction
+  *engine*: the script format, both drivers, the fleet, the artifact store, the
+  worker image, and the mapping onto the canonical `canary.Result` (type
+  `browser`) — all CI-tested, including a real-browser smoke in the Playwright
+  image. What is *not* wired yet: the shipped agent's canary registry
+  (`noop`/`icmp`/`tcp`/`udp`/`dns`/`http`/`voice`) does not register a `browser`
+  type, so transaction scripts are not yet schedulable as ordinary tests from
+  the control plane. The consuming side is already browser-aware (the RUM
+  convergence engine counts `browser` among its web-facing synthetic types), so
+  results flow end-to-end the moment that registration lands.
 - **Architecture choice.** The script format, result model, object-store upload,
   and fleet isolation/concurrency/recycling all live in Go (`internal/browser`,
   fully tested); only rendering is delegated to the external Playwright worker.
   This is what keeps browsers out of the single-binary agent.
-- **Out of scope.** Real-user monitoring (RUM — see `docs/rum.md`) and endpoint
+- **Out of scope.** Real-user monitoring ([`rum.md`](rum.md)) and endpoint
   browser-session capture are separate features. Note that some sites detect
   headless browsers; for those, configure a realistic user-agent / browser
   context.

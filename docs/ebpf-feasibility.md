@@ -26,8 +26,10 @@ sub-project**, not a library variant.
 Three risks have to be **decided, not discovered**:
 
 1. **BTF-less kernels.** CO-RE needs a BTF-exposing kernel. Most current distros
-   ship it; some older/embedded ones do not. → ship a BTFHub fallback path and a
-   clean "unsupported kernel" degradation, not a crash.
+   ship it; some older/embedded ones do not. → a clean, decided "unsupported
+   kernel" degradation, never a crash. (The shipped agent degrades immediately
+   with the reason; the automatic BTFHub fallback this study floated was not
+   shipped — see §4.)
 2. **The Go-runtime TLS problem.** Go's `crypto/tls` does not call OpenSSL, and
    `uretprobe` is unsafe on Go binaries. Capturing Go plaintext needs binary
    disassembly + goroutine tracking — a separate strategy from the `SSL_write`
@@ -88,22 +90,27 @@ distros backporting earlier.
 | Platform | Ships kernel BTF by default? | Ring buffer (≥5.8)? | Support |
 |---|---|---|---|
 | Ubuntu 20.04 (HWE 5.8+), 22.04, 24.04 | yes | yes | ✅ supported |
-| RHEL/Rocky/Alma 8.2+, 9.x | yes | 9.x yes; 8.x via perf-buffer fallback | ✅ supported |
+| RHEL/Rocky/Alma 9.x | yes | yes | ✅ supported |
+| RHEL/Rocky/Alma 8.x (4.18 kernel) | yes (8.2+) | **no** | ❌ below the ring-buffer floor — probe reports unavailable (a perf-buffer fallback was considered, not shipped) |
 | Debian 11+, 12 | yes | yes | ✅ supported |
 | Amazon Linux 2023; AL2 (recent kernels) | AL2023 yes; AL2 varies | AL2023 yes | ✅ / ⚠️ verify AL2 |
 | SUSE SLES 15 SP3+ | yes | yes | ✅ supported |
 | Container-Optimized OS / Bottlerocket / Talos | usually yes | yes | ✅ (verify per release) |
-| Older / embedded / vendor kernels w/o `CONFIG_DEBUG_INFO_BTF` | **no** | maybe | ⚠️ BTFHub fallback or unsupported |
+| Older / embedded / vendor kernels w/o `CONFIG_DEBUG_INFO_BTF` | **no** | maybe | ❌ probe reports unavailable (BTFHub is the manual avenue) |
 
-**The decisions that came out of this matrix:**
+**The decisions that came out of this matrix (and what actually shipped):**
 
-- **Floor = ring buffer + BTF.** Treat **Linux 5.8** as the clean floor. Detect BTF
-  at startup; if absent, attempt the **BTFHub** external-BTF path; if that also
-  fails, **degrade gracefully** to "eBPF unavailable on this host" — one structured
-  log line plus a host-capability flag surfaced to the control plane — never crash
-  the agent or the node.
+- **Floor = ring buffer + BTF.** Treat **Linux 5.8** as the clean floor. The
+  shipped agent detects both at startup and, when either is missing, **degrades
+  gracefully** to "eBPF unavailable on this host" — one structured capability-probe
+  log line with the reason — never crashing the agent or the node. The study
+  proposed an automatic **BTFHub** external-BTF fallback before degrading; that
+  path was **not shipped** — the probe's reason string names BTFHub as the manual
+  avenue instead.
 - **Perf-buffer fallback** for 4.x kernels that have BPF but not the ring buffer
-  (see §5). This is a build/load-time selection, not two codebases.
+  was considered (see §5) but **not shipped**: the agent requires the ring buffer,
+  and a pre-5.8 kernel is reported unavailable rather than served a second capture
+  path.
 - **Architectures:** both `amd64` and `arm64`, matching probectl's dual-arch build.
 
 ---
@@ -118,10 +125,13 @@ distros backporting earlier.
 | Overhead | lower (fewer copies, reserve/commit API) | higher |
 | Backpressure | reserve fails → counted drop | per-CPU overwrite/drop |
 
-**Decision:** the ring buffer is the **default**; keep a perf-buffer path only as
-the <5.8 fallback. Either way, **count and expose drops** as a first-class metric —
-a silent drop is a correctness bug in an observability tool. (The agent surfaces
-ring-buffer drops as `dropped_total`; see [`ebpf-agent.md`](ebpf-agent.md).)
+**Decision:** the ring buffer wins on every row, so it is the **only** capture
+path the agent ships — the perf-buffer column stayed a contingency for a <5.8
+fallback that was never built (a pre-5.8 kernel is reported unavailable instead).
+Either way the non-negotiable held: **count and expose drops** as a first-class
+metric — a silent drop is a correctness bug in an observability tool. (The agent
+surfaces ring-buffer drops as `dropped_total`; see
+[`ebpf-agent.md`](ebpf-agent.md).)
 
 ---
 
@@ -168,7 +178,7 @@ exposes different symbols, so each needs its own attach.
 | **OpenSSL** | `SSL_write` (entry) / `SSL_read` (**return** — buffer not filled at entry) | usually dynamic `libssl.so`; symbols present | ✅ strong |
 | **BoringSSL** | same `SSL_*` API surface | common in Envoy/Chromium; often statically linked | ✅ if symbols resolvable / ⚠️ if stripped |
 | **GnuTLS** | `gnutls_record_send` / `gnutls_record_recv` | dynamic `libgnutls.so` | ✅ |
-| **NSS/NSPR** | `PR_Write` / `PR_Read` | dynamic | ✅ (optional, later) |
+| **NSS/NSPR** | `PR_Write` / `PR_Read` | dynamic | feasible — **not shipped** (no NSS attach in the agent today) |
 | **Go `crypto/tls`** | **no libssl** — pure Go; `uretprobe` unsafe on Go | static in the app binary | ⚠️ **special case (below)** |
 | Stripped / static (no symbols) | n/a | symbols absent | ❌ socket-layer plaintext only |
 
@@ -250,8 +260,8 @@ overhead test for the ring-buffer path — all documented in
 | # | Decision | Rationale |
 |---|---|---|
 | D1 | Use **`cilium/ebpf` + `bpf2go`** (pure Go, no cgo) | matches the single-static-binary model; embeds the compiled object; CO-RE-native |
-| D2 | **Ring buffer default**, perf-buffer fallback <5.8 | lower overhead + ordering; one codebase |
-| D3 | **CO-RE + BTF**, with **BTFHub** fallback, then graceful "unsupported" | portability across the distro matrix without per-kernel builds |
+| D2 | **Ring buffer only** (the perf-buffer <5.8 fallback was considered, dropped) | lower overhead + ordering; one codebase; pre-5.8 reports unavailable |
+| D3 | **CO-RE + BTF**, graceful "unsupported" when BTF is absent (the automatic **BTFHub** fallback was deferred — the probe names it as the manual avenue) | portability across the distro matrix without per-kernel builds |
 | D4 | L3/L4 via **stable tracepoints** first, CO-RE struct reads where required | minimizes per-kernel offset risk |
 | D5 | **Go-TLS is a separate sub-module**, not an OpenSSL variant | Go ABI + uretprobe incompatibility |
 | D6 | **Socket-layer fallback** for stripped/static binaries | uprobe symbol resolution will fail there |
@@ -266,9 +276,11 @@ coverage documentation.
 
 This is the definition-of-ready the production agent was held to:
 
-1. **Startup capability probe** — detect BTF (+ ring buffer + required CONFIGs);
-   choose ring-buffer vs perf-buffer; on no-BTF, try BTFHub, else degrade to "eBPF
-   unavailable" with a host-capability flag surfaced to the control plane.
+1. **Startup capability probe** — detect BTF + ring buffer + capabilities +
+   kernel lockdown, and on any miss degrade to a decided, logged "eBPF
+   unavailable" state with the reason. (As shipped: no perf-buffer selection and
+   no automatic BTFHub attempt — missing prerequisites degrade immediately, with
+   BTFHub named in the reason as the manual avenue.)
 2. **Drop accounting** — ring-buffer drops counted and exposed as a metric from day
    one.
 3. **Capability-minimal runtime** — `CAP_BPF`+`CAP_PERFMON` where available;

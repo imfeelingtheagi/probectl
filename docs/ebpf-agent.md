@@ -234,9 +234,11 @@ returns a clear message instead of a bare `EPERM`. Boot without
 ## Kernel compatibility
 
 CO-RE ("Compile Once – Run Everywhere") needs a **BTF-exposing kernel** and the
-**BPF ring buffer**, both mainstream from **Linux 5.8**. BTF-less kernels fall
-back to BTFHub or are reported unavailable. The full matrix and distro coverage
-live in [`ebpf-feasibility.md`](ebpf-feasibility.md). eBPF is **Linux-only**; on
+**BPF ring buffer**, both mainstream from **Linux 5.8** — that pair is the hard
+floor. On a BTF-less kernel the capability probe reports eBPF **unavailable**
+(the reason string points at BTFHub as a manual avenue; no automatic external-BTF
+fallback ships today). The full matrix and distro coverage live in
+[`ebpf-feasibility.md`](ebpf-feasibility.md). eBPF is **Linux-only**; on
 macOS/Windows, run the agent inside a Linux VM.
 
 On startup the agent logs a **capability probe** (BTF / ring buffer / CAP_BPF /
@@ -292,11 +294,11 @@ anyone adds a filesystem/env object-load path.
 The live build regenerates `vmlinux.h` from the running kernel's BTF, runs
 `bpf2go`, and writes the SHA-256 manifest (`gendigests` → `bpf_digests_ebpf.go`)
 that the loaders verify before **any** kernel load — a tampered or stale object
-refuses to load. It also pulls in the `cilium/ebpf` module, which the default
-build does **not**. One-time, on the build host:
+refuses to load. The `cilium/ebpf` loader dependency is already pinned in
+`go.mod`; only the `-tags ebpf` files import it, so the default build never
+compiles or links it. On the build host:
 
 ```sh
-go get github.com/cilium/ebpf      # add the loader dependency (only for -tags ebpf)
 make ebpf-agent                    # bpftool + bpf2go + go build -tags ebpf
 ```
 
@@ -307,6 +309,13 @@ drifting across many. The generated bindings (`l4flow_bpfel.go`, `bpf/vmlinux.h`
 carry `//go:build ebpf`, are git-ignored, and are regenerated per build.
 
 ## Installing
+
+If this is your first probectl producer, start with
+[`getting-started.md`](getting-started.md) (the control-plane + bus bring-up) and
+[`deploying-agents.md`](deploying-agents.md) (the per-producer deployment
+journeys, including this agent) — you're done when flow batches show up
+downstream, not when the unit reports active. The sections below are the
+agent-specific contract.
 
 ### Kubernetes
 
@@ -359,7 +368,7 @@ unit and container/K8s `securityContext` examples.
 PROBECTL_EBPF_TENANT_ID=<uuid> PROBECTL_EBPF_FIXTURE_PATH=flows.json probectl-ebpf-agent
 
 # Live (Linux, built with -tags ebpf, as root or with CAP_BPF+CAP_PERFMON):
-probectl-ebpf-agent -config /etc/probectl/ebpf-agent.yml
+probectl-ebpf-agent -config /etc/probectl/ebpf-agent.yaml
 ```
 
 Example config:
@@ -367,15 +376,18 @@ Example config:
 
 ## Configuration keys
 
-See [`configuration.md`](configuration.md#ebpf-host-agent-s20) for the full
+See [`configuration.md`](configuration.md#ebpf-host-agent) for the full
 `PROBECTL_EBPF_*` table.
 
 ## Scope and follow-ups
 
 In scope today: the agent, L3/L4 capture, the service map, **L7 parsing
 (HTTP/1.1+2, gRPC, DNS, Kafka) with TLS-uprobe plaintext capture**, OTel emit, and
-the kernel/uprobe matrix. Natural follow-ups (out of scope here): IPv6 +
-byte/packet counters; the **5-tuple↔SSL correlation** and the **Go-TLS** capture
-path; and a control-plane consumer draining `probectl.ebpf.flows` into ClickHouse
-plus a tenant-scoped service-map API for the UI (which feeds the topology plane).
-Detection, segmentation validation, TLS posture, and cost all build on this layer.
+the kernel/uprobe matrix. On the consuming side, the control plane already drains
+`probectl.ebpf.flows` on three independent, tenant-verified consumer groups: the
+**topology** view (service edges feed the graph), **segmentation validation**
+(declared policy vs observed traffic), and **NDR detection**. Natural follow-ups
+(out of scope here): IPv6 + byte/packet counters; the **5-tuple↔SSL correlation**
+and the **Go-TLS** capture path; and raw-flow retention in ClickHouse with a
+flow-level query API. Detection, segmentation validation, TLS posture, and cost
+all build on this layer.

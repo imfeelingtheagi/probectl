@@ -76,7 +76,7 @@ above these measured figures.
 |---|---|---|---|---|---|---|
 | 2026-06-07 | dev container, 4 vCPU arm64 | synthetic 50×8 | 881k | 1.75 µs | 29 MiB | n/a (no kernel) |
 | _continuous_ | CI runner (in `make test`, -race) | synthetic 50×8 | see job log (floor 20k) | see job log | see job log | n/a |
-| _pending_ | reference host (whitepaper) | iperf3 + wrk defined mix | — | — | — | — |
+| _pending_ | reference host (the [agent whitepaper](security/agent-whitepaper.md) numbers) | iperf3 + wrk defined mix | — | — | — | — |
 
 The reference-host row is intentionally left for a human to fill: run the script
 on real hardware with live traffic and paste the row. That's also the only way to

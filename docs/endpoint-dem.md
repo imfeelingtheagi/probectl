@@ -145,6 +145,13 @@ needs **no elevated privileges**: it uses the OS's own `traceroute` / `tracert`
 and read-only Wi-Fi queries. Point it at the bus (Kafka in a fleet, or the
 lightweight in-memory bus for a single-node dev deploy) with a tenant id.
 
+First deployment? The cross-producer journey — control plane, bus, and each
+agent's enrollment-or-bus path — lives in
+[`deploying-agents.md`](deploying-agents.md) (start at
+[`getting-started.md`](getting-started.md) if nothing is running yet). You're
+done when the device shows up in `GET /v1/endpoints` with an attribution
+verdict — not when the process starts.
+
 ## Notes and deferrals
 
 - **Gateway-health derivation (flagged):** gateway health is derived from the
