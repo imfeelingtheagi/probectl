@@ -73,9 +73,13 @@ trustctl renewal request — that a human must approve through the authenticated
 The MCP path can never approve or execute; probectl never executes autonomously
 (see `docs/remediation.md`). So the worst an injected prompt can do through this
 tool is *file a suggestion someone then has to look at*. `TestProposeRemediationToolIsProposalOnly`
-(`internal/ai/mcp/mcp_test.go`) pins that guarantee. Note: the proposal backend is
-only wired on the **HTTP** transport (through the commercial provider plane); on the
-lightweight **stdio** transport the tool is inert.
+(`internal/ai/mcp/mcp_test.go`) pins that guarantee — including a structural check
+that the catalog contains **no** approve/execute/apply tool at all. Note: the
+proposal backend is the commercially licensed guarded-remediation feature, attached
+at the editions seam — it is live only on the **HTTP** transport of a licensed
+server. On the lightweight **stdio** transport (and on an unlicensed deployment)
+the tool is inert: calling it returns a clear "remediation is not enabled" error
+result instead of acting.
 
 ## Transports and auth
 
@@ -84,7 +88,7 @@ the owning user's effective RBAC. As with sessions, only the token's **hash** is
 stored (never the token itself), and the lookup happens before tenant scoping is
 applied. Mint one with:
 
-```
+```sh
 probectl-control mcp-token --user <user-uuid> [--tenant <id>] [--name laptop]
 ```
 
@@ -106,7 +110,7 @@ boundary, exactly like any local CLI credential (think `kubectl`'s kubeconfig).
 Tenant scoping and RBAC still apply to every call; the transport grants no extra
 privilege.
 
-```
+```sh
 PROBECTL_MCP_TOKEN=<token> PROBECTL_DATABASE_URL=... probectl-control mcp-stdio
 ```
 
@@ -147,7 +151,9 @@ rendering and `structuredContent`. A **tool-level** failure comes back as an
 An MCP caller is an **external AI client**, so returning tool output means tenant
 telemetry is leaving the platform. Every `tools/call` therefore rides **the same
 egress gate** as the remote RCA model and the authoring model
-(`internal/ai.EgressGate` — one instance, constructed once; see `docs/ai-egress.md`):
+(`internal/ai.EgressGate`, built by the control plane's one gate constructor — the
+same consent source, redaction policy, and audit sink on every surface; see
+`docs/ai-egress.md`):
 
 - **Consent (default deny).** The tenant must have opted in via
   `tenant_governance.ai_remote_egress` — the *same* per-tenant consent that gates
@@ -159,13 +165,15 @@ egress gate** as the remote RCA model and the authoring model
   the **redacted** form is what reaches the client — both the text and the
   `structuredContent`. Masking runs on the JSON encoding with deterministic tokens,
   so the document stays valid and values stay correlatable.
-- **Audit.** Every call lands in the tenant's tamper-evident audit stream as
-  `mcp.tool_call` (actor, tool, allowed/denied + reason), plus an `ai.remote_egress`
-  event (`surface = mcp`) on each allowed call.
+- **Audit.** Every call — allowed or denied, and *why* — lands in the tenant's
+  tamper-evident audit stream as `mcp.tool_call` (actor, tool, outcome), plus an
+  `ai.remote_egress` event (`surface = mcp`) on each allowed call that returns
+  data.
 
 Crucially, the egress gate is a **required constructor argument** of `mcp.New` —
-there is no gate-less constructor, so a gate-less MCP server simply can't be built,
-and no future transport can bypass consent/redaction/audit.
+there is no gate-less constructor, and a nil gate denies every tool call (fail
+closed). A gate-less MCP server simply can't exist, so no future transport can
+bypass consent/redaction/audit.
 
 ## What it deliberately does not do
 

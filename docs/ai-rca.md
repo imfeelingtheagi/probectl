@@ -87,7 +87,11 @@ The assistant doesn't have its own isolation logic — it inherits the query lay
 contract: **tenant boundary first, then RBAC, enforced at the query layer, never
 by asking the model to self-censor.** Because the `Query` type has no tenant field
 (see `docs/ai-query.md`), a question is *incapable* of crossing tenants. An
-integration test proves tenant A's answer never contains tenant B's signals.
+end-to-end test (`TestAIAskGroundedCitedAndTenantScoped`,
+`internal/control/ai_integration_test.go`) proves it against a real Postgres:
+tenant A's incident becomes cited evidence in tenant A's answer, while tenant B
+asking the *same question* gets an honest "insufficient evidence" — never tenant
+A's signals.
 
 ## Evidence sources: what's wired today
 
@@ -112,7 +116,7 @@ The synthesis backend is pluggable (`internal/ai/model.go`, `model_http.go`):
 
 | Provider    | Wire path                                 | Notes                                                                 |
 | ----------- | ----------------------------------------- | --------------------------------------------------------------------- |
-| `builtin`   | in-process, deterministic                 | **the default** — air-gapped, no network; also the reference oracle the golden-set tests assert against |
+| `builtin`   | in-process, deterministic                 | **the default** — air-gapped, no network; also the deterministic baseline the CI RCA eval harness (`internal/ai/eval`, a fixed labeled scenario set run through the real pipeline) scores against |
 | `ollama`    | local Ollama / vLLM (`/api/chat`)         | the first-class sovereign path; a loopback endpoint may be plain `http` |
 | `openai`    | OpenAI-compatible `/v1/chat/completions`  | OpenAI, Azure OpenAI, vLLM, LM Studio, …                              |
 | `anthropic` | Anthropic `/v1/messages`                  | Claude models                                                          |
@@ -153,6 +157,12 @@ Both actions are written to the tenant's tamper-evident audit log as `ai.ask` an
 process-wide concurrency backstop returns `429` (so a burst can't exhaust the
 control plane) and the per-tenant fairness budget wraps the whole analysis
 (`docs/fairness.md`).
+
+For reproducibility (or a dispute about "what did the AI tell us that day?"),
+`PROBECTL_AI_PERSIST_ANSWERS` (default `false`) stores each full cited answer
+tenant-scoped, together with the model name and a hash of the AI configuration
+that produced it, pruned past `PROBECTL_AI_ANSWER_RETENTION` (default 90 days).
+Persistence is best-effort and never blocks or alters the answer.
 
 ## What it deliberately does not do
 

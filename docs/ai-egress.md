@@ -41,20 +41,23 @@ appears in both signals") without ever seeing the real value.
 
 ## One gate, three doors
 
-The same `EgressGate` (`internal/ai/egressgate.go`) — consent + redaction + audit,
-**one instance constructed once** in the control plane — guards every path that
-sends tenant data to an external AI:
+The same `EgressGate` (`internal/ai/egressgate.go`) — consent + redaction + audit
+— guards every path that sends tenant data to an external AI:
 
 - the **remote RCA model** (`docs/ai-rca.md`),
 - **MCP tool results** (an MCP caller *is* an external AI client; `docs/mcp.md`),
 - the **test-authoring model** (`docs/ai-authoring.md`).
 
 The audit event records which door it came through: `surface = rca | mcp | author`.
-There is deliberately no second construction site and no gate-less path — a static
-test (`TestNoAIClientOutsideGate`, `internal/ai/egressgate_test.go`) scans the
-source tree and fails the build if any file outside the single approved adapter
-gains the ability to dial out. So a future surface *cannot* quietly route around
-the gate.
+Every gate is built by **one constructor** in the control plane, so every surface
+draws the *same* per-tenant consent source (`tenant_governance.ai_remote_egress`),
+the *same* redaction policy, and the *same* audit sink — no surface carries its own
+copy that could drift. And there is no gate-less path: the MCP server *requires* a
+gate to construct (a nil gate denies every call), and a static test
+(`TestNoAIClientOutsideGate`, `internal/ai/egressgate_test.go`) walks the AI
+subsystem's sources and fails CI if any file beyond the one approved model adapter
+(and the inbound MCP HTTP transport, which serves and never dials out) gains an
+HTTP client. So a future surface *cannot* quietly route around the gate.
 
 **Who governs the data once it leaves:** your agreement with the model provider.
 probectl sets no retention terms on the remote side. DPA inputs, ready to copy:
@@ -70,7 +73,7 @@ All three must be satisfied. Each is independent, and each fails closed.
 1. **Operator acknowledgment (boot-time, fail-closed).** A remote endpoint refuses
    to start until the operator sets, exactly:
 
-   ```
+   ```text
    PROBECTL_AI_EGRESS_ACK=yes-send-tenant-data-to-the-remote-model
    ```
 

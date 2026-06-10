@@ -62,7 +62,8 @@ runs depends on your config:
   you say "dns"/"resolve" or "ping", and a small list of well-known services is
   recognised by name — so "check Salesforce login" yields an `http` test to
   `login.salesforce.com`. If it can't find a host, IP, or URL, it returns a clear
-  "couldn't derive a test — include one, or configure a model."
+  "could not derive a test" error telling you to include one — or configure a
+  model.
 - **The model-backed author (when a model is configured).** When
   `PROBECTL_AI_MODEL_PROVIDER` points at a model, a `ModelAuthor` handles
   open-ended requests the heuristic can't. It asks the model for strict JSON, and
@@ -76,7 +77,9 @@ consented is denied — and the air-gapped heuristic still works for everyone.
 
 **API:** `POST /v1/ai/author` with body `{prompt}` → a `Proposal` (the spec plus a
 short rationale and which author produced it). It **never creates the test**; you
-apply the returned spec via `POST /v1/tests`.
+apply the returned spec via `POST /v1/tests`. Each authoring call is recorded in
+the tenant's tamper-evident audit log as `ai.author` (the proposed type + target,
+never the prompt's secrets) — proposing is a data-access action like any other.
 
 ## Auto-discovery: mine what's already observed
 
