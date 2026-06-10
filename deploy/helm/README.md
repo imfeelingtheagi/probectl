@@ -1,12 +1,21 @@
 # deploy/helm/
 
-Helm chart for deploying probectl on Kubernetes / OpenShift.
+Helm charts for deploying probectl on Kubernetes / OpenShift. Two charts ship
+here:
 
-The chart lives in [`probectl/`](probectl/). It is **HTTPS-by-default**: the API is
-exposed only through a TLS-terminating ingress that emits HSTS and force-redirects
-HTTP → HTTPS; the Service is `ClusterIP`, so no plaintext API is reachable from
-outside the cluster (CLAUDE.md §7 guardrail 12). The migration runs as an init
-container; the pod runs non-root with a read-only root filesystem.
+- [`probectl/`](probectl/) — the **control plane**: the API/UI Deployment, the
+  TLS-terminating ingress, the migration init container, NetworkPolicy / PDB /
+  HPA, and the sizing profiles below.
+- [`probectl-agent/`](probectl-agent/) — the **eBPF host agent** DaemonSet
+  (see [its section](#the-agent-chart-probectl-agent)).
+
+The control-plane chart is **HTTPS-by-default**: the API is exposed only through
+a TLS-terminating ingress that emits HSTS and force-redirects HTTP → HTTPS; the
+Service is `ClusterIP`, so no plaintext API is reachable from outside the
+cluster ("TLS on every listener" is a
+[non-negotiable](../../CONTRIBUTING.md#non-negotiables)). The database migration
+runs as an init container; the pod runs non-root with a read-only root
+filesystem.
 
 ## Install (single-tenant / sovereign)
 
@@ -26,6 +35,13 @@ helm install probectl deploy/helm/probectl \
 Provide the TLS material via cert-manager (add the issuer annotation in
 `ingress.annotations`) or a pre-created secret named by `ingress.tlsSecretName`.
 
+> A green `/readyz` is not "done" — **data on screen is**. A control plane with
+> no agents shows empty dashboards. Continue with
+> [`docs/getting-started.md`](../../docs/getting-started.md) (the zero →
+> first-real-data path) and
+> [`docs/deploying-agents.md`](../../docs/deploying-agents.md) (which agent or
+> collector produces which data plane).
+
 ## Install (multi-tenant / provider, MSP)
 
 ```sh
@@ -41,6 +57,27 @@ Tenant isolation is enforced by the control plane (pooled RLS scoping) regardles
 of deployment shape; the multi-tenant values only size the runtime and spread
 replicas.
 
+## The agent chart (`probectl-agent/`)
+
+[`probectl-agent/`](probectl-agent/) deploys the eBPF host agent as a DaemonSet
+with its privilege contract declared **in the artifact**, not implied:
+capabilities drop ALL and add back exactly `CAP_BPF` + `CAP_PERFMON`
+(`capabilityMode: legacy` swaps in `CAP_SYS_ADMIN` for pre-5.8 kernels), a
+seccomp profile, a read-only root filesystem, and the
+`/sys/kernel/btf/vmlinux` host mount. It **fails closed**: the chart refuses to
+render without a `tenantID` (every captured flow must belong to a tenant), and
+refuses plaintext Kafka unless you set the explicit dev-only
+`bus.allowPlaintext=true`.
+
+```sh
+helm install probectl-agent deploy/helm/probectl-agent \
+  --set tenantID=<tenant> \
+  --set 'bus.brokers={kafka.internal.example:9093}'
+```
+
+Details: [`docs/ebpf-agent.md`](../../docs/ebpf-agent.md) and the privilege
+contract in [`deploy/agent/README.md`](../agent/README.md).
+
 ## Reference values
 
 Pick a sizing profile and layer your overrides on top:
@@ -52,13 +89,23 @@ Pick a sizing profile and layer your overrides on top:
 | medium | [`probectl/values-medium.yaml`](probectl/values-medium.yaml) | 3 replicas + PDB + spread |
 | large | [`probectl/values-large.yaml`](probectl/values-large.yaml) | HPA 4–12 + PDB + filled NetworkPolicy egress allow-list |
 | provider (MSP) | [`probectl/values-multitenant.yaml`](probectl/values-multitenant.yaml) | 3 replicas + anti-affinity + PDB |
-| multi-region | [`probectl/values-multiregion.yaml`](probectl/values-multiregion.yaml) | active-active HA, one release per region |
-| strict | [`probectl/values-strict.yaml`](probectl/values-strict.yaml) | tightest egress + air-gapped-leaning defaults |
+| multi-region | [`probectl/values-multiregion.yaml`](probectl/values-multiregion.yaml) | active-active HA, one release per region ([`docs/multi-region.md`](../../docs/multi-region.md)) |
+| strict | [`probectl/values-strict.yaml`](probectl/values-strict.yaml) | regulated/air-gapped: both NetworkPolicy holes closed + ServiceMonitor + backup CronJobs |
 
-`values.schema.json` types every key (Helm validates it). Security defaults
+`values.schema.json` types every key (Helm validates it). The security defaults
 (non-root pinned uid, read-only root FS, drop-ALL caps, NetworkPolicy/PDB/HPA,
-`/readyz` drain probe, HSTS, no default credentials) are enforced by the CI
-hardening gate — `make helm-gate` (`helm lint` + `scripts/check_helm_hardening.sh`).
+`/readyz` drain probe, HSTS, no default credentials — the chart refuses to
+render without an envelope key) are enforced by `make helm-gate`, which runs
+[`scripts/check_helm_hardening.sh`](../../scripts/check_helm_hardening.sh):
+hardening assertions plus `helm lint` over every profile **and** the agent
+chart. CI's `helm-gate` job runs the same gate plus kubeconform on the rendered
+charts, so a hardening regression fails the build, not a customer install.
+
+Opt-in extras, both off by default and enabled in the strict profile:
+`backup.enabled=true` renders the encrypted Postgres + ClickHouse backup
+CronJobs ([`docs/ops/backup-restore.md`](../../docs/ops/backup-restore.md));
+`metrics.serviceMonitor.enabled=true` renders a Prometheus-Operator
+ServiceMonitor.
 
 **NetworkPolicy is ON by default** in every profile, with two
 documented holes until tightened per deployment: empty `ingressFrom` admits

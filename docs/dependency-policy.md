@@ -18,15 +18,17 @@ exactly, verify, upgrade on purpose.
 | Surface | Mechanism | Enforced by |
 |---|---|---|
 | Go modules | exact versions in [`go.mod`](../go.mod), checksums in `go.sum` (verified against the Go checksum database on download) | `go build` fails on any checksum mismatch |
-| Dev / codegen tools (buf, protoc-gen-go / -go-grpc, golangci-lint, govulncheck) | exact versions at the top of the [`Makefile`](../Makefile); installed as Go modules (so they're checksum-verified) — never `@latest`, never a curl-pipe install | the `proto` job's generated-code drift check; the supply-pins gate (`! grep @latest`) |
+| Dev / codegen tools (buf, protoc-gen-go / -go-grpc, golangci-lint, govulncheck) | exact versions at the top of the [`Makefile`](../Makefile); installed as Go modules (so they're checksum-verified) — never `@latest`, never a curl-pipe install | the `proto` job's generated-code drift check; the supply-pins gate |
 | GitHub Actions | full commit-SHA pins (not `@v3` tags) | `scripts/check_action_pins.sh` (the `action-pins` CI job) |
-| Container images (compose, Helm, CI services) | digest pins (`@sha256:...`) | review + the scheduled security scan |
+| Container images (compose, Helm, CI services) | digest pins (`@sha256:...`) on infrastructure images; release-tag pins on probectl's own | the supply-pins gate (no `:latest` under `deploy/`) + review + the scheduled security scan |
 | npm (`web/`, `browser-worker/`) | lockfiles + `npm ci` | `npm audit` gate in the `web` and `security-scan` jobs |
 | Go toolchain | the `go` directive in `go.mod` (exact patch), a verified upstream release | see [`build/toolchain.md`](build/toolchain.md) |
 
 The supply-pins gate (`scripts/check_supply_pins.sh`, run by the `action-pins`
-job) is the backstop that mechanically fails the build if any of these slips to a
-floating reference.
+job) is the backstop that mechanically fails the build on a floating reference:
+a `:latest` image ref anywhere under `deploy/`, a `go install` in CI or the
+`Makefile` without an exact `@vX.Y.Z`, or a `pip install` without exact `==`
+pins, `--require-hashes`, or `--no-deps`.
 
 ## Upgrade cadence
 
@@ -100,13 +102,18 @@ Controls specific to this dependency:
 The default is **no**. A new dependency has to clear all of:
 
 - a maintained upstream,
-- a license compatible with the editions model (CLAUDE.md §2),
-- no phone-home behavior (CLAUDE.md §7.2),
+- a license compatible with the open-core editions model (see
+  [`editions.md`](editions.md)),
+- no phone-home behavior (a
+  [non-negotiable](../CONTRIBUTING.md#non-negotiables)),
 - and a note in the PR naming what it replaces.
 
 **Crypto never comes from a new dependency** — it goes through `internal/crypto`
-only (CLAUDE.md §7.3). And per the operating model (CLAUDE.md §9), adding an
-external dependency is one of the things you ask the human about first, not after.
+only, so a FIPS-validated module can be compiled in (also a
+[non-negotiable](../CONTRIBUTING.md#non-negotiables); a CI lint guard rejects
+primitive imports elsewhere). And adding an external dependency is a design
+discussion *before* the code, not a fait accompli in a feature PR — open the
+discussion first (see [`../CONTRIBUTING.md`](../CONTRIBUTING.md)).
 
 ## Deploy-time pinning (operators)
 

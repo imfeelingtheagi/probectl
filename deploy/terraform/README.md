@@ -7,11 +7,17 @@ Postgres with your cloud's own modules and pass the DSN in.
 
 ```
 deploy/terraform/
-├── modules/probectl/         # the reusable module (helm_release + Secret + namespace)
-│   ├── versions.tf · variables.tf · main.tf · outputs.tf
+├── modules/probectl/       # the reusable module (helm_release + Secret + namespace)
+│   └── versions.tf · variables.tf · main.tf · outputs.tf
 └── examples/kubernetes/    # a root you can `terraform apply`
-    ├── main.tf · variables.tf · terraform.tfvars.example
+    └── main.tf · variables.tf · terraform.tfvars.example
 ```
+
+The module requires Terraform >= 1.5 with the `hashicorp/helm` (~> 2.12) and
+`hashicorp/kubernetes` (~> 2.25) providers (`versions.tf`). It is kept honest in
+CI: the `terraform-gate` job runs `make terraform-gate` — `terraform fmt
+-recursive -check` plus `terraform validate` of the example root that consumes
+the module.
 
 ## Quickstart
 
@@ -21,6 +27,12 @@ cp terraform.tfvars.example terraform.tfvars   # fill in (never commit real secr
 terraform init
 terraform apply
 ```
+
+A successful `apply` means the release rolled out — not that probectl is doing
+anything useful yet. Data appears once agents are deployed and reporting:
+[`docs/getting-started.md`](../../docs/getting-started.md) is the zero →
+first-data path, and [`docs/deploying-agents.md`](../../docs/deploying-agents.md)
+catalogs which agent produces which data plane.
 
 ## Module interface (`modules/probectl`)
 
@@ -59,7 +71,11 @@ manager or CI variables; never commit `terraform.tfvars`.
 
 ### Security posture
 
-The deployed release is HTTPS-by-default (TLS-terminating ingress + HSTS), runs
-as a non-root, read-only-root-FS, all-caps-dropped pod, and (in the `large`
-profile / multi-tenant values) ships a PodDisruptionBudget, HPA, and a
-default-deny NetworkPolicy. See [`../../docs/iac-gitops.md`](../../docs/iac-gitops.md).
+The deployed release inherits the chart's hardening: HTTPS-by-default
+(TLS-terminating ingress + HSTS, no plaintext API exposure), a non-root,
+read-only-root-FS, all-caps-dropped pod, and a NetworkPolicy that is **on in
+every profile** (with two documented holes you tighten per deployment — the
+`large` profile ships the filled egress allow-list). `medium` and above add a
+PodDisruptionBudget; `large` adds the HPA. See
+[`../helm/README.md`](../helm/README.md) and
+[`../../docs/iac-gitops.md`](../../docs/iac-gitops.md).

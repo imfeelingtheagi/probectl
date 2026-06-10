@@ -59,8 +59,11 @@ Image tags follow `ghcr.io/imfeelingtheagi/probectl-control:<version>` (and
 The release pipeline will not build anything unless the **full CI workflow already
 concluded green on the exact commit you are tagging** (the `require-green-ci`
 gate). Tag pushes do not trigger CI, so this gate looks up the CI run for the
-tagged commit and refuses to publish on an untested or red commit. Practically,
-that means: get the commit green on `main` first, *then* tag it.
+tagged commit and refuses to publish on an untested or red commit — it holds even
+for a tag cut off a side branch or by an admin who bypassed branch protection
+(branch protection guards the *merge*; this gate independently guards the
+*release* — see [`ops/branch-protection.md`](ops/branch-protection.md)).
+Practically, that means: get the commit green on `main` first, *then* tag it.
 
 1. Confirm CI is green on the commit you intend to tag — that single CI run
    includes every gate (`cross-tenant-isolation`, `openapi-gate`, `migration-gate`,
@@ -69,7 +72,7 @@ that means: get the commit green on `main` first, *then* tag it.
 2. Tag and push:
 
    ```sh
-   git tag -a v0.1.0 -m "Phase 1 GA"
+   git tag -a v0.1.0 -m "probectl v0.1.0"
    git push origin v0.1.0
    ```
 

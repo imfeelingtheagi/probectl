@@ -70,31 +70,53 @@ reach for most:
 
 > `make ci` runs the **core** gates fast and locally. It is *not* the full CI
 > suite — the integration, isolation-against-real-DBs, eBPF-kernel-matrix,
-> coverage, and supply-chain gates run in GitHub Actions (next section).
+> coverage, and supply-chain gates run in GitHub Actions (next section). Most
+> per-surface gates have an identically-named `make` target you can run
+> yourself: `editions-gate`, `fips-gate`, `openapi-gate`, `migration-gate`,
+> `helm-gate`, `gitops-gate`, `terraform-gate`, `cover-gate`, `perf-smoke`,
+> `e2e`.
 
 ## CI jobs (`.github/workflows/ci.yml`)
 
 The CI job names are a **contract** — every pull request runs them, and they are
-how a change earns its way to `main`. The table below is the load-bearing subset;
-`ci.yml` is the source of truth.
+how a change earns its way to `main`. This is the full list; `ci.yml` is the
+source of truth.
 
 | Job                      | Gate                                                              |
 | ------------------------ | ---------------------------------------------------------------- |
+| `action-pins`            | every workflow action is commit-SHA-pinned + the supply-pins gate (no `:latest` image refs under `deploy/`, no unpinned installs) |
+| `secret-scan`            | gitleaks over the working tree (`.gitleaks.toml` allow-lists the deliberate redaction-test fixtures) |
+| `no-devauth-in-release`  | the dev-auth bypass is **physically absent** from release binaries — symbol + literal absence, and the binary refuses `PROBECTL_AUTH_MODE=dev` at boot |
 | `lint-go`                | `gofmt` + `go vet` + `golangci-lint` + crypto/editions/SQL/TLS import guards |
 | `lint-python`            | `ruff check` + `black --check`                                  |
-| `test-go`                | unit tests (`-race`) + **fuzz smoke** (parsers must not crash) + cross-compile |
-| `test-python`            | analyzer `pytest` (incl. Hypothesis property tests)             |
-| `coverage`               | per-package coverage floor on service-free packages             |
 | `editions-gate`          | `ee/` import guard + the core-only build/test (`-tags probectl_core`) |
 | `fips-gate`              | FIPS artifact builds + power-on self-test passes                |
-| `cross-tenant-isolation` | **permanent** tenant-isolation gate (CLAUDE.md §7 g.1), real Postgres + ClickHouse |
-| `integration`            | migrations are idempotent + `/readyz` passes + result pipeline, against a real Postgres |
-| `proto`                  | `buf lint` + breaking-change check + generated-code drift       |
+| `test-go`                | unit tests (`-race`) + backup/erasure tests + **fuzz smoke** (parsers must not crash) + bench smoke + cross-compile (incl. the endpoint agent's Linux/macOS/Windows builds) |
+| `rca-eval`               | the AI root-cause eval set through the real pipeline; **blocking** floors: answer accuracy ≥ 0.85, citation precision ≥ 0.85 |
+| `coverage`               | per-package coverage floor on service-free packages (`make cover-gate`) |
+| `test-python`            | analyzer `pytest` (incl. Hypothesis property tests) + hash-lock drift refusal |
+| `browser-worker`         | the Playwright synthetic worker: real-browser scripted-login smoke inside the official Playwright image |
+| `openapi-gate`           | spec is valid OpenAPI 3.1 and the registered `/v1` routes exactly match it (no undocumented routes) |
+| `migration-gate`         | expand/contract migrations only — rejects destructive/blocking schema changes |
+| `helm-gate`              | chart hardening for every profile + the agent chart (`make helm-gate`), kubeconform on the rendered charts, GitOps manifest validation (`make gitops-gate`), compose config validation |
+| `terraform-gate`         | `terraform fmt -check` + `terraform validate` of the module's example root |
+| `ebpf-kernel-matrix`     | the BPF programs **load and attach** on real LTS kernels (5.15/6.6, amd64 + arm64, plus a lockdown-hardened entry) under QEMU |
+| `ebpf-image-live`        | the shipped eBPF-agent image is the live `-tags ebpf` build, not the fixture replayer |
+| `cross-tenant-isolation` | **permanent** tenant-isolation gate (a [non-negotiable](../CONTRIBUTING.md#non-negotiables)), against real Postgres (TLS) + ClickHouse |
+| `integration`            | migrations are idempotent + `/readyz` passes + result pipeline, against a real Postgres + Prometheus |
+| `perf-smoke`             | ingest baseline + pooled multi-tenant query-latency smoke       |
+| `backup-drill`           | the backup → wipe → restore drill executes against real stores  |
+| `failover-drill`         | timed kill-the-primary → promote-the-replica drill (RTO/RPO measured) |
+| `load-smoke`             | S-tier full-stack load smoke through real Kafka + Prometheus    |
+| `proto`                  | `buf lint` + `buf breaking` vs `main` (additive-only wire contract) + generated-code drift |
+| `web`                    | typecheck + lint + the a11y / theme-swap / no-hardcoded-token gates + `npm audit` + production build |
 | `dependency-scan`        | `govulncheck` + Trivy filesystem scan (**vulnerabilities only**) |
 | `image-scan`             | Trivy image scan (**vulnerabilities only**)                    |
 | `build-images`           | multi-arch image build for every component (Buildx + QEMU)     |
 | `commitlint`             | Conventional Commits (pull requests only)                       |
 | `dco`                    | every commit carries a `Signed-off-by` trailer (pull requests only) |
+| `sbom`                   | CycloneDX SBOM of the Go module graph, retained 90 days (informational, not a merge gate) |
+| `verify-all`             | the umbrella check: red unless every verification job it depends on concluded green |
 
 > **Trivy is vulnerability-only here, by design.** Secret scanning is the separate
 > `secret-scan` job (gitleaks), which owns the `.gitleaks.toml` allow-list for the
@@ -102,9 +124,18 @@ how a change earns its way to `main`. The table below is the load-bearing subset
 > so pointing it at secrets would re-flag those intentional fixtures — hence
 > `scanners: vuln` in both Trivy jobs.
 
-There is no branch-protection job in CI: it was removed as premature ceremony for
-a solo, pre-GA repo. The release pipeline still refuses to publish a tag whose CI
-run isn't green (see [`releasing.md`](releasing.md)).
+Two more workflows run outside the pull-request loop: **`nightly.yml`** (the
+black-box full-stack e2e via `make e2e`, ingest benchmarks, and the M-profile
+scale-gate regression guard — too slow to run per-PR) and
+**`security-scan.yml`** (weekly `govulncheck` / `npm audit` / Trivy with
+retained evidence artifacts, so a newly-disclosed CVE in an *unchanged* pin
+still goes red on its own).
+
+CI itself cannot make merges blocking — that is **branch protection**, a GitHub
+repository setting documented in
+[`ops/branch-protection.md`](ops/branch-protection.md). Independently of it, the
+release pipeline refuses to publish any tag whose CI run isn't green (see
+[`releasing.md`](releasing.md)).
 
 ## Testing layers
 
@@ -127,8 +158,10 @@ deploy recipes are `sslmode=require` or stricter.
 - **Fuzz** (`make fuzz-smoke`) — Go fuzz targets over the untrusted-input parsers
   (ICMP / Time-Exceeded / MPLS in `internal/path`, the BGP-event ingest in
   `internal/bgp`). The invariant is "never panic", and the bridge must
-  additionally never publish a tenant-less event under fuzzing (fail-closed,
-  guardrail 1). CI runs a short smoke; run longer locally with `-fuzztime`.
+  additionally never publish a tenant-less event under fuzzing — the fail-closed
+  tenancy rule (see the
+  [non-negotiables](../CONTRIBUTING.md#non-negotiables)). CI runs a short smoke;
+  run longer locally with `-fuzztime`.
 - **Property** (Hypothesis, in the analyzer suite) — the MRT parser and RPKI
   validator are checked over thousands of generated inputs (robustness +
   round-trip + soundness), the Python counterpart to the Go fuzzers.

@@ -27,15 +27,17 @@ The version is named in two places that are kept in lockstep:
   build stops instead of silently using an untrusted compiler.
 
 - **Pinning.** Because the directive names the *exact patch* (`1.26.4`, not a
-  loose `1.26`), every developer machine and every CI runner resolves to the
-  same compiler. CI's `setup-go` step is pinned to the same `1.26.4`
-  (`.github/workflows/ci.yml`, `GO_VERSION: "1.26.4"`), so there is literally one
-  toolchain everywhere, by construction.
+  loose `1.26`), every developer machine resolves to the same compiler. The
+  workflows that build and gate shipped artifacts pin their `setup-go` to the
+  same patch (`GO_VERSION: "1.26.4"` in `.github/workflows/ci.yml` and
+  `release.yml`), and the `go` directive is the floor everywhere else — a
+  machine running an older Go fetches and checksum-verifies `1.26.4` before it
+  compiles anything.
 
 - **Why this patch level.** `1.26.4` is pinned *forward* deliberately: it carries
-  upstream **standard-library security fixes** (the `crypto/x509` and
-  `net/textproto` advisories) that `govulncheck` would otherwise flag. Bumps land
-  through the normal pull-request + green-CI path, never out of band.
+  upstream **standard-library security fixes** (GO-2026-5037 in `crypto/x509`,
+  GO-2026-5039 in `net/textproto`) that `govulncheck` would otherwise flag. Bumps
+  land through the normal pull-request + green-CI path, never out of band.
 
 ## Why it's built this way
 
@@ -49,9 +51,11 @@ The version is named in two places that are kept in lockstep:
   *minimum* every build must use. `go.work` must not name an older Go than the
   modules' `go.mod`, or Go rejects the workspace whenever it cannot auto-resolve
   a newer toolchain — which is exactly the case under `GOTOOLCHAIN=local`, the
-  mode the FIPS distribution build runs in (`make build-fips`). Keeping the
-  `go.work` `go` line and `toolchain` line in sync with `go.mod` is what stops
-  that build from breaking.
+  mode the FIPS distribution build (`make build-fips`) and any offline or
+  air-gapped build runs in (no network means no toolchain download — the local
+  Go either satisfies the floor or the build refuses). Keeping the `go.work`
+  `go` line and `toolchain` line in sync with `go.mod` is what stops those
+  builds from breaking.
 
 - **No vendored or forked toolchain exists in this repository.** Provenance is
   upstream-official plus checksum-database-verified — full stop. That is the

@@ -11,6 +11,11 @@ deploy/gitops/
 └── flux/{gitrepository,helmrelease}.yaml   # Flux source + HelmRelease
 ```
 
+These manifests are structurally validated in CI (`make gitops-gate`, run by the
+`helm-gate` job), so a broken reference manifest fails the build. The deep dive —
+how Terraform, GitOps, and the chart hardening fit together — is
+[`docs/iac-gitops.md`](../../docs/iac-gitops.md).
+
 ## Config-as-code
 
 The declarative probectl config IS the Helm values: `control.*`, `oidc.*`,
@@ -64,3 +69,8 @@ manifest → the controller renders the chart and applies the namespace,
 Deployment, Service, hardened ingress, NetworkPolicy/PDB/HPA, and the migrations
 init-container. Rolling upgrades and rollback are then driven by the same Git
 source — change the chart version or values in Git and the controller reconciles.
+
+A converged sync is a running control plane, not yet a useful one — data appears
+once agents are deployed and reporting. Continue with
+[`docs/getting-started.md`](../../docs/getting-started.md) and
+[`docs/deploying-agents.md`](../../docs/deploying-agents.md).
