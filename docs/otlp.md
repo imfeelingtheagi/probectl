@@ -35,18 +35,18 @@ store (see "Deliberate bounds" below).
   standard OTel Collector exports straight to the receiver — there's a reference
   config at `deploy/otel-collector/config.yaml`.
 - **OTLP export.** Metrics only. Re-exporting ingested traces/logs is not a goal.
-- **Deliberate bounds (CLAUDE.md §10).** probectl ingests traces + logs for
-  **correlation** — bounded attributes, capped bodies, retention-limited. It is
-  **not** an APM / distributed-tracing replacement and **not** a log-analytics
-  store. Positioning language may claim three-signal OTLP ingest with exactly
-  those bounds — and no more.
+- **Deliberate bounds.** probectl ingests traces + logs for **correlation** —
+  bounded attributes, capped bodies, retention-limited. It is **not** an APM /
+  distributed-tracing replacement and **not** a log-analytics store. probectl
+  claims three-signal OTLP ingest with exactly those bounds — and no more.
 
 ## Receiver — inbound, TLS-only, authenticated, tenant-scoped
 
-The receiver is an inbound ingestion surface, so it gets the full guardrail-12
-treatment (CLAUDE.md §7): TLS is required, every push is authenticated and
-tenant-scoped, the payload is untrusted, and anything missing makes it **fail
-closed**.
+The receiver is an inbound ingestion surface, so it gets probectl's full
+ingestion-guardrail treatment (see
+[`security/threat-model.md`](security/threat-model.md)): TLS is required, every
+push is authenticated and tenant-scoped, the payload is untrusted, and anything
+missing makes it **fail closed**.
 
 - **Transports & signals.** Both OTLP/gRPC (`MetricsService`, `TraceService`,
   `LogsService`) and OTLP/HTTP (`POST /v1/metrics`, `/v1/traces`, `/v1/logs`,
@@ -126,7 +126,8 @@ Two checks pin this layer in CI:
   enforced. The full three-signal ingest path is exercised by
   `TestOTLPThreeSignalRoundTrip` (`internal/pipeline`).
 - `internal/otel.TestAllSignalMappingsConform` holds **every** signal mapping —
-  result, flow, L7, BGP, path — to the OTel / `probectl.*` naming discipline.
+  result, eBPF flow, L7, device flow (NetFlow/IPFIX/sFlow), device telemetry,
+  BGP, path — to the OTel / `probectl.*` naming discipline.
 
 ## Deploying behind an OTel Collector
 
@@ -145,6 +146,5 @@ paths, so a stock **opentelemetry-collector** exports to it with the ordinary
 
 The token determines the tenant: probectl verifies or stamps `probectl.tenant.id`
 server-side, so a mislabeled resource is rejected — never misfiled. The
-three-signal round-trip is pinned in CI (`TestOTLPThreeSignalRoundTrip`); the
-live exercise against a real Collector on real infrastructure is the part of
-acceptance that needs infrastructure rather than a unit test.
+three-signal round-trip is pinned in CI (`TestOTLPThreeSignalRoundTrip` in
+`internal/pipeline`).

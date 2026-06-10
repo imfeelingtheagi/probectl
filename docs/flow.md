@@ -96,7 +96,8 @@ signals rather than remapping them. The mapping (see
 
 Flow export is **plaintext UDP with no authentication — by protocol design**
 (the same reality every flow collector lives with). probectl treats it as an
-untrusted ingestion surface (CLAUDE.md §7 guardrail 12):
+untrusted ingestion surface (see
+[`security/threat-model.md`](security/threat-model.md)):
 
 - every datagram is **untrusted input**: decoders are pure and bounds-checked,
   record counts and template state are capped, and malformed input is counted
@@ -137,7 +138,9 @@ the flow store (`internal/store/flowstore/clickhouse.go`):
 - a `memory` store (the default) implements the same `Store` contract for the
   lightweight / single-node deploy, and is the reference implementation the
   ClickHouse SQL must agree with (the two share one anomaly detector, so both
-  backends flag identically).
+  backends flag identically). The control plane selects the backend with
+  `PROBECTL_FLOWSTORE_MODE=memory|clickhouse` (+ `PROBECTL_FLOWSTORE_URL` for
+  ClickHouse).
 
 In siloed/hybrid isolation, a per-tenant ClickHouse database holds that tenant's
 `probectl_flows` table; the store routes each tenant to its target and **fails
@@ -198,6 +201,8 @@ PROBECTL_FLOW_BUS_BROKERS=localhost:9092 ./bin/probectl-flow-agent
 curl -s "https://localhost:8443/v1/flows/top?by=src_asn&window=15m&limit=5"
 ```
 
-See `deploy/agent/probectl-flow-agent.example.yml` for the YAML form of every
-key, and [`configuration.md`](configuration.md) for the full `PROBECTL_FLOW_*`
-reference.
+See [`deploying-agents.md`](deploying-agents.md) for where the collector sits
+in the producer catalog (placement, service files, the full
+producer-to-first-data path), `deploy/agent/probectl-flow-agent.example.yml`
+for the YAML form of every key, and [`configuration.md`](configuration.md) for
+the full `PROBECTL_FLOW_*` reference.

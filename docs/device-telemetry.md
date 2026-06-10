@@ -104,7 +104,7 @@ as `credential(redacted)`).
 The default source reads the environment. For a credential named `core-ro`
 (uppercased, with `-`/`.` mapped to `_`):
 
-```
+```text
 PROBECTL_DEVICE_CRED_<NAME>_COMMUNITY      # SNMP v2c
 PROBECTL_DEVICE_CRED_<NAME>_USERNAME       # SNMP v3 / gNMI metadata auth
 PROBECTL_DEVICE_CRED_<NAME>_AUTH_PROTO     # sha (default) | sha256 | sha512 | md5
@@ -136,9 +136,11 @@ username/password, it rides gRPC metadata per the gNMI convention.
 
 ## Configuration
 
-See `deploy/agent/probectl-device-agent.example.yml` for the YAML form and
-[`configuration.md`](configuration.md#device-telemetry-agent-probectl-device-agent-s39)
-for every key. Quick start against one switch:
+See [`deploying-agents.md`](deploying-agents.md) for where the device agent
+sits in the producer catalog (placement, service files, the full
+producer-to-first-data path), `deploy/agent/probectl-device-agent.example.yml`
+for the YAML form, and [`configuration.md`](configuration.md) for every key.
+Quick start against one switch:
 
 ```bash
 export PROBECTL_DEVICE_TENANT=t-acme

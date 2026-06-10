@@ -63,8 +63,9 @@ flowchart LR
 ## Query API (the contract everything else consumes)
 
 The `Store` interface (`internal/topology/store.go`) is tenant-scoped: every
-method takes a tenant and **never returns another tenant's graph** (CLAUDE.md §7
-guardrail 1).
+method takes a tenant and **never returns another tenant's graph** — tenant
+isolation is probectl's outermost boundary (see
+[`security/tenant-isolation.md`](security/tenant-isolation.md)).
 
 - `SnapshotAt(tenant, t)` / `Latest(tenant)` — the graph, or its state at `t`.
 - `Neighbors(tenant, nodeID, t)` — a node's adjacency at `t`.
@@ -118,8 +119,8 @@ Second, simulation accuracy depends on graph completeness, so every result
 carries a **coverage block** — per-plane edge counts plus notes for missing
 planes ("no flow-plane (eBPF) edges — service impact may be incomplete"). The
 simulation is strictly **read-only**: it runs on a copy and never mutates the
-graph. Acting on a prediction is a separate, human-gated capability (CLAUDE.md
-§7 guardrail 8) — probectl predicts, a human decides.
+graph. Acting on a prediction is a separate, human-gated capability (see
+[`remediation.md`](remediation.md)) — probectl predicts, a human decides.
 
 ## Visualization
 

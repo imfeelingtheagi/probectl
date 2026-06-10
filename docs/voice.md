@@ -16,8 +16,9 @@ From those echoes it computes three numbers operators recognize:
 - **Packet loss** — how many of the RTP packets never came back.
 
 It is a standard canary like ICMP or HTTP: you create a test, it runs on a
-schedule, and the result flows through the normal pipeline. The implementation
-lives in `internal/canary/voice.go`.
+schedule, and the result flows through the normal pipeline (the
+agent-to-first-result journey is [`getting-started.md`](getting-started.md)).
+The implementation lives in `internal/canary/voice.go`.
 
 ## Creating a test
 
@@ -100,9 +101,10 @@ than approximated with the wrong formula.
 **Attributes:** `voice.codec`, `voice.model`, `voice.method`
 (`rtp-udp-echo-reflection`), `voice.jitter_buffer_ms`, `voice.one_way_estimate`.
 
-Results render in the Targets & Tests views with MOS up front
-(≥4.0 good / ≥3.6 fair / below = poor) and the model named in the detail — so a
-*computed* score is never presented as a *measured* listening test.
+Results render in the result-detail view (reached from the Targets & Tests
+pages) with MOS up front (≥4.0 good / ≥3.6 fair / below = poor) and the model
+named alongside it — so a *computed* score is never presented as a *measured*
+listening test.
 
 ## What it deliberately does not do
 

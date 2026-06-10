@@ -2,12 +2,14 @@
 
 ## What it is
 
-Every time probectl makes an HTTPS request — through the HTTP synthetic canary,
-or by reading plaintext at the eBPF L7 layer — a TLS handshake happens, and that
-handshake *already tells you* the server's certificate, TLS version, and cipher.
-The **TLS observability** layer harvests that information probectl has **already
-captured** and analyzes it for posture problems: certs about to expire, weak
-keys, deprecated TLS versions, untrusted chains, and so on.
+Every time probectl's HTTP synthetic canary makes an HTTPS request, a TLS
+handshake happens, and that handshake *already tells you* the server's
+certificate, TLS version, and cipher. The **TLS observability** layer harvests
+that information probectl has **already captured** and analyzes it for posture
+problems: certs about to expire, weak keys, deprecated TLS versions, untrusted
+chains, and so on. (The observation model is source-tagged — `http` | `ebpf` —
+so the eBPF L7 plane can feed the same analyzer; today the HTTPS synthetic is
+the live source. See the coverage caveat below.)
 
 The key design choice is in the name: it **observes**, it does not re-probe. It
 never opens a second connection or re-handshakes a target just to inspect the
@@ -35,7 +37,9 @@ The flow, step by step:
    normal handshake — the negotiated version and cipher, whether the chain
    verified, and the leaf certificate's raw DER bytes — as result attributes
    (`tls.protocol.version`, `tls.cipher`, `tls.server.verified`,
-   `tls.server.cert`, plus the JA3/JA3S fingerprints).
+   `tls.server.cert`). The observation also carries `tls.ja3` / `tls.ja3s`
+   fingerprint fields when a capture source supplies them — the HTTPS canary
+   does not emit them today.
 2. **Rehydrate, don't re-fetch.** `threat.FromCanaryAttributes` turns those
    attributes back into a `TLSObservation` — parsing the leaf DER into a real
    certificate object. It opens **no** new connection. If the result carried no
@@ -48,8 +52,8 @@ The flow, step by step:
 
 From the captured handshake and the parsed leaf certificate, the analyzer flags:
 
-- **expired** certs (critical) and **expiring-soon** certs (within a configurable
-  window, default 21 days);
+- **expired** certs (critical) and **expiring-soon** certs (within a
+  configurable window — `PROBECTL_TLS_EXPIRY_WARNING`, default 21 days);
 - **not-yet-valid** certs;
 - **self-signed** certs (issuer == subject);
 - **weak RSA keys** (below 2048 bits);
@@ -76,9 +80,10 @@ renewal flow in the sibling product.
 ## CT correlation (opt-in)
 
 When you enable it with `PROBECTL_CT_ENABLED=true`, probectl correlates a leaf's
-serial number against **Certificate Transparency** logs (crt.sh by default). A
-serial that CT has **never seen** is flagged as a low-severity *issuance anomaly*
-— a possible sign a cert was minted outside the normal pipeline.
+serial number against **Certificate Transparency** logs (crt.sh by default;
+`PROBECTL_CT_ENDPOINT` overrides). A serial that CT has **never seen** is
+flagged as an info-severity *issuance anomaly* — a possible sign a cert was
+minted outside the normal pipeline.
 
 It is **off by default** on purpose: it's an outbound fetch to a third party,
 which collides with the no-phone-home / sovereignty stance. When enabled it
@@ -87,29 +92,34 @@ limits, fetches over validated TLS, and **degrades gracefully**: a CT source
 that's down or throttled is a silent no-op, never an error that breaks posture
 analysis.
 
-## Coverage caveat — the Go-server blind spot
+## Coverage caveat — what feeds the inventory, and the Go-server blind spot
 
-The two capture paths see different things:
+The observation model defines two capture sources, and they see different
+things:
 
-- The **HTTP synthetic** path sees the certificate **probectl's own client**
-  negotiated. This always works — it's probectl initiating the handshake.
-- The **eBPF L7** path sees **server-side** TLS by reading plaintext at the TLS
-  library's read/write calls. But a **Go server terminates TLS inside the Go
-  runtime**, not in a system TLS library probectl's uprobes attach to — so a Go
-  server's TLS can be invisible to the eBPF path until Go-runtime uprobes land
-  (the same Go-TLS limitation described in
+- The **HTTP synthetic** path (`source: http`) sees the certificate
+  **probectl's own client** negotiated. This always works — it's probectl
+  initiating the handshake — and it is the path that feeds the posture
+  inventory today.
+- The **eBPF L7** path (`source: ebpf`) is the designed-in second source: it
+  would see **server-side** TLS by reading plaintext at the TLS library's
+  read/write calls. It is not wired into the posture pipeline yet — and when it
+  is, it carries a structural blind spot: a **Go server terminates TLS inside
+  the Go runtime**, not in a system TLS library probectl's uprobes attach to,
+  so a Go server's TLS stays invisible to the eBPF path until Go-runtime
+  uprobes land (the same Go-TLS limitation described in
   [`ebpf-feasibility.md`](ebpf-feasibility.md)).
 
-The synthetic path is unaffected by this — it's a limitation of the
-*passively-observed* eBPF source only.
+The synthetic path is unaffected by either caveat: anything you point an HTTPS
+test at lands in the inventory.
 
 ## Out of scope
 
-- **Malicious-cert / JA3 threat-intel correlation** — matching certs and JA3
-  fingerprints against feeds like SSLBL is the *threat-intel* layer's job (it
-  reuses the same captured TLS via the analyzer's `WithIntel` hook), not this
-  posture layer's. Here, **JA3 / JA3S are surfaced as observed fields, not
-  scored**.
+- **Malicious-cert / JA3 threat-intel correlation** — matching cert
+  fingerprints and JA3 fingerprints against feeds like SSLBL is the
+  *threat-intel* layer's job (it reuses the same captured TLS via the
+  analyzer's `WithIntel` hook), not this posture layer's. Here, **JA3 / JA3S
+  are carried as observed fields when a source supplies them, never scored**.
 - **Full NDR detections** — also a separate layer.
 
 ## The posture surface

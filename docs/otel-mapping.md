@@ -72,8 +72,8 @@ falls over.
 
 ## eBPF flow (`probectl.ebpf.v1.Flow`)
 
-The host/L4 observability signal. Mapping in `internal/otel/flow.go`
-(`FlowAttributes`).
+The host/L4 observability signal from the eBPF agent. Mapping in
+`internal/otel/flow.go` (`FlowAttributes`).
 
 | proto field                                | OTel attribute                          |
 | ------------------------------------------ | --------------------------------------- |
@@ -101,6 +101,45 @@ Plus `network.protocol.name` (the protocol itself) and `probectl.l7.encrypted`
 on every call (set when the call was captured via a TLS-library uprobe, i.e.
 plaintext read before encryption).
 
+## Device flow — NetFlow / IPFIX / sFlow (`probectl.flow.v1.FlowRecord`)
+
+The passive flow-plane signal (see [`flow.md`](flow.md)) — one record per flow
+a router or switch exported. Mapping in `internal/otel/netflow.go`
+(`NetFlowAttributes`). The 5-tuple reuses the same `source.*` /
+`destination.*` / `network.*` keys the eBPF flow mapping registers; the
+flow-export specifics have no OTel home and use `probectl.flow.*`; AS/geo
+enrichment uses the ECS-aligned names, because neither OTel nor `probectl.*`
+needs a new name where ECS already has one.
+
+| proto field                                 | OTel attribute                                  | notes                                           |
+| ------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `tenant_id` / `agent_id`                    | `probectl.tenant.id` / `probectl.agent.id`      | tenant is the outermost scope                   |
+| `exporter_address`                          | `probectl.flow.exporter.address`                | the device that emitted the datagram            |
+| `flow_protocol`                             | `probectl.flow.protocol`                        | `netflow5` \| `netflow9` \| `ipfix` \| `sflow5` |
+| `source_address` / `source_port`            | `source.address` / `source.port`                | zero/empty omitted                              |
+| `destination_address` / `destination_port`  | `destination.address` / `destination.port`      | zero/empty omitted                              |
+| `network_transport` / `network_type`        | `network.transport` / `network.type`            |                                                 |
+| `input_interface` / `output_interface`      | `probectl.flow.interface.in` / `.interface.out` | the exporter's ifIndex values                   |
+| `sampling_rate`                             | `probectl.flow.sampling.rate`                   | 1 = unsampled                                   |
+| `source_asn` / `source_as_name` / `source_country` | `source.as.number` / `source.as.organization.name` / `source.geo.country.iso_code` | ECS-aligned; `destination.*` equivalents likewise |
+
+## Device telemetry (`probectl.device.v1.DeviceMetric`)
+
+The SNMP/gNMI device-plane sample (see
+[`device-telemetry.md`](device-telemetry.md)). Mapping in
+`internal/otel/device.go` (`DeviceMetricAttributes`). No OTel semantic
+convention covers network-device telemetry, so the identity attributes live
+under `probectl.device.*` — and the metric *names* themselves
+(`probectl.device.if.in.octets`, …) are probectl-owned for the same reason.
+
+| proto field          | OTel attribute                                        |
+| -------------------- | ----------------------------------------------------- |
+| `tenant_id` / `agent_id` | `probectl.tenant.id` / `probectl.agent.id`        |
+| `device_address`     | `probectl.device.address`                             |
+| `device_name`        | `probectl.device.name`                                |
+| `source`             | `probectl.device.source` (`snmp` \| `gnmi`)           |
+| `if_index` / `if_name` | `probectl.device.interface.index` / `.interface.name` (omitted when device-wide) |
+
 ## BGP event (`probectl.bgp.v1.BGPEvent`)
 
 BGP has no OTel semantic convention, so the routing signal uses the
@@ -120,7 +159,8 @@ standard `destination.address`; path specifics use `probectl.path.*` —
 ## Conformance
 
 `internal/otel.TestAllSignalMappingsConform` holds **every** mapping — result,
-eBPF flow, L7, BGP, path — to two rules: it may emit only OTel-standard or
-`probectl.*` names, and it must carry the tenant. The OTLP layer
-(`internal/otel/otlp`) then turns these attribute sets into OTLP
-`ResourceMetrics` for export and ingest; see [`otlp.md`](otlp.md) for that side.
+eBPF flow, L7, device flow (NetFlow/IPFIX/sFlow), device telemetry, BGP, path —
+to two rules: it may emit only OTel-standard (or ECS-aligned) or `probectl.*`
+names, and it must carry the tenant. The OTLP layer (`internal/otel/otlp`) then
+turns these attribute sets into OTLP `ResourceMetrics` for export and ingest;
+see [`otlp.md`](otlp.md) for that side.
