@@ -226,8 +226,40 @@ See **[`docs/editions.md`](docs/editions.md)**.
 
 ## Quickstart (run it)
 
-Bring up the control plane **over HTTPS** with a bundled Postgres (a self-signed
-cert is generated on first boot):
+**One idea first: the control plane is a *consumer*, not a producer.** It
+ingests, correlates, stores, and serves — but it never observes the network
+itself. The things that watch the wire and run probes are the **producers**:
+the agents and collectors. So a control plane with **no producers attached
+collects nothing** — `/readyz` goes green and the dashboards stay empty. That's
+expected, not a bug. To see data you have to attach at least one producer.
+
+### Fastest path to *first data* — the evaluation stack
+
+This brings up the control plane **plus** an eBPF agent in **fixture mode**
+(replaying a recorded, clearly-labelled file of SAMPLE flows — no kernel, works
+on macOS/Windows/Linux), so you watch a real signal flow end-to-end with one
+command and no Go toolchain:
+
+```sh
+docker compose -f deploy/compose/eval.yml up --build -d
+# ~20s for the control plane to migrate + start, then:
+docker compose -f deploy/compose/eval.yml --profile tools run --rm viewer
+```
+
+`viewer` prints the `/v1/topology` service map the control plane folded out of
+those sample flows — that JSON **is your first data**. This stack is
+**evaluation-only** (loopback dev-auth — every request is an unauthenticated
+admin — plus plaintext Kafka and a self-signed cert), so it's never reachable
+from your network and never for production. Walk it all the way through —
+including synthetic (canary) probes and the build-from-source path — in
+**[`docs/getting-started.md`](docs/getting-started.md)**, and meet every
+producer you can attach in **[`docs/deploying-agents.md`](docs/deploying-agents.md)**.
+
+### Production-shaped stack
+
+The shipped all-in-one deploy is `deploy/compose/probectl.yml`: the control
+plane **over HTTPS** with a bundled Postgres (a self-signed cert is generated on
+first boot), no evaluation weakenings.
 
 ```sh
 cp deploy/compose/.env.example deploy/compose/.env     # set PROBECTL_ENVELOPE_KEY etc.
@@ -236,11 +268,12 @@ docker compose -f deploy/compose/probectl.yml cp control:/certs/ca.crt ./ca.crt
 curl --cacert ./ca.crt https://localhost:8443/readyz
 ```
 
-Once `/readyz` is green, open the UI at `https://localhost:8443`, register an
-agent, and run your first synthetic test — or ask the assistant a question. The
-API is HTTPS-only (no plaintext port). Full guide, real certificates, SSO, and
-the Kubernetes/Helm path: **[`docs/install.md`](docs/install.md)**; day-2
-operation (audit, roles, SSO): **[`docs/admin.md`](docs/admin.md)**.
+Once `/readyz` is green, open the UI at `https://localhost:8443` — then (per the
+consumer/producer rule above) register an agent and run your first synthetic
+test, or ask the assistant a question. The API is HTTPS-only (no plaintext
+port). Full guide, real certificates, SSO, and the Kubernetes/Helm path:
+**[`docs/install.md`](docs/install.md)**; day-2 operation (audit, roles, SSO):
+**[`docs/admin.md`](docs/admin.md)**.
 
 ## Build from source
 
@@ -277,11 +310,13 @@ test/           # integration harness (separate Go module)
 
 ## Documentation
 
-New here? Start with **Why probectl** and **How it works** above, then the
-install guide. Going deeper:
+New here? Start with **Why probectl** and **How it works** above, then walk the
+zero-to-first-data journey in getting started. Going deeper:
 
 | Topic | Doc |
 |---|---|
+| Getting started (zero → first real data) | [`docs/getting-started.md`](docs/getting-started.md) |
+| Deploying agents & collectors (the producers) | [`docs/deploying-agents.md`](docs/deploying-agents.md) |
 | Install & deploy (compose / Helm / air-gapped) | [`docs/install.md`](docs/install.md) |
 | Day-2 admin (audit, roles, SSO) | [`docs/admin.md`](docs/admin.md) |
 | Architecture deep-dives | [`docs/architecture.md`](docs/architecture.md) |

@@ -1,8 +1,19 @@
 # Administering probectl
 
 Day-2 operation of an installed deployment: identity and roles, the audit trail,
-and SSO. For installation see [install.md](install.md); for every config key see
+SSO, and the fleet of **agents** that actually feed the control plane. For
+installation see [install.md](install.md); for every config key see
 [configuration.md](configuration.md).
+
+> **Consumer vs. producer.** The control plane is a *consumer* — it stores,
+> correlates, and serves, but it observes nothing on its own. The **agents and
+> collectors** are the *producers* that watch the network and ship what they see.
+> A control plane with no producers is a healthy, empty database. So "operating
+> the fleet" — enrolling, revoking, rotating, and upgrading agents — *is* a core
+> day-2 job, covered in [Operating the agent fleet](#operating-the-agent-fleet-day-2)
+> below. To stand up your first producer end-to-end, start with the
+> [getting-started guide](getting-started.md); for the full catalog of producers
+> and how to deploy each, see [deploying-agents.md](deploying-agents.md).
 
 ## Identity, roles, and access (RBAC)
 
@@ -72,6 +83,124 @@ callback with your IdP. Login begins at `GET /auth/login`; the session cookie is
 provider factory; the factory exists today, but DB-backed per-tenant IdP
 configuration is still to come — until it lands, the single env-configured IdP is
 shared across tenants.
+
+## Operating the agent fleet (day-2)
+
+Agents are the producers; the control plane is the consumer. Keeping the fleet
+healthy is the other half of day-2. The lifecycle has four operator touchpoints:
+**enroll** an agent (give it an identity), **revoke** one that's compromised,
+let the runtime **rotate** identities forever after, and **roll out** new
+versions in waves. Each is detailed below; the deep walkthrough with the threat
+model lives in [agent/enrollment.md](agent/enrollment.md).
+
+The one idea underneath all of it: an agent is useless until it holds an
+**SVID** — a short-lived mTLS client certificate whose identity names *both* its
+tenant and its agent id. No SVID, no transport: the control plane refuses the
+connection at the TLS handshake, so nothing the agent sends lands anywhere. You
+never hand-copy certificates around; agents *earn* an identity by redeeming a
+one-time token, and the runtime keeps it fresh on its own.
+
+### Enrolling an agent
+
+Two steps, on two different hosts.
+
+**1. Mint a join token on the control host.** This is an operator action; the
+mint is audited and only a *hash* of the token is stored.
+
+```sh
+probectl-control enroll-token -tenant <tenant-uuid> [-agent <id>] [-name <label>] [-ttl 1h]
+```
+
+It prints — **once** — a single-use `pjt_…` token (default validity 1 hour), a
+**token id** for your records, and the server-certificate **pin** (a hex SHA-256
+of the control plane's serving cert) that the agent can use to trust the server
+on first contact. The token is **tenant-scoped: the token, not the agent, names
+the tenant**, which is why `-tenant` is required. `-agent` optionally nails the
+token to one specific agent id; `-name` is a human label; `-ttl` shortens or
+lengthens the window.
+
+> The same mint is available over the admin API
+> (`POST /v1/agents/enroll-tokens`, requires the `agent.write` permission) for
+> automated provisioning — both surfaces go through the identical service path.
+
+**2. Redeem the token on the agent host.** The agent generates its private key
+**locally** (the key never leaves that host), sends a certificate request, and
+receives its SVID, the issuing intermediate, and the trust bundle — all written
+`0600` into `--dir`:
+
+```sh
+probectl-agent enroll \
+  --server https://<control-host>:8443 \
+  --token pjt_... \
+  --dir /var/lib/probectl-agent/identity \
+  --ca-pin <hex-sha256>          # the pin printed at mint, for self-signed deployments
+  # …or, for a CA-issued control-plane cert:
+  # --ca-file ca.crt
+```
+
+You must give the agent exactly one way to trust the server: `--ca-pin` (the pin
+from step 1 — there is **no** trust-on-first-use fallback, so a mismatched pin
+**refuses** the connection) or `--ca-file` (a CA bundle). On success it prints
+the SVID's identity and expiry and the config snippet to point the agent at its
+new identity files. Setting `identity.server` in that config is what enables the
+automatic rotation described next.
+
+### Revoking a compromised agent
+
+If an agent (or its key) is compromised, revoke it:
+
+```sh
+probectl-control revoke-agent -tenant <uuid> -agent <id>
+```
+
+This **persists** the revocation (so it survives a control-plane restart) and
+feeds the mTLS handshake **deny-list**. A *running* control plane reloads that
+persisted list every **30 seconds**, so from its next connection the agent's
+handshakes are refused, its live certificate serials are denied, and its
+identity is denied outright — meaning even a re-issued certificate is rejected,
+and both **enrollment and rotation refuse that identity** going forward. There
+is no resurrection path short of an operator un-revoking it in the database.
+(The admin API equivalent, `POST /v1/agents/{id}/revoke`, pushes the denial
+**live immediately** rather than waiting for the 30-second refresh.)
+
+### Certificate rotation — and what you watch
+
+SVIDs are deliberately short-lived (24 hours), so a stolen one is only useful
+briefly. With `identity.server` set, the agent runtime rotates **automatically
+at roughly 2/3 of the certificate's lifetime**: it generates a fresh key, proves
+possession of the current one, and asks the control plane to re-issue. The
+**identity can never change on rotation** — only the key and expiry do. New
+files are swapped in atomically and the mTLS client hot-reloads them on the next
+handshake, so there is **no restart and no gap in data** as long as rotation
+keeps succeeding.
+
+Rotation is self-healing: a failed attempt retries every minute while the
+current SVID is still valid, logging loudly. As an operator you mostly watch for
+two things in the agent logs:
+
+- `agent SVID rotated` — the healthy steady-state heartbeat of rotation working.
+- `identity rotation FAILED (will retry; ingest stops if the SVID expires)` —
+  the warning that matters. If you see this persisting, fix it (reachability to
+  `identity.server`, a not-yet-revoked identity) **before** the 24-hour SVID
+  expires, because once it does the agent's transport stops and its data dries
+  up.
+
+The full rotation protocol and security properties are in
+[agent/enrollment.md](agent/enrollment.md).
+
+### Staged fleet rollout
+
+Upgrading the whole fleet at once is how one bad version takes everything down.
+probectl instead moves a fleet to a new version in **waves** — a small canary
+first, then early, then the rest — from **signed** artifacts, with the agent
+registry **verifying** each wave and any failure **halting the train**.
+Crucially, there is **no agent self-update**: agents never fetch or run new code
+on their own (that would be a fleet-wide remote-code-execution primitive); the
+control plane only *plans* and *verifies* waves while your orchestrator (Helm /
+`install.sh` / config management) does the actual pushing. The full operator
+runbook — plan, advance one wave, verify from the registry, halt-on-error, and
+the explicit resume-with-a-note step — is in
+[ops/fleet-rollout.md](ops/fleet-rollout.md).
 
 ## Transport posture
 

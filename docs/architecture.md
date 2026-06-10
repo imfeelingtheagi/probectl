@@ -48,6 +48,56 @@ collectors, geo data, threat intel) are pulled in *once*, shared, and then
 attributed per tenant when stored — probectl owns no measurement fleet of its
 own.
 
+### Producers and consumers — and why "no producers = no data"
+
+The single most important operational fact for a new reader: **the control plane
+is the *consumer*, and the agents/collectors are the *producers*.** The control
+plane produces no observations of its own — it does not probe, sniff, poll, or
+peer with anything. It only **receives, stores, correlates, and serves** the data
+that producers ship in. (The one thing it triggers itself is operator-initiated
+path discovery; see [Path visualization](#path-visualization). Everything else
+arrives from a producer.)
+
+The practical consequence: **a brand-new control plane with nothing attached is
+an empty system — by design, not by fault.** It will start, serve a healthy UI
+and API, pass its own health checks, and show *zero* network data, because
+nothing is observing the network yet. Data appears only once you attach
+producers. So the first question when a fresh install "shows nothing" is never
+"is the control plane broken?" — it is "what's producing?"
+
+The producers are the binaries under `cmd/probectl-*` (deploy configs and the
+full how-to live in [`deploying-agents.md`](deploying-agents.md)):
+
+| Producer | What it observes | How it ships data in |
+| --- | --- | --- |
+| `probectl-agent` (canary/synthetic + path engine) | active ICMP/TCP/UDP/DNS/HTTP probes and traceroutes it runs itself | **streams over gRPC/mTLS** to the control plane (`StreamResults`); the control plane re-publishes onto the bus as `probectl.network.results` |
+| `probectl-flow-agent` | passive NetFlow v5/v9, IPFIX, sFlow v5 exporter datagrams | **publishes to the bus** as `probectl.flow.events` |
+| `probectl-device-agent` | SNMP (v2c/v3) + gNMI/OpenConfig device telemetry | **publishes to the bus** as `probectl.device.metrics` |
+| `probectl-ebpf-agent` | zero-instrumentation L3/L4 host flows + service map (Linux) | **publishes to the bus** as `probectl.ebpf.flows` |
+| `probectl-endpoint` (DEM) | last-mile experience on a user's device (WiFi, gateway, ISP path, browser timings) | **publishes to the bus** as `probectl.endpoint.results` |
+
+Note the two shapes of "ships data in." The **canary agent streams** over its
+tenant-bound mTLS gRPC link (`internal/agenttransport`, the
+`probectl.agent.v1.AgentService` service — see [Agent transport](#agent-transport)),
+and the control plane is the thing that puts that result on the bus. The
+**flow/device/eBPF/endpoint collectors publish directly to the bus** themselves
+(`internal/bus`). Either way the rule from the diagram holds: every record is
+stamped with its tenant before a consumer ever sees it.
+
+This is *not* the same thing as the external feeds on the right of the diagram
+(RouteViews/RIS, RPKI, MaxMind, threat-intel). Those are read-only *enrichment*
+data the control plane pulls in to annotate what producers observe — they are
+context, not observations of your network. The Python BGP analyzer
+([BGP / routing intelligence](#bgp--routing-intelligence)) sits in that camp: it
+reads public collector data and emits `probectl.bgp.events`, but it is not
+watching your network either. So even with every external feed reachable, "no
+producers = no data" still holds for your own traffic.
+
+To see the whole producer → consumer → UI loop come alive end-to-end on one
+machine, walk through [`getting-started.md`](getting-started.md); to choose and
+deploy producers for a real environment, see
+[`deploying-agents.md`](deploying-agents.md).
+
 ## First principles
 
 These are the rules that shaped the build. They are non-negotiable, and the

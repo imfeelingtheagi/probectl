@@ -42,8 +42,11 @@ cp deploy/compose/.env.example deploy/compose/.env
 #   - PROBECTL_ENVELOPE_KEY  (openssl rand -base64 32 — the at-rest encryption key)
 #   - PROBECTL_TLS_HOSTS     (the hostname(s)/IP(s) the self-signed cert is valid for)
 # Auth defaults to "session" (real OIDC SSO, fail-closed) — set the PROBECTL_OIDC_*
-# values. For a quick NO-AUTH local evaluation ONLY, explicitly set
-# PROBECTL_AUTH_MODE=dev (it logs a loud startup warning).
+# values. PROBECTL_AUTH_MODE=dev (no-auth, all-access) is NOT a runtime toggle on
+# this shipped release image: the dev-auth code path only exists in a binary built
+# with -tags devauth, so setting it here makes the control plane REFUSE TO START
+# with a clear error (not a warning). For a no-IdP local evaluation, use the eval
+# stack (deploy/compose/eval.yml) — see docs/getting-started.md — not this stack.
 
 # 2. Start.
 docker compose -f deploy/compose/probectl.yml up -d
@@ -104,6 +107,36 @@ curl https://probectl.example.com/readyz
 
 See [`../deploy/helm/README.md`](../deploy/helm/README.md) for every value and
 sizing profile (small / medium / large / multitenant / multi-region / strict).
+
+## Deploy your first agent / see data
+
+Your control plane is up — but it is a **consumer**, and a consumer with nothing
+feeding it stores nothing. `/readyz` is green and every dashboard is empty,
+because the things that actually watch the network — synthetic probes, the eBPF
+host agent, flow collectors — are separate **producers** you deploy next. No
+producers, no data; that is expected, not a bug.
+
+Don't follow a one-off recipe here — the canonical journey is already written:
+
+- **See data in one command (no Go toolchain, any OS):** the **evaluation stack**
+  [`deploy/compose/eval.yml`](../deploy/compose/eval.yml) brings up a control plane
+  plus a sample producer so you can watch real data flow end to end:
+
+  ```sh
+  docker compose -f deploy/compose/eval.yml up --build -d
+  # wait ~20s for the control plane to migrate + start, then read first data:
+  docker compose -f deploy/compose/eval.yml --profile tools run --rm viewer
+  ```
+
+  The `viewer` prints the `/v1/topology` service map built from the sample flows —
+  proof the agent → bus → consumer → API loop works. It is **local-evaluation
+  only** (no-auth, loopback-bound, plaintext bus); the full walkthrough — including
+  attaching a real canary and combining planes into one correlated incident — is in
+  [`getting-started.md`](getting-started.md).
+- **Attach producers to *this* stack:** [`deploying-agents.md`](deploying-agents.md)
+  is the catalog of every producer (synthetic canary, eBPF, flow, device telemetry)
+  and which channel each uses — gRPC/mTLS straight to the control plane, or the
+  message bus.
 
 ## First-run checklist
 
