@@ -23,7 +23,8 @@ for an immediate quickstart — production replaces it with a CA-issued cert.
 ```sh
 cp deploy/compose/.env.example deploy/compose/.env     # then edit (envelope key, etc.)
 docker compose -f deploy/compose/probectl.yml up -d
-curl --cacert ./certs/ca.crt https://localhost:8443/readyz
+docker compose -f deploy/compose/probectl.yml cp control:/certs/ca.crt ./ca.crt
+curl --cacert ./ca.crt https://localhost:8443/readyz
 ```
 
 See [`docs/install.md`](../../docs/install.md) for the full guide (including

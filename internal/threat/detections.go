@@ -90,9 +90,8 @@ const DefaultMaxDetectionsPerTenant = 1000
 // DetectionStore retains recent detections per tenant — newest first, bounded
 // (oldest evicted). Like the posture inventory it is in-memory and rebuilt
 // from the stream; the durable trail is the incident + SIEM export
-// (rebuild-on-restart is the decided contract — docs/adr/volatile-stores.md,
-// U-047). Cross-
-// tenant reads are impossible by construction (guardrail 1).
+// (rebuild-on-restart is the decided contract). Cross-tenant reads are
+// impossible by construction (guardrail 1).
 type DetectionStore struct {
 	mu      sync.Mutex
 	max     int

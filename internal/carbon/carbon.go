@@ -34,7 +34,7 @@ type Coefficients struct {
 }
 
 // DefaultCoefficients is the built-in model: fixed-network transmission
-// energy in the ~0.01–0.06 kWh/GB band (Aslan et al. 2017 and successors,
+// energy in the ~0.004–0.06 kWh/GB band (Aslan et al. 2017 and successors,
 // scaled by path locality), with the world-average grid intensity as the
 // default — the operator should set their real grid figure.
 func DefaultCoefficients(gridGCO2e float64) Coefficients {

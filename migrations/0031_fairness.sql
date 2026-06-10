@@ -1,8 +1,8 @@
--- 0031: Tenant fairness / noisy-neighbor isolation (S-T7, F57).
+-- 0031: Tenant fairness / noisy-neighbor isolation.
 --
 -- tenant_fairness: per-tenant fairness policy overrides (ingest rate bounds,
 -- query-cost guards, weight). NULL = unset = the deployment default for that
--- bound (zero/absent means UNLIMITED — fairness is opt-in per bound).
+-- bound (zero/absent = use the deployment default, which ships bounded).
 -- Provider-owned platform-protection state, set from the provider plane;
 -- tenants may READ their own row (the /v1/fairness self-view — debugging
 -- fairness disputes needs the tenant to see its own bounds). On the silo

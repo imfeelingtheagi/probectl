@@ -20,11 +20,11 @@
 //     /v1/fairness (the tenant debugging its own disputes), the provider
 //     console (ee), and as TSDB series (Grafana-federable).
 //
-// Defaults doctrine (Sprint 15, SCALE-004 — REVERSED from fail-open): the
-// deployment ships SANE per-tenant ingest bounds on every plane; UNLIMITED is
-// an explicit opt-in (set the env/policy value NEGATIVE, e.g.
-// PROBECTL_FAIRNESS_RESULTS_PER_SEC=-1). A zero policy field still means
-// "deployment default" — the default itself is now bounded. A policy-store
+// Defaults doctrine: the deployment ships SANE per-tenant ingest bounds on
+// every plane, enabled by default (not opt-in). A zero or unset policy field
+// means "use the deployment default" — which is itself bounded — so to change a
+// bound you set a POSITIVE value; there is no negative/unlimited override for the
+// ingest bounds (the query-cost guards do default to 0 = unlimited). A policy-store
 // outage degrades to the deployment defaults (availability over precision; a
 // down Postgres must not stall ingest). Shedding is never silent: every shed
 // unit is counted, surfaced, and attributable. Cost guards bound CONCURRENCY
