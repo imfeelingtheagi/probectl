@@ -216,10 +216,19 @@ func run(cmd string) error {
 		return runMCPToken(log, db, os.Args[2:])
 	case "agent-ca":
 		// Sprint 11: `agent-ca init` generates the enrollment hierarchy once.
-		if len(os.Args) < 3 || os.Args[2] != "init" {
-			return fmt.Errorf("usage: probectl-control agent-ca init")
+		// `agent-ca export <file>` writes the public trust bundle (root +
+		// intermediate) for PROBECTL_AGENT_TLS_CA_FILE.
+		if len(os.Args) < 3 {
+			return fmt.Errorf("usage: probectl-control agent-ca <init|export>")
 		}
-		return runAgentCAInit(context.Background(), db)
+		switch os.Args[2] {
+		case "init":
+			return runAgentCAInit(context.Background(), db)
+		case "export":
+			return runAgentCAExport(context.Background(), db, os.Args[3:])
+		default:
+			return fmt.Errorf("usage: probectl-control agent-ca <init|export>")
+		}
 	case "enroll-token":
 		return runEnrollToken(context.Background(), cfg, db, os.Args[2:])
 	case "revoke-agent":

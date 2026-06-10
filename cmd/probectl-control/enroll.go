@@ -38,6 +38,31 @@ func runAgentCAInit(ctx context.Context, db *store.DB) error {
 	return nil
 }
 
+// runAgentCAExport writes the agent CA trust bundle (root + intermediate
+// PUBLIC certificates — never the sealed key) to a file, so an operator can
+// point the control plane's PROBECTL_AGENT_TLS_CA_FILE at the pool that
+// verifies enrolling agents. "-" writes to stdout. It needs no envelope key
+// (public material only), so it works anywhere the database is reachable.
+func runAgentCAExport(ctx context.Context, db *store.DB, args []string) error {
+	if len(args) < 1 || args[0] == "" {
+		return fmt.Errorf(`usage: probectl-control agent-ca export <file>   ("-" for stdout)`)
+	}
+	bundle, err := enroll.PublicBundle(ctx, db.Pool())
+	if err != nil {
+		return err
+	}
+	if args[0] == "-" {
+		_, err := os.Stdout.Write(bundle)
+		return err
+	}
+	if err := os.WriteFile(args[0], bundle, 0o644); err != nil {
+		return fmt.Errorf("write agent CA bundle: %w", err)
+	}
+	fmt.Printf("agent CA trust bundle (root + intermediate) written to %s\n", args[0])
+	fmt.Println("point the control plane's PROBECTL_AGENT_TLS_CA_FILE at this file so it verifies enrolling agents.")
+	return nil
+}
+
 // runEnrollToken mints a one-time, tenant-scoped join token and prints it
 // once, plus the server-certificate pin agents can use on first contact.
 func runEnrollToken(ctx context.Context, cfg *config.Config, db *store.DB, args []string) error {

@@ -66,6 +66,28 @@ func setup(ctx context.Context, t *testing.T) (*pgxpool.Pool, *enroll.Service, s
 	return pool, svc, tn.ID
 }
 
+// TestPublicBundleExportsRootAndIntermediate covers `agent-ca export`'s core:
+// PublicBundle returns the public trust bundle (root + intermediate) WITHOUT
+// unsealing the key, and equals the canonical Service.Bundle().
+func TestPublicBundleExportsRootAndIntermediate(t *testing.T) {
+	ctx := context.Background()
+	pool, svc, _ := setup(ctx, t)
+
+	bundle, err := enroll.PublicBundle(ctx, pool)
+	if err != nil {
+		t.Fatalf("public bundle: %v", err)
+	}
+	if n := strings.Count(string(bundle), "BEGIN CERTIFICATE"); n != 2 {
+		t.Fatalf("public bundle must carry root + intermediate (2 certs), got %d", n)
+	}
+	if string(bundle) != string(svc.Bundle()) {
+		t.Fatal("PublicBundle must equal Service.Bundle() (root + intermediate)")
+	}
+	if strings.Contains(string(bundle), "PRIVATE KEY") {
+		t.Fatal("PublicBundle must never contain private key material")
+	}
+}
+
 func TestEnrollHappyPathIssuesTenantBoundSVID(t *testing.T) {
 	ctx := context.Background()
 	pool, svc, tenantID := setup(ctx, t)

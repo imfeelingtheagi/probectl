@@ -156,6 +156,25 @@ func (s *Service) Bundle() []byte {
 	return append(append([]byte{}, s.rootPEM...), s.ca.CertPEM()...)
 }
 
+// PublicBundle returns the agent CA trust bundle — the root + intermediate
+// CERTIFICATES, i.e. the public trust anchor a verifier needs (notably the
+// control plane's agent gRPC client-CA pool, PROBECTL_AGENT_TLS_CA_FILE).
+// Unlike Load it never unseals the intermediate KEY, so it needs no envelope
+// key and can export the public CA on any host with database access. Returns
+// store.ErrAgentCANotInitialized when the CA has not been created yet.
+func PublicBundle(ctx context.Context, pool *pgxpool.Pool) ([]byte, error) {
+	cas := store.NewAgentCA(pool)
+	rootCert, _, err := cas.Load(ctx, "root")
+	if err != nil {
+		return nil, err
+	}
+	interCert, _, err := cas.Load(ctx, "intermediate")
+	if err != nil {
+		return nil, err
+	}
+	return []byte(rootCert + interCert), nil
+}
+
 // MintToken creates a one-time join token for a tenant (operator path,
 // audited by the caller). Returns the DISPLAY token — shown once, never
 // stored (only its hash is).
