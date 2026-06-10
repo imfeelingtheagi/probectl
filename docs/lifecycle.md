@@ -57,8 +57,9 @@ Instead you split it across two releases:
   old column/constraint.
 
 Anything that would break N−1 mid-roll is forbidden in a single migration, and the
-**migration gate** rejects it automatically (`make migration-gate`, a CI job that
-walks every embedded `*.sql` in `internal/store/migrate`):
+**migration gate** rejects it automatically (`make migration-gate`, a standing CI
+job: the checker in `internal/store/migrate` walks every embedded `*.sql` in
+`migrations/`):
 
 | Rejected | Why | Do instead |
 | -------- | --- | ---------- |

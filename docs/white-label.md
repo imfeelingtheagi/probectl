@@ -96,14 +96,17 @@ an ingress certificate.
 
 ## Branded email templates
 
-probectl has no SMTP sender yet — notifications today ride Slack/Teams/
-PagerDuty/ServiceNow/Jira. So white-labeling ships the **template contract**
-rather than a live mailer: `whitelabel.RenderEmail(brand, email)` wraps any
-notification body in the tenant's brand (logo, product name, footer). It uses
-Go's `html/template`, so every brand field is **escaped**, and the logo is
-restricted to the already-validated inline data URI (no external fetches in mail
-clients). When an email channel eventually lands, it renders through this and is
-branded for free.
+probectl's live email today is the alert engine's **plaintext SMTP channel**
+(`internal/alert`); richer notifications ride the chat/on-call/ticket
+integrations (Slack, Teams, PagerDuty, Opsgenie, ServiceNow, Jira —
+`internal/notify`). None of those render a brand. So white-labeling ships the
+**branded-HTML template contract** rather than wiring a mailer of its own:
+`whitelabel.RenderEmail(brand, email)` wraps any notification body in the
+tenant's brand (logo, product name, footer). It uses Go's `html/template`, so
+every brand field is **escaped**, and the logo is restricted to the
+already-validated inline data URI (no external fetches in mail clients). When a
+branded (HTML) email path lands, it renders through this and is branded for
+free.
 
 ## Configuration surface
 

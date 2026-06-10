@@ -12,12 +12,14 @@ Why a separate, bigger gate? Because the cheap CI smoke proves the *mechanics*
 work; this proves the *platform* does, at the tenant counts and throughputs a real
 deployment sees.
 
-## The numeric SLOs are PROVISIONAL — pending sign-off
+## The numeric SLOs are provisional — not yet validated at full scale
 
 The numeric SLO targets below are engineering estimates, recorded so the gate is
-runnable end to end — they await explicit sign-off, not a final commitment.
-Change them in `internal/perf/scale.go` (the `Profiles` function) and this table
-together so the two never drift.
+runnable end to end. They become validated capability numbers only when a full
+L/XL run on reference hardware is recorded in the tables further down — until
+then, treat them as targets, not promises. Change them in
+`internal/perf/scale.go` (the `Profiles` function) and this table together so
+the two never drift.
 
 | Tier | Shape (full scale) | Ingest floor | Publish p95 ceiling | Noisy-neighbor inflation ceiling |
 |---|---|---|---|---|
@@ -68,23 +70,25 @@ in-process gate; the next is the full-stack one.
   the absolute throughput floors do not apply at 5% scale, but correctness and
   material inflation do.
 - **The flow (volume) plane:** the drive set also includes the high-volume flow
-  plane. `TestScaleGateFlowPlaneCI` (`internal/perf/flowplane.go`) pushes 4× the
-  tier's result count as NetFlow records through the *production* `FlowConsumer`
-  (the verify + fairness + enrich seams are identical to runtime) and fails on any
-  rejected batch or incomplete storage. `make scale-gate` runs both planes.
-- **Nightly regression guard:** `make scale-gate-m` runs the M tier (both planes,
-  CI scale) plus the M-tier full-stack gate against real Kafka + Prometheus — this
-  is the `scale-gate-m` job in `nightly.yml`. A regression that breaks an SLO,
-  drops a record, or leaks a tenant fails the night's build. It's the standing
-  guard until the full L/XL reference run is recorded.
+  plane. `TestScaleGateFlowPlaneCI` (the driver is `internal/perf/flowplane.go`)
+  pushes 4× the tier's result count as NetFlow records through the *production*
+  `FlowConsumer` (the verify + fairness + enrich seams are identical to runtime)
+  and fails on any rejected batch or incomplete storage. Both planes ride the
+  same `^TestScaleGate` run, so every invocation below exercises them together.
+- **Nightly regression guard:** the `scale-gate-m` job in `nightly.yml` runs
+  `make scale-gate-m` — the M tier, both planes, at CI scale — and then the
+  M-tier full-stack gate against real Kafka + Prometheus as a second step. A
+  regression that breaks an SLO, drops a record, or leaks a tenant fails the
+  night's build. It's the standing guard until the full L/XL reference run is
+  recorded.
 - **Full scale (reference hardware):** `make scale-gate TIER=L` (or `XL`) sets
   `PROBECTL_SCALE=1` and runs the real shape with the absolute SLOs armed. Record
   the numbers here when run:
 
 | Date | Tier | Hardware | Throughput | Publish p95 | Inflation | Verdict |
 |---|---|---|---|---|---|---|
-| _pending_ | L | _reference hardware TBD_ | — | — | — | — |
-| _pending_ | XL | _reference hardware TBD_ | — | — | — | — |
+| _pending_ | L | _to be recorded_ | — | — | — | — |
+| _pending_ | XL | _to be recorded_ | — | — | — | — |
 
 ## The full-stack load gate
 
@@ -100,14 +104,14 @@ violation, incomplete ingest, or scoping error.
 
 - **CI (every pass):** the `load-smoke` job — S tier at 5% scale against the dev
   compose stack (`make load-test-smoke`). Proves the harness, not the platform.
-- **Reference hardware (human-scheduled):** `make compose-up && make load-test
-  TIER=L` (then `XL`). The test logs a `RESULT ROW` line — commit it below, and
-  flip the SLO labels above from PROVISIONAL once both tiers pass.
+- **Reference hardware (operator-scheduled):** `make compose-up && make load-test
+  TIER=L` (then `XL`). The test logs a `RESULT ROW` line — commit it below; once
+  both tiers pass, the SLOs above stop being provisional.
 
 | Date | Tier | Hardware | Throughput (results/s) | Publish p95 | Query p95 | Series confirmed | Verdict |
 |---|---|---|---|---|---|---|---|
-| _pending human run_ | L | _reference hardware TBD_ | — | — | — | — | — |
-| _pending human run_ | XL | _reference hardware TBD_ | — | — | — | — | — |
+| _pending_ | L | _to be recorded_ | — | — | — | — | — |
+| _pending_ | XL | _to be recorded_ | — | — | — | — | — |
 
 Run against a fresh stack (`make compose-down && make compose-up`): the consumer
 reads its topic from the start, and a persistent Prometheus keeps prior runs'

@@ -3,7 +3,10 @@
 "Isolation model" answers a simple question: **how physically separate is one
 tenant's data from another's?** probectl offers three answers, and you can pick
 per deployment *and* per tenant — a single install can run most tenants pooled
-and a few high-compliance ones siloed.
+and a few high-compliance ones siloed. This page covers the *models*; the
+storage-layer enforcement mechanics they all share (forced RLS, partition keys,
+the cross-tenant test suite) live in
+[`security/tenant-isolation.md`](security/tenant-isolation.md).
 
 The mental model is a spectrum:
 
@@ -31,21 +34,26 @@ layer. So even if routing sent a query to the wrong silo, the query would return
 *nothing* rather than another tenant's rows — the defenses stack, they don't
 replace each other.
 
-**Fail closed on routing.** The isolation router (`ee/silo.Router`, installed at
-the editions attach seam) resolves each tenant's storage targets from the tenant
-registry. A routing **error fails the operation** — a siloed tenant is never
-silently downgraded to the pooled stores, and a pooled query can never reach a
-siloed tenant's stores. (`tenancy.InTenant` resolves targets *before* opening the
-transaction; the flow store splits a batch per target and fails the whole batch on
-a routing error.) There is exactly one deliberate exception: **bus lanes** fall
-back to the shared topic on a transient routing blip, chosen for
-availability — and it is safe precisely because the tenant boundary there is the
-tenant-keyed message plus the storage-level isolation, both of which still hold.
+**Fail closed on routing — everywhere, including the bus.** The isolation router
+(`ee/silo.Router`, installed at the editions attach seam) resolves each tenant's
+storage targets from the tenant registry. A routing **error fails the
+operation** — a siloed tenant is never silently downgraded to the pooled stores,
+and a pooled query can never reach a siloed tenant's stores.
+(`tenancy.InTenant` resolves targets *before* opening the transaction; the flow
+store splits a batch per target and fails the whole batch on a routing error.)
+Bus lanes are no exception: if a siloed tenant's lane cannot be resolved when a
+result arrives, the control plane **drops that result with a loud error** rather
+than publishing it onto the shared topic
+(`internal/agenttransport/service.go`) — a siloed tenant's telemetry must never
+silently ride the shared lane. Availability comes from the *agent*, not from a
+fallback: the agent's store-and-forward buffer retries delivery, so a transient
+routing blip delays the data instead of mis-routing it.
 
 ## How each leg works
 
-- **Postgres (siloed):** each tenant gets a schema named `t_<uuid>` containing
-  every tenant-owned table. The table set is *derived live* from
+- **Postgres (siloed):** each tenant gets a schema named `t_<uuid>` (the tenant
+  UUID lowercased, dashes stripped — `silo.SchemaName`) containing every
+  tenant-owned table. The table set is *derived live* from
   `information_schema` — any `public` table with a `tenant_id` column, minus a
   provider-owned deny list — so the silo automatically tracks whatever tables the
   schema actually has. Each table is created `LIKE public.<t> INCLUDING ALL`, with

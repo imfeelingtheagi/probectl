@@ -115,8 +115,12 @@ pointing at `ee/web`, is the web seam). When the API returns 404 (unlicensed), t
 console honestly renders "Provider plane not enabled." The screens: MFA login;
 tenant inventory with lifecycle actions and a provision form; a
 fleet-across-tenants table (counts and versions only — no telemetry);
-break-glass request/list/revoke with per-grant audited-use counts; and, for
-admins, operator management with one-time enrollment tokens.
+break-glass request/list/revoke with per-grant audited-use counts; usage,
+fairness, and governance cards (each documented on its own page —
+[`metering.md`](metering.md), [`fairness.md`](fairness.md),
+[`governance.md`](governance.md)); and, for admins, the white-label branding
+card ([`white-label.md`](white-label.md)) and operator management with one-time
+enrollment tokens.
 
 ## API
 

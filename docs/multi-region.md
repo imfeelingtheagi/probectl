@@ -115,13 +115,14 @@ failover controller's detection + promotion times. probectl resumes writes
 automatically on the next probe once the endpoint resolves to the promoted
 primary — no probectl restart required.
 
-## The RPO/RTO targets are PROVISIONAL — pending sign-off
+## The RPO/RTO targets are provisional — not yet validated
 
 RPO (how much data you can lose) and RTO (how long recovery takes) are *numeric
-SLO targets*, and the exact numbers are an open decision still awaiting explicit
-sign-off. The values below are recorded so the failover gate is runnable end to
-end, not as a final commitment. They are configurable via `PROBECTL_RPO_SECONDS` /
-`PROBECTL_RTO_SECONDS` (surfaced together on `/readyz` and in this table).
+SLO targets*. The values below are engineering estimates recorded so the
+failover gate is runnable end to end — they become committed numbers only once
+validated failover runs back them. They are configurable via
+`PROBECTL_RPO_SECONDS` / `PROBECTL_RTO_SECONDS` (surfaced together on `/readyz`
+and in this table).
 
 | Target | Provisional value | Determined by |
 |---|---|---|

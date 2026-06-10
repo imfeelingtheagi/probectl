@@ -23,9 +23,9 @@ flowchart TB
         Subsys["subsystems: tenancy · path · bgp · opendata · threat · change ·<br/>topology · cost · slo · compliance · ai · …"]
     end
 
-    Agents["Agents — Go, single binary, tenant-bound<br/>canary plugins · path engine · eBPF host agent"]
+    Agents["Agents & collectors — Go static binaries, tenant-bound<br/>canary/path agent · flow · device · eBPF · endpoint (DEM)"]
     Analyzer["BGP analyzer (Python)<br/>RouteViews/RIS MRT + RIS Live"]
-    Bus["Bus — Kafka / NATS / in-process<br/>(tenant-tagged)"]
+    Bus["Bus — Kafka / in-process memory<br/>(tenant-tagged)"]
     Stores["Postgres · ClickHouse · Prometheus/VM<br/>topology graph · object store"]
     External["External (read-only, cached, degrade gracefully)<br/>RouteViews · RIPE RIS/Atlas · RPKI · PeeringDB · MaxMind/Cymru · CT logs · threat-intel · cloud pricing"]
 
@@ -201,17 +201,20 @@ inside tenant logs, or vice versa.
 
 Agents talk to the control plane over **gRPC with mutual TLS**
 (`internal/agenttransport`; the service is `probectl.agent.v1.AgentService` with
-`Register` / `Attest` / `Heartbeat` / `StreamResults`). The server demands and
-verifies a client certificate, and reads the agent's **tenant and id from that
-certificate's SPIFFE identity** — `spiffe://probectl/tenant/<t>/agent/<a>` — never
-from the request body. That single design choice binds an agent to exactly one
-tenant cryptographically: a compromised or malicious agent cannot claim to be in
-a different tenant, because it would need that tenant's certificate.
+`Register` / `Attest` / `Heartbeat` / `StreamResults`, plus the
+`PollCoordination` / `ReportEndpoint` pair that brokers agent-to-agent
+measurement — see [Network tests and agent-to-agent](#network-tests-and-agent-to-agent)).
+The server demands and verifies a client certificate, and reads the agent's
+**tenant and id from that certificate's SPIFFE identity** —
+`spiffe://probectl/tenant/<t>/agent/<a>` — never from the request body. That
+single design choice binds an agent to exactly one tenant cryptographically: a
+compromised or malicious agent cannot claim to be in a different tenant, because
+it would need that tenant's certificate.
 
-A fifth RPC, `StreamConfig`, exists in the schema but is an **explicit deny**:
+One more RPC, `StreamConfig`, exists in the schema but is an **explicit deny**:
 config push is deliberately not a shipped capability (agents load their own
 config), and the stub returns an error rather than silently doing nothing — see
-[`docs/adr/config-push.md`](adr/config-push.md). The proto lives under
+[`adr/config-push.md`](adr/config-push.md). The proto lives under
 `proto/probectl/agent/v1/` and is versioned, additive-only.
 
 ## Agent runtime

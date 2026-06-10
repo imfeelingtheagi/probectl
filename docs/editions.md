@@ -101,9 +101,10 @@ The claims inside:
 - `tier` implies its feature set from the one table; `features` lists *explicit
   extras* on top (the mechanism for a one-off grant, like the "provider + byok"
   deal above).
-- `tenant_band` is the licensed tenant-count band. It is enforced at tenant
-  *provisioning* time (the provider plane refuses to create a tenant past the
-  band), and is **never** a kill-switch on already-running telemetry.
+- `tenant_band` is the licensed tenant-count band (`0` or absent = unlimited).
+  It is enforced at tenant *provisioning* time (the provider plane refuses to
+  create a tenant past the band, with `tenant_band_exhausted`), and is **never**
+  a kill-switch on already-running telemetry.
 - Verification rejects: an unknown payload version, an unknown or `community` tier
   (community needs no license at all), a signature that fails against every
   trusted key, and an inverted validity window (expiry before issue). An
@@ -235,6 +236,6 @@ Ed25519 math — no sockets.
   commercial license + trademark; the gate is for honest customers.
 - Not a kill-switch: no state in the ladder ever stops ingestion, probing,
   alerting, or dashboards that already exist.
-- Not finalized legal text: `LICENSE` stays a TBD placeholder and `ee/` files
-  carry a commercial-header *placeholder* until counsel delivers the real
-  texts (human-owned decision).
+- Not finalized legal text: the repository `LICENSE` is a placeholder and `ee/`
+  files carry a *placeholder* commercial header until counsel delivers the
+  final texts. The enforcement mechanics above are complete either way.
