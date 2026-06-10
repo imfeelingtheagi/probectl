@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
 # release_notes.sh [FROM] [TO] — conventional-commit-grouped release notes
-# (U-087). FROM defaults to the latest tag, TO to HEAD. Used to prepend the
-# CHANGELOG.md section at each release; the GitHub release body itself is
-# auto-generated (release.yml: generate_release_notes), so this keeps the
-# in-repo history equally automated.
+# FROM defaults to the latest tag, TO to HEAD. A local helper to preview the
+# release notes grouped by change type. There is no in-repo CHANGELOG file;
+# the git commit history is the source of truth, and the GitHub release body
+# is auto-generated from it (release.yml: generate_release_notes).
 #
 #   scripts/release_notes.sh v0.3.0 v0.4.0
 #   scripts/release_notes.sh                # latest tag → HEAD (the next section)

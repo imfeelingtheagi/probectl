@@ -65,7 +65,7 @@ func chMigrations() []chmigrate.Migration {
 		// retention TTL drops whole parts. PARTITION BY is immutable in
 		// ClickHouse, so v2 creates NEW tables and DROPS the v1 ones —
 		// pre-GA, with path snapshots being re-discoverable caches, the
-		// discard is deliberate and recorded (CHANGELOG + register).
+		// discard is deliberate.
 		{Version: 2, Name: "path_tables_day_partitioned", Statements: []string{
 			createHops, createLinks,
 			"DROP TABLE IF EXISTS probectl_path_hops",
