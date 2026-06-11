@@ -36,7 +36,7 @@ func (s *Server) SetAgentRevocationPush(push func(serials []string, spiffeIDs []
 // handleRevokeAgent is the operator path that FEEDS the handshake deny-list
 // (WIRE-003 residual): resolves the agent's issued serials + SPIFFE id from
 // the registry, persists the revocation, pushes it live, audits it. The
-// caller's tenant scopes the revocation (admin RBAC: agents.write).
+// caller's tenant scopes the revocation (admin RBAC: the `agent.write` permission).
 func (s *Server) handleRevokeAgent(w http.ResponseWriter, r *http.Request) error {
 	if s.enrollSvc == nil {
 		return apierror.Unavailable("agent enrollment is not configured (run: probectl-control agent-ca init)")

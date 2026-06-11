@@ -663,8 +663,11 @@ func Load(getenv func(string) string) (*Config, error) {
 
 		RemediationApprovalsEnabled: l.boolean("PROBECTL_REMEDIATION_APPROVALS_ENABLED", false),
 		RemediationMaxBlastRadius:   l.intRange("PROBECTL_REMEDIATION_MAX_BLAST_RADIUS", 50, 1, 100000),
-		// SCALE-004: bounded by DEFAULT — unlimited is the explicit opt-in
-		// (set a NEGATIVE value). Defaults mirror fairness.DefaultPolicy.
+		// SCALE-004: bounded by DEFAULT; these env values must be >= 0 —
+		// l.float REJECTS negatives at boot (fail closed). Unlimited is not
+		// an env option: it exists only as an explicit per-tenant override
+		// at the fairness engine (rate<=0 in take()). Defaults mirror
+		// fairness.DefaultPolicy.
 		FairnessResultsPerSec:       l.float("PROBECTL_FAIRNESS_RESULTS_PER_SEC", 1000),
 		FairnessFlowEventsPerSec:    l.float("PROBECTL_FAIRNESS_FLOW_EVENTS_PER_SEC", 10000),
 		FairnessIngestBytesPerSec:   l.float("PROBECTL_FAIRNESS_INGEST_BYTES_PER_SEC", 2<<20),

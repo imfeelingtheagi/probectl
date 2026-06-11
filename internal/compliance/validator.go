@@ -100,7 +100,7 @@ type ruleState struct {
 	observedPairs uint64
 	samples       []ViolationSample
 	first, last   time.Time
-	alerted       bool // one violation signal per rule per quiet period
+	alerted       bool // one violation signal per rule, latched until the engine is rebuilt (no quiet-period re-arm exists)
 }
 
 type tenantState struct {

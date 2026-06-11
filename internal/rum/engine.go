@@ -208,8 +208,9 @@ func (e *Engine) ObserveRUM(r *resultv1.Result) []incident.Signal {
 	return e.evaluateLocked(tenant, ts, agg, at)
 }
 
-// ObserveSynthetic folds one web-facing synthetic outcome (http/https/tcp
-// against the host) into the host's window — the other half of convergence.
+// ObserveSynthetic folds one web-facing synthetic outcome (the consumer
+// filters to http/https/browser types — see rumapi.go) into the host's
+// window — the other half of convergence.
 func (e *Engine) ObserveSynthetic(tenant, host string, success bool, at time.Time) []incident.Signal {
 	if tenant == "" || host == "" {
 		return nil

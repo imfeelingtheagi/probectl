@@ -52,11 +52,14 @@ const (
 )
 
 // Policy is the per-tenant fairness contract (the S-T7 "quotas / limits /
-// weights"). The zero value of any field means UNLIMITED / deployment
-// default — fairness is opt-in per bound.
+// weights"). The zero value of any field means "inherit" — merged() fills it
+// from the deployment default, so fairness stays bounded by default.
 // DefaultPolicy is the bounded-by-default deployment policy (SCALE-004):
 // generous for real fleets, a hard wall for a runaway tenant. Override per
-// deployment via PROBECTL_FAIRNESS_*; opt OUT with a negative value.
+// deployment via PROBECTL_FAIRNESS_* (the env loader REJECTS negative values
+// at boot — config.go float()); the engine-level rate<=0 = unlimited branch
+// in take() is reachable only via an explicit per-tenant override, never an
+// env value.
 func DefaultPolicy() Policy {
 	return Policy{
 		ResultsPerSec:       1000,

@@ -26,9 +26,11 @@ NoNewPrivileges=yes
 # BPF maps/ringbuf need locked memory.
 LimitMEMLOCK=infinity
 
-# --- resource caps (EBPF-007): mirror the Helm chart's limits ---
-# Helm: requests 100m/128Mi, limits 1 cpu / 512Mi. A host agent must never
-# starve the workloads it observes.
+# --- resource caps (EBPF-007): host-level counterparts of the chart's ---
+# The agent chart's container limits are requests 50m/64Mi, limits 500m/256Mi
+# (deploy/helm/probectl-agent/values.yaml); these systemd caps are deliberately
+# looser whole-unit ceilings for bare-metal hosts. Either way the principle
+# holds: a host agent must never starve the workloads it observes.
 CPUQuota=100%
 CPUWeight=100
 MemoryHigh=384M
