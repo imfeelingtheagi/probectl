@@ -6,6 +6,9 @@ The threat-intel layer (see [`threat-intel.md`](threat-intel.md)) catches
 *known-bad* things by name. This engine catches *suspicious-looking behavior* — patterns that look
 like an attack even when no name is on a list yet. That is the "NDR" idea:
 **Network Detection and Response**, the behavioral half of threat detection.
+If threat-intel is a guard holding a wanted list, this engine is the guard who
+knows everyone's *habits* — it can't name the intruder, but it knows nobody in
+this building walks the halls at 3 a.m. checking every door handle.
 
 probectl's version is **NDR-lite**: it runs behavioral detectors over telemetry
 the platform **already collects** — DNS lookups (from synthetic DNS canaries and
@@ -21,7 +24,8 @@ It lives in `internal/threat/` — the engine in `ndr.go`, the rule model in
 
 Like threat-intel, this engine is **never an IPS** — detection is a signal,
 never an enforcement action, one of probectl's
-[non-negotiables](../CONTRIBUTING.md#non-negotiables). It
+[non-negotiables](../CONTRIBUTING.md#non-negotiables). (An **IPS** — intrusion
+*prevention* system — sits inline and drops traffic it dislikes.) probectl
 does not block traffic, terminate connections, or act inline. The engine emits
 `incident.Signal` values and nothing else — there is literally no enforcement
 code path in the package. A behavioral detector firing on a public network will
@@ -39,7 +43,9 @@ already gathered locally (sovereignty-safe). Threat-intel enrichment, which
 ## The detectors
 
 Each detector watches for one shape of bad behavior. All thresholds are
-tunable per the rule model (no code change required).
+tunable per the rule model (no code change required). Two terms recur:
+**C2** (command-and-control — the attacker's server that compromised hosts
+report to) and **exfiltration** (smuggling data out of the network).
 
 | Kind | Behavior detected | Key tunables |
 |---|---|---|
@@ -56,15 +62,22 @@ A few of these reward a closer look at the mechanism:
   (stddev ÷ mean) of the gaps between callbacks (`intervalStats` in `ndr.go`).
   Malware phoning home tends to be suspiciously regular; a human browsing is
   not. Low jitter plus a known-bad destination is a strong signal.
-- **`dns_dga`** scores the **Shannon entropy** of the first DNS label — random
-  strings like `x7f3q9zk.example` carry more bits-per-character than real words,
-  which is the fingerprint of domain-generation-algorithm malware.
+- **`dns_dga`** scores the **Shannon entropy** of the first DNS label —
+  entropy measures how random a string is, in bits per character. Random
+  strings like `x7f3q9zk.example` carry more bits-per-character than real words
+  (and the engine only counts labels at least 10 characters long), which is the
+  fingerprint of domain-generation-algorithm malware — a **DGA** invents
+  thousands of throwaway rendezvous names so defenders can't blocklist one.
 - **`egress_volume`** compares a flow against the source's own **EWMA**
-  (exponentially-weighted moving average) baseline, and crucially updates that
-  baseline *after* judging, so a spike can never quietly raise its own bar.
-- **`lateral`** excludes destinations that the topology service map already
-  knows are normal neighbors, so expected service-to-service traffic does not
-  read as an attacker spreading sideways.
+  (exponentially-weighted moving average — a running average that weights
+  recent samples more) baseline, and crucially updates that baseline *after*
+  judging, so a spike can never quietly raise its own bar. Each host gets a
+  personal speed limit derived from its own history, not a fleet-wide one.
+- **`lateral`** watches **east-west** traffic — host-to-host inside the
+  network, as opposed to north-south traffic in and out of it — and excludes
+  destinations that the topology service map already knows are normal
+  neighbors, so expected service-to-service traffic does not read as an
+  attacker spreading sideways.
 
 ## False-positive management is the product
 
@@ -82,9 +95,12 @@ drowning the analyst. Every layer here is tunable without touching code:
 3. **Suppression** — a per-`(rule, tenant, entity)` re-fire window
    (`suppress`): once an entity trips a rule, it stays quiet until the window
    passes, so a persisting behavior re-raises *occasionally*, not on every
-   single observation.
-4. **Detection-as-code** — rules are Sigma-style versioned YAML. Override any
-   rule by ID (including `enabled: false` to switch one off) or add new ones.
+   single observation. A snooze, not a dismissal — the behavior is still
+   watched, it just stops paging.
+4. **Detection-as-code** — rules are Sigma-style versioned YAML (Sigma is the
+   SOC convention of writing detections as declarative, shareable rule files).
+   Override any rule by ID (including `enabled: false` to switch one off) or
+   add new ones.
 
 ## Detection-as-code
 
@@ -118,9 +134,11 @@ rules:
 A malformed rules directory **fails startup** (fail closed — tuning the
 operator believes is live must actually be live, not silently dropped). Rules
 are validated in `validateRules`: non-empty unique IDs, a known `kind`,
-`version >= 1`, `severity` in `{info, warning, critical}`, and
-`base_confidence` in `0..100`. Two rules sharing one ID *in a single file* is
-treated as an operator mistake and rejected, not guessed at.
+`version >= 1`, `severity` in `{info, warning, critical}`,
+`base_confidence` in `0..100`, and a non-negative `suppress`. Two rules
+sharing one ID *in a single file* is treated as an operator mistake and
+rejected, not guessed at — silently picking one would mean some tuning the
+operator wrote is not in force.
 
 ## Pipeline
 

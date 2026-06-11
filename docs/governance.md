@@ -1,8 +1,10 @@
 # Advanced data governance (Enterprise: `governance`)
 
 **What this is.** One place for a privacy-strict organization to control how a
-tenant's data is **classified**, **redacted**, **retained**, **located**, and
-**encrypted**. This feature adds the new classification + redaction mechanism and
+tenant's data is **classified** (labeled by sensitivity), **redacted** (masked
+before it leaves), **retained** (kept, then deleted on schedule), **located**
+(pinned to a region), and **encrypted**. This feature adds the new
+classification + redaction mechanism and
 **composes** it with capabilities that ship elsewhere in probectl, so an operator
 sees one coherent governance view per tenant rather than five scattered settings.
 
@@ -25,8 +27,14 @@ feature, installed onto the core `govern` seam at the attach seam.
 
 ## Data classification
 
-Every sensitive data **category** has a sensitivity **class**, ordered low → high:
+Classification is labeling: every sensitive data **category** (a kind of value
+— an IP address, an email — not a specific column) gets a sensitivity
+**class**, ordered low → high:
 `public` < `internal` < `confidential` < `pii` < `restricted`.
+Think of folder labels in a filing cabinet — the label, not the clerk's
+judgment per page, decides how a folder is handled when it leaves the room.
+(**PII** is personally identifiable information — data that can point back to
+a human.)
 
 | Category | Default class | Examples |
 |---|---|---|
@@ -39,15 +47,19 @@ Every sensitive data **category** has a sensitivity **class**, ordered low → h
 | `asn` | public | autonomous-system numbers |
 | `credential` | restricted | secrets, tokens, wrapped keys, BYOK refs |
 
-**IPs-as-PII** is the headline. Under GDPR and similar regimes an IP address *is*
-personal data, so `ip_address` defaults to `pii` and is masked by default whenever
+**IPs-as-PII** is the headline. Under GDPR (the EU's privacy law) and similar
+regimes an IP address *is*
+personal data — it can identify a household or a person — so `ip_address`
+defaults to `pii` and is masked by default whenever
 redaction is active. A tenant's governance policy can **re-classify** any category
 (e.g. treat `hostname` as `pii`).
 
 ## Redaction / masking
 
 When redaction is active, every category at or above the policy's **redaction
-floor** (default `pii`) is masked. The strategies:
+floor** (default `pii`) is masked — the floor is a water line: everything at
+that sensitivity or above goes under, everything below stays readable. The
+strategies:
 
 | Strategy | Behavior | Example (`203.0.113.42`) |
 |---|---|---|
@@ -56,7 +68,13 @@ floor** (default `pii`) is masked. The strategies:
 | `drop` | remove entirely | `` (empty) |
 | `none` | leave as-is | unchanged |
 
-`restricted` (credentials) **always drops** in clear — secrets never leave the
+`partial` is "blur the house number, keep the street": analytics can still
+group by network, but no value points at one host. (A MAC's **OUI** is its
+first three octets — the vendor prefix, shared by millions of devices.)
+`hash` is pseudonymization: the same input always yields the same token, so
+"this address appears in both records" survives while the address itself does
+not. `restricted` (credentials) **always drops** in clear — secrets never
+leave the
 deployment in a governed export, regardless of strategy. All hashing routes
 through the FIPS-swappable `internal/crypto` provider — no raw crypto
 primitives outside it.
@@ -65,12 +83,13 @@ primitives outside it.
 
 The tenant-portability export gains a **redacted mode**:
 
-```
+```text
 GET /v1/lifecycle/export?redact=true     # mask PII per the tenant's policy
 ```
 
 and a tenant whose governance policy sets `redact_export: true` always gets a
-redacted export, even without the query parameter. The manifest carries
+redacted export, even without the query parameter — the strict tenant's floor
+holds even when a requester forgets to ask. The manifest carries
 `"redacted": true`. Postgres rows and flow records are masked column-by-category
 (IPs, emails, geo, MACs, …) while non-sensitive fields (counts, protocol, names)
 survive. Malformed lines pass through untouched, so the bundle stays well-formed.
@@ -82,7 +101,7 @@ policy** — custom classifications, a custom floor, and forced export redaction
 ## The governance policy + composed view
 
 The provider plane exposes one place for a tenant's data governance
-(`governance`-gated; the routes 404 when unlicensed):
+(`governance`-gated; the routes 404 when unlicensed — hidden, not locked):
 
 - `GET /provider/v1/tenants/{id}/governance` — the **composed view**: the effective
   classification of every category + the redaction policy + remote-AI egress
@@ -96,7 +115,8 @@ The provider plane exposes one place for a tenant's data governance
 
 The policy persists in `tenant_governance` (migration `0033`; migration `0037`
 adds the `ai_remote_egress` consent column): a tenant reads its
-own policy under RLS, the provider plane writes it. It is on the silo deny list
+own policy under RLS (row-level security — the database enforces the tenant
+boundary itself), the provider plane writes it. It is on the silo deny list
 (never copied into a per-tenant silo schema) and is erased with the tenant at
 offboarding. The resolver installs onto the core `govern` seam, so redacted
 exports honor per-tenant overrides.
@@ -114,20 +134,24 @@ exactly what a remote call sends, and the other gates in front of it, is
 ## Retention, erasure & residency (composed, not re-implemented)
 
 The governance view **shows these together**; it does not re-enforce them. Each is
-owned by its own subsystem:
+owned by its own subsystem — governance is the dashboard, not a second engine:
 
 - **Retention + cross-store erasure** is core (`internal/tenantlife`): configurable
   flow retention plus verifiable deletion across Postgres / ClickHouse / TSDB /
-  object storage, with a recomputable attestation. **Erasure covers all live
+  object storage, with a recomputable attestation (a proof document anyone can
+  re-derive to confirm the deletion happened). **Erasure covers all live
   stores**; backups are the operator's documented backup-TTL
   (`PROBECTL_BACKUP_RETENTION_NOTE`) — a governed deletion is not a backup purge.
   See [`runbooks/tenant-offboarding.md`](runbooks/tenant-offboarding.md).
 - **Residency** is siloed stores pinned to a region, plus the region topology.
-  Strict tenants run **siloed** so their stores stay in the permitted region rather
+  Strict tenants run **siloed** (their own schemas/databases rather than shared
+  ones) so their stores stay in the permitted region rather
   than replicating globally. See [`isolation.md`](isolation.md),
   [`multi-region.md`](multi-region.md).
 - **BYOK / HYOK + no-downtime rotation** is the `byok` Enterprise feature
-  (`ee/tenantkeys`): per-tenant customer-held keys, rotation with
+  (`ee/tenantkeys`): per-tenant customer-held keys (bring-your-own-key /
+  hold-your-own-key — the tenant, not the platform, controls the key material),
+  rotation with
   retired-versions-decrypt-only (no downtime), and crypto-offboarding. See
   [`byok.md`](byok.md).
 
@@ -140,4 +164,6 @@ owned by its own subsystem:
 - **Rotation across high-volume stores is deferred-rewrap.** New data uses the new
   key immediately; old data re-seals on write — no downtime.
 - **Redaction is best-effort masking, not anonymization.** `partial` keeps a
-  network prefix and `hash` is correlatable. For irreversible removal, use erasure.
+  network prefix and `hash` is correlatable. For irreversible removal, use erasure
+  — you cannot un-mask, but you also cannot promise a masked value identifies
+  nobody.

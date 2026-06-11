@@ -1,5 +1,14 @@
 # Enterprise identity: SCIM 2.0 + ABAC + directory integration
 
+**SCIM** (System for Cross-domain Identity Management) is the standard protocol
+an identity provider uses to *push* user and group changes into an application
+— hire someone, they appear; fire someone, they vanish. **RBAC** is role-based
+access control: a user holds roles, roles grant permissions. **ABAC** is
+attribute-based access control: rules about *properties* of the user or the
+resource ("is a contractor", "has MFA") layered on top of those roles. An
+**IdP** (identity provider — Okta, Microsoft Entra ID, Keycloak, …) is the
+system that owns the user directory and does the pushing.
+
 probectl extends the SSO/RBAC foundation with **SCIM 2.0** user/group lifecycle
 provisioning, **ABAC** (attribute policies layered over RBAC), and the
 directory-integration path that Entra ID / Okta actually use (SCIM push + OIDC
@@ -16,15 +25,20 @@ Where this sits relative to login: OIDC SSO (see
 [`auth/self-hosted-idp.md`](auth/self-hosted-idp.md)) gets a user *in the
 door*; SCIM is what assigns and removes their *access*.
 probectl does not read group claims off the login token — group membership
-arrives via SCIM.
+arrives via SCIM. Why the split? A login token is a snapshot minted at sign-in;
+a SCIM push is the directory speaking *now*. Access driven by SCIM changes the
+moment HR changes, not the next time someone happens to log in.
 
 ## SCIM 2.0 provisioning
 
-The IdP calls `/scim/v2/*` with a **per-tenant SCIM bearer token.** Like
-sessions and MCP tokens, the lookup is **pre-tenant** — the token *selects its
-own tenant*, and only the token's hash is stored. All provisioning is then
-tenant-scoped by row-level security (RLS), so one tenant's IdP can never touch
-another tenant's directory.
+The IdP calls `/scim/v2/*` with a **per-tenant SCIM bearer token** (a bearer
+token is a secret string whose mere possession authenticates the request).
+Like sessions and MCP tokens, the lookup is **pre-tenant** — the token *selects
+its own tenant*, and only the token's hash is stored, so reading the database
+can never recover (or mint) a usable token. All provisioning is then
+tenant-scoped by row-level security (**RLS** — the database itself refuses to
+return or write rows outside the current tenant, regardless of what the query
+asks for), so one tenant's IdP can never touch another tenant's directory.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
@@ -39,16 +53,17 @@ flowchart LR
   REVOKE --> SESS[("sessions / mcp_tokens")]
 ```
 
-Endpoints (mounted at `/scim/v2`, outside the `/v1` API, in
-`internal/control/scim.go`):
+Endpoints — twelve routes, mounted at `/scim/v2`, outside the `/v1` API, in
+`internal/control/scim.go`:
 
 - **Users** — `POST` (provision), `GET` (list with a `userName eq` filter plus
   `startIndex`/`count`), `GET/{id}`, `PUT/{id}`, `PATCH/{id}`, `DELETE/{id}`.
-- **Groups** — `POST`, `GET`, `GET/{id}`, `PATCH/{id}` (member add/remove),
-  `DELETE`. A SCIM **Group maps to a probectl role**, and group membership is a
-  role binding — that is the **group-sync mapping** that gives users their
-  permissions.
-- **Discovery** — `GET /scim/v2/ServiceProviderConfig`.
+- **Groups** — `POST`, `GET`, `GET/{id}`, `PATCH/{id}` (member
+  add/remove/replace), `DELETE`. A SCIM **Group maps to a probectl role**, and
+  group membership is a role binding — that is the **group-sync mapping** that
+  gives users their permissions.
+- **Discovery** — `GET /scim/v2/ServiceProviderConfig` (the machine-readable
+  capability sheet an IdP reads before provisioning).
 
 Conformance details, because IdPs are strict: responses use the
 `application/scim+json` media type and the SCIM error envelope
@@ -57,7 +72,9 @@ Conformance details, because IdPs are strict: responses use the
 delete. PATCH deliberately tolerates the divergent ways IdPs encode
 "deactivate" — Okta's valueless `replace` carrying `{"active":false}`, and
 Entra's `path:"active"` with the string `"False"` (the parser in
-`internal/scim/patch.go` accepts both a JSON bool and a quoted string).
+`internal/scim/patch.go` accepts both a JSON bool and a quoted string). Two
+IdPs, one spec, two dialects — the parser speaks both rather than failing the
+one you happen to run.
 
 ### Deprovision → immediate revocation
 
@@ -69,12 +86,18 @@ deprovisioned session fails to resolve and returns `401` — there is **no TTL
 window** to wait out. This does not depend on any cache; it is a direct session
 delete keyed by `(tenant_id, user_id)`, so it takes effect at once.
 
+Think of a building badge: the safe design confiscates the badge at the desk
+the moment HR terminates, rather than letting it keep opening doors until its
+printed expiry date. A session that outlives the employment it represents is
+exactly the access an offboarding process exists to kill.
+
 ### Minting a SCIM token
 
 An operator mints the per-tenant bearer token with the control-plane CLI (the
-IdP then pastes it into its provisioning config). The token is shown once:
+IdP then pastes it into its provisioning config). The token is shown once —
+only its hash is stored, so this is the single chance to copy it:
 
-```
+```sh
 probectl-control scim-token --tenant <tenant-uuid> --name okta
 ```
 
@@ -85,7 +108,12 @@ model: **RBAC is the baseline grant; ABAC can only take away from it.** RBAC
 says "this role may write tests"; ABAC can add "…but not if the subject is a
 contractor." The model is **deny-override** — an `allow` policy is just a silent
 permit (RBAC already permitted), so ABAC can never widen access beyond what
-RBAC granted (`internal/auth/abac.go`).
+RBAC granted (`internal/auth/abac.go`). Like a checkpoint guard who can
+confiscate keys but carries none to hand out: whatever the guard decides, nobody
+leaves holding a key RBAC didn't already issue. Why build it one-way? A policy
+language that can *grant* is a second, parallel permission system — two places
+to audit, two places to get wrong. One that can only *narrow* is pure
+subtraction from a single source of truth.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#0d1117','primaryColor':'#161b22','primaryTextColor':'#e6edf3','primaryBorderColor':'#3b82f6','lineColor':'#8b949e','secondaryColor':'#21262d','tertiaryColor':'#0d1117','clusterBkg':'#161b22','clusterBorder':'#30363d','fontFamily':'ui-monospace, SFMono-Regular, Menlo, monospace'},'flowchart':{'curve':'basis','nodeSpacing':55,'rankSpacing':55,'padding':12}}}%%
@@ -117,7 +145,9 @@ Policies are managed at `/v1/abac/policies` (`GET` gated by `directory.read`;
 (30 seconds), with policy CRUD invalidating that tenant's cache
 (`internal/control/abac.go`). The cache is a performance shortcut only —
 because deprovision deletes sessions directly, a deprovisioned user is locked
-out at once regardless of any cached policy.
+out at once regardless of any cached policy. The worst a stale cache can do is
+apply a 30-second-old *policy* to a still-valid user; it can never resurrect a
+revoked one.
 
 ## Directory connectors
 

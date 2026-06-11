@@ -2,14 +2,18 @@
 
 ## What this is
 
-A firewall config says what traffic is *supposed* to be blocked. This feature
+**Segmentation** is the practice of splitting a network into zones that must
+not talk to each other — the firewalled walls auditors ask about. A firewall
+config says what traffic is *supposed* to be blocked. This feature
 checks what your network is *actually* doing — and tells an auditor the
 difference, honestly.
 
 probectl proves segmentation the only way an observability tool truthfully can:
 the operator **declares** the intended segmentation (PCI cardholder zones,
 zero-trust intents), and probectl validates those declarations against
-**observed** traffic — the eBPF and flow records the platform already collects.
+**observed** traffic — the eBPF and flow records the platform already collects
+(eBPF sees connections from inside each host's kernel; flow records are the
+per-conversation summaries network devices export).
 It flags violations with the actual flow evidence and exports **audit-grade**
 PCI/NIST/zero-trust evidence.
 
@@ -26,15 +30,18 @@ into the control plane in `internal/control/complianceapi.go`.
 > enforces** — it does not block anything, ever (one of probectl's
 > [non-negotiables](../CONTRIBUTING.md#non-negotiables)).
 
-This is the whole philosophy. An auditor who is told "compliant" when probectl
-merely *didn't see* any traffic has been misled. So the engine is built to
-distinguish "we watched and it was clean" from "we never saw anything here,"
-and to say so out loud.
+This is the whole philosophy. Think of security cameras: a camera that watched
+a door all week and saw nobody force it is evidence; a door no camera covers is
+*nothing* — not evidence the door held. An auditor who is told "compliant"
+when probectl merely *didn't see* any traffic has been misled. So the engine is
+built to distinguish "we watched and it was clean" from "we never saw anything
+here," and to say so out loud.
 
 ## Declaring policy
 
 Policies are YAML files in `PROBECTL_COMPLIANCE_POLICY_DIR`. They are validated
-**strictly** (unknown YAML fields are rejected via `KnownFields(true)`), and a
+**strictly** (unknown YAML fields are rejected via `KnownFields(true)`, so a
+typo like `birdirectional` is an error, not a silently ignored rule), and a
 malformed file **fails startup** — a boundary the operator believes is being
 validated must actually be validated, not silently skipped (`LoadDir` in
 `policy.go`).
@@ -67,15 +74,20 @@ rules:
 
 The pieces:
 
-- **Zones** are named address spaces (CIDR sets). When probectl sees a flow, it
+- **Zones** are named address spaces (CIDR sets — a CIDR like `10.10.0.0/16`
+  names a whole block of addresses). When probectl sees a flow, it
   resolves each endpoint to the **longest-prefix-matching** zone (`zoneOf`), so
-  a more specific `/24` wins over a broader `/16`.
+  a more specific `/24` wins over a broader `/16` — the most precise
+  description of an address is the one that counts.
 - **Rules are forbidden intents** — "traffic from zone A to zone B should not
   happen." A rule is directional by default; set `bidirectional: true` to
   forbid both directions, or `ports: [...]` to scope the prohibition to specific
   destination ports (empty = all ports).
-- **`frameworks`** maps each rule onto audit language — PCI DSS, NIST SP 800-207
-  zero-trust, or any custom framework tag. That mapping rides into every result
+- **`frameworks`** maps each rule onto audit language — PCI DSS (the card
+  industry's security standard; the **CDE** is the cardholder data
+  environment it ring-fences), NIST SP 800-207 zero-trust (the "never trust by
+  network position" architecture), or any custom framework tag. That mapping
+  rides into every result
   and every evidence record, so the export speaks the auditor's vocabulary.
 
 ## Verdict semantics
@@ -92,17 +104,23 @@ For each rule, the validator produces one of three verdicts (`Results` in
 The distinction between `observed_clean` and `not_observed` is the honesty
 contract in action. `observed_clean` means "we were watching that path and saw
 only allowed traffic." `not_observed` means "we have no visibility into that
-path" — which is emphatically *not* the same as "that path is blocked."
+path" — which is emphatically *not* the same as "that path is blocked." A
+binary pass/fail would have to lump one of these in with the other, and either
+lump misleads.
 
 A `violation` raises a `compliance.segmentation_violation` signal (plane
 `compliance`, severity `critical`) into the incident pipeline and the SIEM —
-**once per rule per episode** (the `alerted` latch in `ruleState`), so a
-persistent breach doesn't spam a fresh alert on every packet.
+**once per rule** (the `alerted` latch in `ruleState`), so a
+persistent breach doesn't spam a fresh alert on every packet. The latch lives
+in the in-memory engine state, so it re-arms when the validator restarts and
+rebuilds from the stream; the violation *count* and samples keep accumulating
+either way.
 
 ## Coverage: never claim beyond what was observed
 
 Every API response and every evidence export carries a **coverage block**
-(`CoverageFor` in `validator.go`) describing exactly what was watched:
+(`CoverageFor` in `validator.go`) describing exactly what was watched — the
+map of where the cameras actually pointed:
 
 - which planes actually reported (`flow_observed`, `ebpf_observed`),
 - the observation count and time range,
@@ -123,7 +141,9 @@ samples, and the records are **hash-chained**: each record's hash covers its
 own canonical content **plus the previous record's hash** (`recordHash` in
 `evidence.go`), and the document ends with the final chain head.
 
-Why a hash chain? So tampering is detectable. If anyone edits a single
+Why a hash chain? So tampering is detectable. Picture a notebook where every
+page is stamped with a seal derived from the previous page's seal: tear out or
+rewrite one page and every later seal stops matching. If anyone edits a single
 violation count after export, `VerifyEvidence` re-walks the chain, the hashes
 stop matching, and verification fails (the test for this flips one violation
 count and watches the chain break). The coverage caveats are embedded *inside*
@@ -152,7 +172,8 @@ outermost boundary — see
 [`security/tenant-isolation.md`](security/tenant-isolation.md)). The
 `GET /v1/compliance` endpoint (RBAC `threat.read`) also returns a
 `compliance_running` flag so a caller can tell whether the validator is
-actually wired.
+actually wired — "no verdicts" from a running validator and "no verdicts"
+because nothing is watching must never look the same.
 
 ## Configuration
 

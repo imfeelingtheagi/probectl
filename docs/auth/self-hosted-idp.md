@@ -1,5 +1,11 @@
 # Self-hosted / air-gapped OIDC IdP
 
+**OIDC** (OpenID Connect) is the standard web login protocol: an **IdP**
+(identity provider — the system that owns the user directory and the login
+page) vouches for who a user is, and an application trusts that voucher
+instead of keeping its own passwords. The IdP's identity on the network is its
+**issuer** — the HTTPS URL all its tokens name as their origin.
+
 probectl authenticates operators via **OIDC**: set `PROBECTL_AUTH_MODE=session`
 and point it at an issuer with `PROBECTL_OIDC_ISSUER` plus a client id/secret
 and redirect URL. Nothing in probectl requires a *cloud* IdP — any
@@ -12,37 +18,53 @@ neither does the login flow.
 ## How probectl uses OIDC (and where roles come from)
 
 probectl is a plain OIDC **relying party** (`internal/auth/oidc.go`, using
-`go-oidc`). Login is the standard authorization-code flow handled at
-`GET /auth/login` → IdP → `GET /auth/callback`. On a successful callback
-(`internal/control/auth.go`) probectl:
+`go-oidc`) — the party that *relies on* the IdP's word rather than verifying
+passwords itself. Login is the standard authorization-code flow handled at
+`GET /auth/login` → IdP → `GET /auth/callback`: probectl sends the browser to
+the IdP, the IdP authenticates the user and sends the browser back with a
+one-time code, and probectl exchanges that code for an **ID token** — a signed
+statement of **claims** (named facts about the user: email, name, how they
+authenticated). On a successful callback (`internal/control/auth.go`) probectl:
 
 1. validates the ID token (signature, and the `nonce` it minted at login — a
-   mismatch fails the login closed);
+   **nonce** is a single-use random value that ties this token to this login
+   attempt, so a captured token cannot be replayed; a mismatch fails the login
+   closed);
 2. reads the user's **email** from the token;
 3. **just-in-time provisions** a first-time user — created with **no roles**, a
    deliberately secure default.
 
 That third point is the one thing to internalize: **OIDC gets a user *in the
-door*; it does not decide what they can *do*.** probectl does **not** read a
-`groups` claim and turn it into roles at login. Authorization (which RBAC roles
-a user holds) is assigned one of two ways:
+door*; it does not decide what they can *do*.** Think of the IdP as a passport
+office and probectl as the border desk: the desk verifies the passport is
+genuine, but a genuine passport is not a visa — what you may do inside is
+granted separately. probectl does **not** read a `groups` claim and turn it
+into roles at login. Authorization (which RBAC roles a user holds) is assigned
+one of two ways:
 
 - **SCIM group sync** — the IdP pushes group membership to probectl, where a
   SCIM Group maps to a probectl role (see [SCIM + ABAC](../scim-abac.md)); or
 - **an admin grants the role explicitly** in probectl.
 
-So the IdP's job here is narrow and well-defined: prove who the user is (and,
-for step-up policies, *how* they authenticated — probectl derives an `mfa` flag
-from the ID token's `amr`/`acr` claims). Everything about *permissions* is the
-SCIM/RBAC/ABAC path in [`scim-abac.md`](../scim-abac.md), which is identical no
-matter which IdP you run — the self-hosted IdP is not a special case.
+Why not map `groups` claims to roles? A claim is a snapshot minted at sign-in
+— revoke a group in the IdP and the stale claim keeps working until the next
+login. SCIM is the directory speaking *now*, and its deprovision revokes
+access immediately. So the IdP's job here is narrow and well-defined: prove
+who the user is (and, for step-up policies, *how* they authenticated —
+probectl derives an `mfa` flag from the ID token's `amr`/`acr` claims, the
+standard fields naming the authentication methods used). Everything about
+*permissions* is the SCIM/RBAC/ABAC path in [`scim-abac.md`](../scim-abac.md),
+which is identical no matter which IdP you run — the self-hosted IdP is not a
+special case.
 
 ## The contract
 
 To be a valid IdP for probectl, the provider must:
 
 - expose a discovery document at `${issuer}/.well-known/openid-configuration`
-  reachable from the control plane (in-cluster DNS is fine);
+  reachable from the control plane (the discovery document is the IdP's
+  self-description — endpoints, keys, capabilities — so nothing else needs
+  hand-configuring; in-cluster DNS is fine);
 - issue ID tokens for the `openid` scope, including an `email` claim (probectl
   requests `openid`, `email`, `profile` by default and refuses a login with no
   email);
@@ -110,7 +132,9 @@ validation is never disabled anywhere in probectl (a
 mount your CA bundle so the control plane trusts
 the IdP's cert — the same trust store the rest of probectl uses for outbound
 TLS. A self-signed IdP cert from a private CA is fine **as long as that CA is in
-the trust store** — probectl never skips verification.
+the trust store** — probectl never skips verification. The distinction matters:
+"trust my private CA" extends the list of who may vouch; "skip verification"
+would accept *anyone*, and login is the worst possible place to accept anyone.
 
 ## What's covered by tests vs. what you wire up
 
