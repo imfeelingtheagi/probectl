@@ -41,9 +41,12 @@ services and ports are in [`docs/configuration.md`](docs/configuration.md).
 ## Commits — Conventional Commits
 
 Commit messages follow [Conventional
-Commits](https://www.conventionalcommits.org/): `type(scope): subject`. The
-subject is imperative with no trailing period, and the whole header line stays
-within 100 characters.
+Commits](https://www.conventionalcommits.org/): `type(scope): subject` — a
+small grammar that makes every commit's *kind* machine-readable, so a human
+(or release tooling) can scan history and tell features from fixes from docs
+without opening a single diff. The subject is imperative ("add", not "added" —
+read it as *"this commit will…"*) with no trailing period, and the whole
+header line stays within 100 characters.
 
 ```
 feat(canary): add ICMP network test
@@ -63,11 +66,14 @@ git config commit.template .gitmessage
 
 ## Sign-off — Developer Certificate of Origin (DCO)
 
-Every commit must carry a **`Signed-off-by:` trailer**. By adding it you certify,
+Every commit must carry a **`Signed-off-by:` trailer** (a trailer is a
+`Key: value` line at the end of the commit message). By adding it you certify,
 under the [Developer Certificate of Origin 1.1](https://developercertificate.org/),
 that you wrote the change (or otherwise have the right to submit it) under the
-project's license. The easy way is the `-s` flag, which appends the trailer
-using your `git` identity:
+project's license — the DCO is the lightweight, per-commit alternative to a
+signed contributor agreement, and the trailer is what makes the certification
+auditable years later, commit by commit. The easy way is the `-s` flag, which
+appends the trailer using your `git` identity:
 
 ```sh
 git commit -s
@@ -94,8 +100,9 @@ A change is complete only when **all** of these hold:
   (the integration suite runs against the real `test/` dependency stack).
 - The **OpenAPI spec** and the **`docs/`** are updated in the same PR — there are
   no undocumented API routes.
-- Any **schema change** ships an **idempotent migration** (`IF NOT EXISTS`,
-  `ON CONFLICT`), and any new tenant-owned table carries `tenant_id` with its
+- Any **schema change** ships an **idempotent migration** — one that is safe to
+  run twice, converging to the same state instead of erroring (`IF NOT EXISTS`,
+  `ON CONFLICT`) — and any new tenant-owned table carries `tenant_id` with its
   index/partition from the *first* migration.
 - Any **new config key** is documented in `docs/configuration.md`.
 - The feature is **self-observable** — it emits the logs and metrics that let an
@@ -149,9 +156,12 @@ it.
 The protobuf schemas in `proto/` are the **wire contract** between agents, the
 bus, and the control plane — and the bus history is replayable, so a breaking
 change can strand deployed agents and corrupt the ability to re-read old events.
+Mutating a published message is like changing what a column means in a ledger
+everyone has already written rows into: every old row silently reads wrong.
 Because of that, schemas are **additive-only**, enforced by the **`buf breaking`
-gate** in the `proto` CI job (it compares your branch against `main` and blocks
-the merge on any incompatible change).
+gate** in the `proto` CI job (`buf` is the protobuf toolchain — linter,
+breaking-change checker, code generator; the gate compares your branch against
+`main` and blocks the merge on any incompatible change).
 
 If you genuinely need an incompatible change, the path is to ship a **new
 versioned package** (`probectl.<domain>.v2`) alongside the old one — never mutate

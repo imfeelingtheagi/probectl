@@ -1,8 +1,9 @@
 # Vendored libbpf BPF-program headers
 
 These are the **BPF-side** headers from [libbpf](https://github.com/libbpf/libbpf),
-vendored so the eBPF object compile (`bpf2go` → clang) does **not** depend on
-whatever `libbpf-dev` version the build image or CI runner happens to ship.
+vendored — copied into this tree at a pinned upstream version — so the eBPF
+object compile (`bpf2go` → clang) does **not** depend on whatever `libbpf-dev`
+version the build image or CI runner happens to ship.
 
 Why: `sslsniff.bpf.c` uses `BPF_UPROBE`/`BPF_URETPROBE`, which libbpf only added
 in **v1.2.0**. The Debian-bookworm-based build image originally pulled in distro
@@ -31,7 +32,7 @@ NOT vendored — the Go side uses the `github.com/cilium/ebpf` library):
 | bpf_helpers.h         | l4flow.bpf.c, sslsniff.bpf.c         |
 | bpf_helper_defs.h     | (via bpf_helpers.h)                  |
 | bpf_tracing.h         | sslsniff.bpf.c (BPF_UPROBE)          |
-| bpf_core_read.h       | available for CO-RE programs         |
+| bpf_core_read.h       | available for CO-RE (Compile Once – Run Everywhere) reads |
 | bpf_endian.h          | available for byte-order helpers     |
 
 ## Updating

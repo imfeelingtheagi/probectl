@@ -1,8 +1,11 @@
 # pkg/
 
 Shared, public Go libraries — packages intended to be importable by external
-consumers without pulling in control-plane internals (unlike `internal/`, which
-the Go toolchain keeps private to this module).
+consumers without pulling in control-plane internals. The split is enforced by
+the Go toolchain itself: the compiler refuses any import of an `internal/`
+package from outside this module, so `pkg/` is the one deliberate shelf of
+exported code — putting something here is a publishing decision, not a file
+move.
 
 ## Status
 

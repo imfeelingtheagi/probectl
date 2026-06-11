@@ -19,7 +19,7 @@ The repo's other three workflows do **not** run on a normal push:
 | `ci.yml` | push to `main` + every PR | the gate described here |
 | `release.yml` | push of a `v*` tag | build/sign/publish a release — its `require-green-ci` job refuses any tag whose commit doesn't have a green `ci` run |
 | `nightly.yml` | daily 03:17 UTC (+ manual) | the slow stuff: `e2e` (black-box full stack against the real compose dependencies), `ingest-bench` (consumer hot-path benchmarks), and `scale-gate-m` (the M-profile SLO regression guard, `make scale-gate-m`, plus an M-tier full-stack run against real Kafka + Prometheus) |
-| `security-scan.yml` | weekly, Mondays 05:17 UTC (+ manual) | scheduled dependency-CVE scans (`govulncheck`, `npm-audit`, `trivy-fs`) that upload evidence artifacts and fail on Critical findings — so a new CVE in an *unchanged* repo still goes red |
+| `security-scan.yml` | weekly, Mondays 05:17 UTC (+ manual) | scheduled dependency-CVE scans that upload evidence artifacts and gate — `govulncheck` fails on any *reachable* Go vulnerability, `npm-audit` and `trivy-fs` on Critical findings — so a new CVE in an *unchanged* repo still goes red |
 
 ## The shape: fan-out, then one umbrella
 
@@ -51,8 +51,10 @@ Verification you ran, not verification you described.
   tag, so a hijacked upstream action can't slip in; a second pass
   (`scripts/check_supply_pins.sh`) rejects `:latest` image tags and unpinned
   tool installs anywhere in the workflows (supply-chain).
-- **secret-scan** — gitleaks: no credentials/keys committed. Deliberate
-  redaction-test fixtures are allowlisted in `.gitleaks.toml`.
+- **secret-scan** — gitleaks, a scanner that pattern-matches the tree for
+  anything *shaped* like a credential (tokens, private keys, `key=value`
+  passwords): nothing secret-shaped gets committed. The deliberately fake
+  secrets inside redaction tests are allowlisted in `.gitleaks.toml`.
 - **commitlint** — commit messages follow Conventional Commits (`feat(...)`,
   `fix(ci): ...`).
 - **dco** — every commit carries a `Signed-off-by` (the Developer Certificate of
@@ -90,16 +92,20 @@ Verification you ran, not verification you described.
 ### 3. Tests + coverage
 
 - **test-go** — the Go unit suite across every workspace module, run with
-  `-race`, plus a fuzz smoke over the untrusted-input parsers, the
-  backup-encryption/erasure gate, an agent-overhead bench smoke, and
-  cross-compile checks (linux amd64+arm64; the endpoint agent additionally
-  builds for macOS and Windows).
+  `-race` (Go's race detector: it catches two goroutines touching the same
+  memory unsynchronized — the class of bug that stays invisible until
+  production load), plus a fuzz smoke over the untrusted-input parsers
+  (fuzzing = feeding a parser machine-mutated random inputs to find the
+  crashes no human would think to type), the backup-encryption/erasure gate,
+  an agent-overhead bench smoke, and cross-compile checks (linux amd64+arm64;
+  the endpoint agent additionally builds for macOS and Windows).
 - **test-python** — the BGP analyzer's tests, installed from a hash-locked
   requirements file (which is itself checked against `pyproject.toml` for
   drift), with an 85% coverage floor.
 - **coverage** — per-package statement-coverage **floors** on the service-free
   logic/parser/probe packages (`scripts/check_coverage.sh`); retains
-  `coverage.out` + a per-package summary as a downloadable receipt artifact
+  `coverage.out` + a summary (the per-function tail of `go tool cover -func`)
+  as a downloadable receipt artifact
   (see [`docs/quality/coverage.md`](quality/coverage.md)).
 - **web** — the frontend: typecheck, lint, production build; the test step *is*
   the WCAG 2.2 AA accessibility + theme-token gate.
@@ -108,24 +114,32 @@ Verification you ran, not verification you described.
 
 ### 4. eBPF — building and loading real BPF objects
 
-- **ebpf-kernel-matrix** — boots real LTS kernels (5.15 and 6.6) in QEMU (via
-  `vimto`) and actually **loads + attaches** the BPF programs (tracepoint +
-  uprobes, one flush cycle). One matrix entry raises kernel lockdown to
-  INTEGRITY inside the VM and proves load+attach still works on a hardened
-  kernel. amd64 runs under KVM; the arm64 runner has no `/dev/kvm`, so it
-  compiles + digest-verifies the arm64 objects but skips the (too-slow emulated)
-  boot.
+- **ebpf-kernel-matrix** — boots real LTS kernels (5.15 and 6.6) in QEMU — a
+  machine emulator that runs a complete virtual machine, real kernel and all,
+  inside the CI runner (driven by `vimto`) — and actually **loads + attaches**
+  the BPF programs (tracepoint + uprobes, one flush cycle). Static analysis
+  cannot prove a BPF program loads; only a kernel's verifier can. One matrix
+  entry raises kernel lockdown to INTEGRITY inside the VM and proves
+  load+attach still works on a hardened kernel. amd64 runs under KVM
+  (hardware-accelerated virtualization); the arm64 runner has no `/dev/kvm`,
+  so it compiles + digest-verifies the arm64 objects but skips the (too-slow
+  emulated) boot.
 - **ebpf-image-live** — the shipped `probectl-ebpf-agent` image must carry the
-  *live* CO-RE loader (built from `Dockerfile.ebpf`, asserting `-tags=ebpf`), not
-  the fixture replayer.
+  *live* CO-RE loader (CO-RE = Compile Once – Run Everywhere: the BPF object is
+  relocated at load time to fit the running kernel's struct layouts), built
+  from `Dockerfile.ebpf` and asserting `-tags=ebpf` — not the fixture replayer.
 
 ### 5. Real-infrastructure suites — spin up actual Postgres / Kafka / ClickHouse
 
 - **cross-tenant-isolation** — the
   [tenant-isolation non-negotiable](../CONTRIBUTING.md#non-negotiables),
-  executed (`make test-isolation`): RLS posture + cross-tenant injection against
-  a real Postgres (over TLS, `sslmode=verify-full` like production) *and* a real
-  ClickHouse (including its row-policy DDL).
+  executed (`make test-isolation`): row-level-security posture (RLS is the
+  Postgres feature where the *database itself* filters every query by tenant,
+  so even buggy handler code cannot return another tenant's rows) +
+  cross-tenant injection against a real Postgres (over TLS,
+  `sslmode=verify-full` — the client checks the server's certificate *and*
+  hostname, like production) *and* a real ClickHouse (including its row-policy
+  DDL).
 - **integration** — boots the control plane against real Postgres (TLS,
   `verify-full`) plus a remote-write Prometheus; migrations are idempotent,
   `/readyz` passes, the result pipeline round-trips — and `internal/store` must
@@ -137,8 +151,10 @@ Verification you ran, not verification you described.
 - **failover-drill** — kills the primary, promotes the streaming standby, and
   times RTO (first write on the new primary) / RPO (acked rows lost).
 - **load-smoke** — synthetic agents → real Kafka → the production consumer
-  (retry/DLQ + cardinality caps) → Prometheus remote-write → tenant-scoped PromQL,
-  end to end.
+  (retry/DLQ — a dead-letter queue, where a message that repeatedly fails
+  processing is parked for inspection instead of retried forever or silently
+  dropped — plus cardinality caps) → Prometheus remote-write → tenant-scoped
+  PromQL, end to end.
 
 ### 6. AI quality
 
@@ -150,10 +166,10 @@ Verification you ran, not verification you described.
 
 - **helm-gate** — the Helm charts lint for every reference profile and uphold
   the secure-by-default invariants (non-root/read-only pod,
-  NetworkPolicy/PDB/HPA, drain probe, HSTS, no default credentials); the
-  rendered manifests are schema-validated with `kubeconform`, the GitOps
-  (ArgoCD/Flux) manifests are checked, and the shipped compose file must pass
-  `docker compose config`.
+  NetworkPolicy/PDB/HPA, drain probe, HSTS — the response header that pins
+  browsers to HTTPS — and no default credentials); the rendered manifests are
+  schema-validated with `kubeconform`, the GitOps (ArgoCD/Flux) manifests are
+  checked, and the shipped compose file must pass `docker compose config`.
 - **terraform-gate** — the Terraform module is `fmt`-clean and `terraform
   validate`s via an example root that consumes it.
 

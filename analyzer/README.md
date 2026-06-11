@@ -2,9 +2,13 @@
 
 The BGP analyzer is the one probectl component written in Python (the language has
 the richest BGP/MRT libraries). It ingests **public** collector data — **RouteViews**
-(bulk MRT over HTTP) and **RIPE RIS** (MRT + the **RIS Live** websocket) — does
-per-prefix AS-path monitoring with origin-change / hijack / leak detection and
-**RPKI** (RFC 6811) validation, and emits `probectl.bgp.events` as JSON Lines. The Go
+(bulk **MRT** over HTTP; MRT, RFC 6396, is the standard binary archive format for
+BGP table snapshots and update streams) and **RIPE RIS** (MRT + the **RIS Live**
+websocket, RIPE's real-time feed of BGP messages) — does per-prefix AS-path
+monitoring with origin-change / hijack / leak detection and **RPKI** (RFC 6811)
+validation (checking each announcement against cryptographically published
+statements of which AS may originate a prefix), and emits `probectl.bgp.events`
+as JSON Lines (one JSON object per line — streamable, no enclosing array). The Go
 side (`internal/bgp`) bridges those onto the bus as the canonical
 `probectl.bgp.v1.BGPEvent` protobuf, tenant-keyed.
 
@@ -26,7 +30,8 @@ side (`internal/bgp`) bridges those onto the bus as the canonical
 
 ```sh
 pip install -e '.[dev]'                         # from analyzer/
-# (optional) live RIS Live needs the websocket extra:
+# (optional) live RIS Live streaming needs the websockets package
+# (imported lazily — MRT/replay processing works without it):
 pip install websockets
 
 # process a RouteViews / RIS MRT dump
@@ -59,9 +64,11 @@ analyzer's output to that reader (e.g. a file/pipe the control plane consumes).
 ```
 
 `tenant_id` is required — every emitted event carries it, and the bridge rejects
-any event without one. `rpki_vrp_file` (or `rpki_vrp_url`) points at a
-`rpki-client` / Routinator VRP JSON export; omit it and RPKI status degrades to
-`unknown`.
+any event without one (fail closed: an unattributable event is dropped, never
+guessed). `rpki_vrp_file` (or `rpki_vrp_url`) points at a `rpki-client` /
+Routinator VRP JSON export (a **VRP**, Validated ROA Payload, is one
+prefix→origin-AS authorization an RPKI validator has verified); omit it and
+RPKI status degrades to `unknown` rather than blocking analysis.
 
 ## Conventions
 
@@ -86,8 +93,10 @@ make lint-python          # ruff check + black --check        (from repo root)
 make test-python          # pytest, with an 85% coverage floor (from repo root)
 ```
 
-The tests run entirely offline against **recorded fixtures** — hand-built MRT
-byte streams (`tests/mrt_fixtures.py`) and in-repo RIS Live message fixtures —
-so no test ever reaches a live collector. CI installs the analyzer from the
-hash-locked `requirements-dev.lock` and fails if that lock drifts from
-`pyproject.toml`.
+The tests run entirely offline against **recorded fixtures** — a fixture is a
+checked-in, known-good input a test replays, here hand-built MRT byte streams
+(`tests/mrt_fixtures.py`) and in-repo RIS Live message fixtures — so no test
+ever reaches a live collector, and a collector outage can never redden CI. CI
+installs the analyzer from the hash-locked `requirements-dev.lock` (every
+dependency pinned by content hash, so a tampered upstream package cannot
+install) and fails if that lock drifts from `pyproject.toml`.

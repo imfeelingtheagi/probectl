@@ -20,9 +20,12 @@ the AI **Ask** panel, the provider console, and more) are routes on top of it.
 ## How it's organized (`src/`)
 
 - **Design tokens** (`styles/tokens.css`) — the single source of design values.
-  **No component hardcodes a color/space/type/radius/motion value.** A second
-  theme (`[data-theme="aurora"]`) proves a full re-skin via token swap;
-  per-tenant branding overrides the same set.
+  A token is one named variable for one visual decision (a color, a spacing
+  step, a radius, a motion curve); components reference the name, never the
+  value. **No component hardcodes a color/space/type/radius/motion value** —
+  which is why re-theming is a variable swap rather than a screen-by-screen
+  hunt. A second theme (`[data-theme="aurora"]`) proves a full re-skin via
+  token swap; per-tenant branding overrides the same set.
 - **Component library** (`components/`) — Button, Card, Badge, Input, Select,
   Table, Modal, Toast, Icon, ChartShell + Sparkline, and Empty/Error/Loading
   states (`States`). Browse them live at `/gallery`.
@@ -49,9 +52,10 @@ the AI **Ask** panel, the provider console, and more) are routes on top of it.
   (`test/no-hardcoded-colors.test.ts`).
 - **White-label ready** — a token swap re-themes the whole UI
   (`test/theme.test.tsx`).
-- **WCAG 2.2 AA baseline** — semantic landmarks, skip link, focus management,
-  reduced-motion, keyboard-first; an **axe gate** runs in CI
-  (`test/a11y.test.tsx`).
+- **WCAG 2.2 AA baseline** (the Web Content Accessibility Guidelines' mid
+  conformance level — the usual legal/procurement bar) — semantic landmarks,
+  skip link, focus management, reduced-motion, keyboard-first; an **axe gate**
+  (the automated a11y checker) runs in CI (`test/a11y.test.tsx`).
 - **Surface coverage** — every user-facing capability declares a surface;
   `test/surface-coverage.test.tsx` (`npm run coverage-gate`) fails the build on
   a capability with no surface (how and why:

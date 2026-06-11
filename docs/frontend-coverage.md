@@ -17,6 +17,11 @@ Two pieces make it work:
   the **Frontend-coverage gate** step of CI's `web` job (it runs
   `npm run coverage-gate`, which is `vitest run src/test/surface-coverage.test.tsx`).
 
+Think of the registry as a passenger manifest and the gate as the headcount:
+drift in *either* direction — someone aboard who isn't on the list, or someone
+on the list who isn't aboard — fails the count. That bidirectionality is the
+point; a one-way check would let the registry rot into fiction.
+
 ## The registry
 
 Every entry declares one of three **Surface** kinds, and the gate checks a
@@ -24,7 +29,7 @@ different thing for each:
 
 | Kind | Meaning | What the gate verifies |
 | --- | --- | --- |
-| `native` | A first-class screen in the app. | The route renders a *real* screen (not the "coming soon" placeholder), has a `<main>` landmark and an `<h1>`, and passes the WCAG 2.2 AA accessibility bar (via `axe`). |
+| `native` | A first-class screen in the app. | The route renders a *real* screen (not the "coming soon" placeholder), has a `<main>` landmark (the HTML element assistive technology uses to jump straight to the page's content) and an `<h1>`, and passes the WCAG 2.2 AA accessibility bar — the Web Content Accessibility Guidelines' mid conformance level, the usual legal/procurement requirement — checked by `axe`, the automated engine that detects the machine-detectable subset of WCAG violations. |
 | `federated` | Surfaced through an external tool by design — Grafana, Prometheus, OTLP, or the raw API. | The declared evidence actually exists: a `file:<repo path>` is present on disk, and/or an `openapi:<path>` is a real route in the control plane's OpenAPI spec (`internal/control/openapi.json`). Federated surfaces **count** — the gate cares that a capability is reachable, not that it lives inside the app. |
 | `placeholder` | The feature itself isn't built yet; the screen is a stub. | The route still renders the placeholder. When the real screen ships, the entry **must** be flipped to `native` — which keeps the registry honest in both directions. |
 

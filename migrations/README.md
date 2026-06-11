@@ -4,10 +4,14 @@ Sequential, numbered SQL migrations for the control-plane datastores. The
 numbered files in this directory — starting at `0001_baseline.sql` — *are* the
 schema; the directory listing is the authoritative sequence.
 
-The files are embedded into the binary (`embed.go`, a `//go:embed *.sql`) and
-applied in ascending order by the migration runner — either
-`probectl-control migrate` (one-shot) or on boot when
-`PROBECTL_MIGRATE_ON_BOOT=true` — idempotently, so re-running is safe.
+The files are embedded into the binary (`embed.go`, a `//go:embed *.sql` —
+Go's directive that compiles the SQL files into the control-plane executable
+itself, so a deployed binary always carries exactly the schema it expects and
+the two can never be separated or version-skewed) and applied in ascending
+order by the migration runner — either `probectl-control migrate` (one-shot)
+or on boot when `PROBECTL_MIGRATE_ON_BOOT=true` — idempotently (safe to run
+twice: a re-run converges to the same state instead of erroring), so
+re-running is safe.
 
 ## Conventions
 
@@ -31,7 +35,8 @@ deliberate design. Rollback is achieved by rolling *forward* (a new,
 higher-numbered migration that reverts the change), not by running a
 down-migration — the standard practice for zero-downtime production schemas,
 where a blind `down` against live data is more dangerous than a reviewed
-forward fix.
+forward fix (a down-migration written months earlier knows nothing about the
+rows production has accumulated since).
 
 To stay safely reversible, schema changes follow **expand/contract**
 (parallel-change):

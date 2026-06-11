@@ -12,7 +12,8 @@ enforced by CI, so a violation is caught on push, not at audit time.
 `make build` puts every binary), the stray root-level binaries a manual
 `go build` can drop (`/probectl`, `/probectl-control`, `/probectl-agent`,
 `/probectl-ebpf-agent`, `/probectl-endpoint`), and coverage output (`*.out`,
-`*.test`, `*.coverprofile`, `coverage.*`).
+`*.test`, `*.coverprofile`, plus the `coverage.txt` / `coverage.out` /
+`coverage.html` / `coverage.xml` family).
 
 So if you see a large `./probectl-control` after building, that is a normal,
 **untracked** local artifact — not something that got committed. (Tip: send build
@@ -31,9 +32,11 @@ repo or its history.
 
 How it's enforced: the `secret-scan` CI job
 ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)) runs
-[gitleaks](https://github.com/gitleaks/gitleaks) over the working tree on every
-push to `main` and every pull request. The only strings it tolerates are the
-*deliberately fake* secrets inside redaction tests — allow-listed in
+[gitleaks](https://github.com/gitleaks/gitleaks) — a scanner that
+pattern-matches text for anything *shaped* like a credential — over the
+working tree (the files as they exist at that commit) on every push to `main`
+and every pull request. The only strings it tolerates are the *deliberately
+fake* secrets inside redaction tests — allow-listed in
 [`.gitleaks.toml`](../../.gitleaks.toml) by the test files' paths, plus one
 named false-positive regex (SNMP protocol constants that trip the generic
 API-key rule). Nothing real, and never a real credential path.

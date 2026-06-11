@@ -10,11 +10,14 @@ the moment it lands, rather than discovering it later at the full scale gate.
 The harness lives in [`internal/perf`](../internal/perf). It is the reusable
 engine that the full load gate and the per-tenant fairness work both build on.
 
-The guiding idea is a **smoke, not a soak**: the thresholds below have generous
-headroom on purpose. The guard is meant to trip on an *order-of-magnitude*
-regression — a pooled-tenancy cardinality blow-up, or a Postgres row-level-
-security cost problem — and to stay quiet through ordinary CI timing jitter. If
-it goes red, something is genuinely, badly slower.
+The guiding idea is a **smoke, not a soak** (a smoke is a short run proving the
+thing basically works; a soak is hours of sustained load hunting slow leaks):
+the thresholds below have generous headroom on purpose. The guard is meant to
+trip on an *order-of-magnitude* regression — a pooled-tenancy cardinality
+blow-up, or a cost problem in Postgres row-level security (RLS — the
+database-enforced per-tenant row filter, a predicate every pooled query pays
+for) — and to stay quiet through ordinary CI timing jitter. If it goes red,
+something is genuinely, badly slower.
 
 ## What the harness drives
 
@@ -55,6 +58,11 @@ the code and this table together when the numbers move materially.
 | Ingest throughput | **≥ 3,000 results/sec** (floor) | the lightweight path; catches a ~10–50× regression |
 | Pooled query p95 | **≤ 250 ms** (ceiling) | a tenant-scoped list under mixed load; catches a row-level-security cost blow-up |
 | Pooled isolation | **0 mismatches** (hard) | any wrong row count is a correctness failure, never tolerated |
+
+(p95 is the 95th percentile — the latency the slowest one-in-twenty query
+sees. Percentiles, not averages, because an average hides the unlucky tail a
+user actually feels; p50/p99 below are the median and the one-in-a-hundred
+tail.)
 
 ## Illustrative numbers
 

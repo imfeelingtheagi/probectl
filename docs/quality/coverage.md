@@ -15,7 +15,7 @@ CI job (in `.github/workflows/ci.yml`) that creates it.
 | Artifact | Producing job | Contents |
 |---|---|---|
 | `coverage-receipt` | `coverage` | `coverage.out` (the raw Go cover profile over the gated packages) + `coverage-summary.txt` (a per-function tail + the total) |
-| `test-go-log` | `test-go` | the full `make test` output — every Go workspace module, run with the race detector (`-race`) |
+| `test-go-log` | `test-go` | the full `make test` output — every Go workspace module, run with the race detector (`-race`, which catches two goroutines touching the same memory unsynchronized) |
 | `dependency-scan-receipts` | `dependency-scan` | `govulncheck-report.txt` (Go vulnerability scan) + `trivy-fs-report.txt` (filesystem vuln scan, CRITICAL/HIGH only). Committed secrets are a *different* job — the `secret-scan` gitleaks gate. |
 | `rca-eval-report` | `rca-eval` | the AI root-cause-analysis quality scores — `answer_accuracy` and `mean_citation_precision` (plus the raw eval log) |
 | `sbom-cyclonedx` | `sbom` | a CycloneDX SBOM of the Go module graph (informational — not a merge gate; the *release* SBOM ships signed with the release artifacts) |
@@ -44,10 +44,15 @@ and CI goes red — that is the whole point: a floor turns "we should test this"
 into "the build won't pass if you don't."
 
 - **Per-package Go floors** live in `scripts/check_coverage.sh` and run in the
-  `coverage` job. The script measures statement coverage from `coverage.out`
-  and fails if any package is under its declared floor. It covers the
-  service-free packages (pure logic, parsers, probes) — the ones whose coverage
-  is meaningful without a live database or message bus.
+  `coverage` job. The script measures **statement coverage** — the share of
+  executable statements the tests actually ran — from `coverage.out` and fails
+  if any package is under its declared floor (a 40% default, with per-package
+  floors set individually, up to 95% for the most testable packages). It covers
+  the service-free packages (pure logic, parsers, probes) — the ones whose
+  coverage is meaningful without a live database or message bus. The stateful
+  store/transport packages are deliberately *not* floored here: they are gated
+  for **correctness** by the `integration` and `cross-tenant-isolation` jobs
+  against real services — a stronger guarantee than a percentage.
 - **`internal/store` integration floor: 60%**, enforced inside the
   `integration` job — not the `coverage` job. The store package only does
   anything useful against a real Postgres (with row-level security on), so its
