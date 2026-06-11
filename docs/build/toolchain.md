@@ -2,27 +2,39 @@
 
 ## What this is
 
-When you run `go build`, *something* has to be the Go compiler. This page is
-about **which Go that is, where it comes from, and how we know it wasn't
-tampered with**. The short version: probectl builds with the **official upstream
-Go release**, pinned to one exact patch version, downloaded and cryptographically
-verified the same way any Go dependency is. There is no custom, forked, or
-vendored compiler hiding in this repo.
+When you run `go build`, *something* has to be the Go compiler. A **toolchain**
+is that something as one versioned unit: the compiler, the standard library,
+and the `go` tool itself, released together under one version number. This
+page is about **which Go that is, where it comes from, and how we know it
+wasn't tampered with**. The short version: probectl builds with the **official
+upstream Go release**, pinned to one exact **patch version** (the third number
+in `MAJOR.MINOR.PATCH` — the level that carries only fixes), downloaded and
+cryptographically verified the same way any Go dependency is. There is no
+custom, forked, or vendored compiler hiding in this repo.
 
 The version is named in two places that are kept in lockstep:
 
-- [`go.mod`](../../go.mod) — `go 1.26.4`. This is the language/version floor for
-  the main module.
-- [`go.work`](../../go.work) — `go 1.26.4` **and** an explicit `toolchain go1.26.4`
-  line. (See "Why the explicit toolchain line" below — it is not redundant.)
+- [`go.mod`](../../go.mod) — the main module's manifest (the file that names a
+  Go module and pins its dependencies) — `go 1.26.4`. This is the
+  language/version floor for the main module.
+- [`go.work`](../../go.work) — the workspace file that ties the repo's modules
+  together for local builds (see [`development.md`](../development.md)) —
+  `go 1.26.4` **and** an explicit `toolchain go1.26.4` line. (See "Why the
+  explicit toolchain line" below — it is not redundant.)
 
 ## How it works
 
 - **Acquisition.** A `go` directive that names a version newer than the running
-  Go triggers Go's *toolchain management*: it downloads the named toolchain from
-  the canonical module mirror (`proxy.golang.org`) exactly like it fetches any
-  module, then verifies it against the **public Go checksum database**
-  (`sum.golang.org`) before it ever runs. A swapped, corrupted, or
+  Go triggers Go's *toolchain management* — the ability (since Go 1.21) of the
+  installed `go` tool to fetch and run a *different*, newer toolchain on
+  demand: it downloads the named toolchain from the canonical module mirror
+  (`proxy.golang.org`) exactly like it fetches any module, then verifies it
+  against the **public Go checksum database** (`sum.golang.org`) — an
+  append-only public ledger recording the hash of every Go module and toolchain
+  ever published — before it ever runs. Think of that database as a notary's
+  ledger held in everyone's hands at once: your download must hash to exactly
+  the entry the whole world can see, so nobody can hand *you* a special
+  compiler without forking reality for everyone else. A swapped, corrupted, or
   man-in-the-middled toolchain fails that checksum and refuses to execute — the
   build stops instead of silently using an untrusted compiler.
 
@@ -36,8 +48,11 @@ The version is named in two places that are kept in lockstep:
 
 - **Why this patch level.** `1.26.4` is pinned *forward* deliberately: it carries
   upstream **standard-library security fixes** (GO-2026-5037 in `crypto/x509`,
-  GO-2026-5039 in `net/textproto`) that `govulncheck` would otherwise flag. Bumps
-  land through the normal pull-request + green-CI path, never out of band.
+  GO-2026-5039 in `net/textproto` — the IDs are Go vulnerability-database
+  advisories) that `govulncheck` (Go's official vulnerability scanner, which
+  reports known CVEs in your dependencies *and* in the standard library of the
+  Go version you build with) would otherwise flag. Bumps land through the
+  normal pull-request + green-CI path, never out of band.
 
 ## Why it's built this way
 
@@ -50,12 +65,13 @@ The version is named in two places that are kept in lockstep:
 - **Why the explicit `toolchain` line in `go.work`.** The patched stdlib is the
   *minimum* every build must use. `go.work` must not name an older Go than the
   modules' `go.mod`, or Go rejects the workspace whenever it cannot auto-resolve
-  a newer toolchain — which is exactly the case under `GOTOOLCHAIN=local`, the
-  mode the FIPS distribution build (`make build-fips`) and any offline or
-  air-gapped build runs in (no network means no toolchain download — the local
-  Go either satisfies the floor or the build refuses). Keeping the `go.work`
-  `go` line and `toolchain` line in sync with `go.mod` is what stops those
-  builds from breaking.
+  a newer toolchain — which is exactly the case under `GOTOOLCHAIN=local` (the
+  setting that forbids Go from downloading any other toolchain: whatever is
+  installed is all there is), the mode the FIPS distribution build
+  (`make build-fips`) and any offline or air-gapped build runs in (no network
+  means no toolchain download — the local Go either satisfies the floor or the
+  build refuses). Keeping the `go.work` `go` line and `toolchain` line in sync
+  with `go.mod` is what stops those builds from breaking.
 
 - **No vendored or forked toolchain exists in this repository.** Provenance is
   upstream-official plus checksum-database-verified — full stop. That is the

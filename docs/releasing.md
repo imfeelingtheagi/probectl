@@ -2,9 +2,14 @@
 
 ## What a release is
 
-A probectl release is **one git tag** that triggers an automated pipeline to
-build, sign, and publish the shipping artifacts: multi-arch container images,
-cross-compiled binaries with checksums, software bills of materials (SBOMs), and a
+A probectl release is **one git tag** — a named, immutable pointer to one
+exact commit — that triggers an automated pipeline to
+build, sign, and publish the shipping artifacts: multi-arch container images
+(one image name carrying variants for both CPU architectures), cross-compiled
+binaries (built on one machine *for* other platforms) with checksums (SHA-256
+fingerprints a downloader can recompute to prove the bytes arrived unaltered),
+software bills of materials (**SBOMs** — machine-readable parts lists of every
+dependency baked into an artifact), and a
 GitHub Release. You do not build or upload anything by hand — you push a tag, and
 [`.github/workflows/release.yml`](../.github/workflows/release.yml) does the rest.
 
@@ -21,7 +26,8 @@ feature weight (so a breaking change before 1.0 bumps the MINOR). Pre-releases u
 a suffix, e.g. `v0.2.0-rc.1`.
 
 The version is stamped into every binary at build time
-(`internal/version`, via `-ldflags`) and surfaced at the `/version` HTTP endpoint
+(`internal/version`, via `-ldflags` — linker flags that write values into the
+binary's variables as it is linked) and surfaced at the `/version` HTTP endpoint
 and via `probectl-control version`. So a running binary can always tell you
 exactly which tag it was cut from.
 
@@ -34,7 +40,11 @@ Pushing a `v*` tag runs `release.yml`, which publishes:
   `probectl-endpoint`, and `probectl` (the CLI) — to
   `ghcr.io/imfeelingtheagi/<component>`, tagged with the exact version and
   `latest`. Each image carries **SLSA provenance and an SBOM** attestation
-  (Buildx `provenance: true` + `sbom: true`). The `probectl-ebpf-agent` image is
+  (Buildx `provenance: true` + `sbom: true`). **SLSA provenance** is a signed
+  build receipt — *which* workflow, on *which* commit, with *which* inputs,
+  produced these bytes — and an **attestation** is such a statement
+  cryptographically attached to the image, so a cluster or auditor can demand
+  it before trusting the artifact. The `probectl-ebpf-agent` image is
   built from `deploy/docker/Dockerfile.ebpf` so it ships the *live* eBPF loader,
   not the fixture replayer.
 - **Cross-compiled binaries** for `linux/{amd64,arm64}` plus a `checksums.txt`
@@ -42,7 +52,16 @@ Pushing a `v*` tag runs `release.yml`, which publishes:
 - A **source SBOM** in SPDX JSON (`probectl_<tag>_sbom.spdx.json`), generated over
   the source tree and lockfiles and shipped as a signed release asset.
 - **Keyless cosign signatures** (`.sig` + `.pem`) over every binary, the checksum
-  manifest, and the SBOM. The signing identity is this repository's release
+  manifest, and the SBOM. **cosign** is the Sigstore signing tool, and
+  **keyless** means no long-lived private key exists to steal or leak: the
+  workflow proves who it is via GitHub **OIDC** (the same short-lived identity
+  tokens cloud logins use), Sigstore's certificate authority (**Fulcio**)
+  issues it a minutes-lived signing certificate, and that certificate (the
+  `.pem`) ships alongside the signature (the `.sig`). It works like a notary
+  who checks your government ID at the desk and stamps the document right
+  there — verification later trusts the recorded identity, not a house key
+  that could have been copied years ago. The signing identity is this
+  repository's release
   workflow (Sigstore/Fulcio, GitHub OIDC); the same job re-verifies its own
   signatures before finishing, so a release that cannot be verified fails the
   build. Verifiers pin the workflow identity — see
@@ -62,7 +81,8 @@ gate). Tag pushes do not trigger CI, so this gate looks up the CI run for the
 tagged commit and refuses to publish on an untested or red commit — it holds even
 for a tag cut off a side branch or by an admin who bypassed branch protection
 (branch protection guards the *merge*; this gate independently guards the
-*release* — see [`ops/branch-protection.md`](ops/branch-protection.md)).
+*release* — two locks on two different doors, so picking one still leaves the
+other shut; see [`ops/branch-protection.md`](ops/branch-protection.md)).
 Practically, that means: get the commit green on `main` first, *then* tag it.
 
 1. Confirm CI is green on the commit you intend to tag — that single CI run

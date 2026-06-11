@@ -26,9 +26,23 @@ you do not pin them yourself.
 > keeps the FIPS build working under `GOTOOLCHAIN=local`. Details:
 > [`build/toolchain.md`](build/toolchain.md).
 
+Two terms from that table that recur on this page: a **linter** is a program
+that reads source code and flags suspicious-but-compiling constructs — the
+compiler answers "does it build?", the linter answers "will it bite?" —
+golangci-lint being Go's standard meta-linter (it runs many individual linters
+as one). **Protobuf** is the typed binary wire format probectl's agents and
+bus speak (schemas live in `proto/`), and **buf** is the tool that lints those
+schemas and drives the Go code generation from them.
+
 ## Go workspace & modules
 
-The repo is a [`go.work`](../go.work) workspace tying together two modules:
+A Go **module** is a versioned unit of Go code with its own dependency
+manifest (`go.mod`); a **workspace** (the [`go.work`](../go.work) file) tells
+the Go tool to build several modules side-by-side from local source, as if
+they were one project. Picture two workshops sharing one driveway: tools and
+work-in-progress roll freely between them while each keeps its own inventory
+list — and when a product ships, only that workshop's own list counts. The
+repo is a workspace tying together two modules:
 
 - **`.`** — the primary module `github.com/imfeelingtheagi/probectl` (`cmd/`,
   `internal/`, `pkg/`). Production code and unit tests live here.
@@ -58,7 +72,7 @@ reach for most:
 | `make cover-gate`       | Per-package coverage floor on service-free packages (`scripts/check_coverage.sh`) |
 | `make fuzz-smoke`       | Run each Go fuzz target briefly to catch crashers           |
 | `make lint`             | `lint-go` + `lint-python`                                    |
-| `make fmt`              | Auto-format Go (`gofmt`) and Python (`ruff --fix`, `black`)  |
+| `make fmt`              | Auto-format Go (`gofmt`) and Python (`ruff check --fix`, `black`) |
 | `make proto`            | `buf lint` + generate Go (+ gRPC) from `proto/`             |
 | `make proto-tools`      | Install protobuf codegen tools (buf + Go plugins, pinned)   |
 | `make migrate`          | Apply DB migrations via `probectl-control migrate`          |
@@ -79,8 +93,10 @@ reach for most:
 ## CI jobs (`.github/workflows/ci.yml`)
 
 The CI job names are a **contract** — every pull request runs them, and they are
-how a change earns its way to `main`. This is the full list; `ci.yml` is the
-source of truth.
+how a change earns its way to `main`. A **gate** is a job that must conclude
+green before the change may proceed: each one defends a specific invariant, so
+the table below doubles as a list of the things probectl refuses to break.
+This is the full list; `ci.yml` is the source of truth.
 
 | Job                      | Gate                                                              |
 | ------------------------ | ---------------------------------------------------------------- |
@@ -100,7 +116,7 @@ source of truth.
 | `migration-gate`         | expand/contract migrations only — rejects destructive/blocking schema changes |
 | `helm-gate`              | chart hardening for every profile + the agent chart (`make helm-gate`), kubeconform on the rendered charts, GitOps manifest validation (`make gitops-gate`), compose config validation |
 | `terraform-gate`         | `terraform fmt -check` + `terraform validate` of the module's example root |
-| `ebpf-kernel-matrix`     | the BPF programs **load and attach** on real LTS kernels (5.15/6.6, amd64 + arm64, plus a lockdown-hardened entry) under QEMU |
+| `ebpf-kernel-matrix`     | the BPF programs **load and attach** on real LTS kernels (5.15/6.6 plus a lockdown-hardened entry) booted under QEMU/KVM on amd64; the arm64 entry compiles + digest-verifies the BPF objects (its runner has no KVM, so the live boot is skipped there) |
 | `ebpf-image-live`        | the shipped eBPF-agent image is the live `-tags ebpf` build, not the fixture replayer |
 | `cross-tenant-isolation` | **permanent** tenant-isolation gate (a [non-negotiable](../CONTRIBUTING.md#non-negotiables)), against real Postgres (TLS) + ClickHouse |
 | `integration`            | migrations are idempotent + `/readyz` passes + result pipeline, against a real Postgres + Prometheus |
@@ -109,14 +125,14 @@ source of truth.
 | `failover-drill`         | timed kill-the-primary → promote-the-replica drill (RTO/RPO measured) |
 | `load-smoke`             | S-tier full-stack load smoke through real Kafka + Prometheus    |
 | `proto`                  | `buf lint` + `buf breaking` vs `main` (additive-only wire contract) + generated-code drift |
-| `web`                    | typecheck + lint + the a11y / theme-swap / no-hardcoded-token gates + `npm audit` + production build |
+| `web`                    | typecheck + lint + the frontend surface-coverage gate + the a11y / theme-swap / no-hardcoded-token gates + `npm audit` + production build |
 | `dependency-scan`        | `govulncheck` + Trivy filesystem scan (**vulnerabilities only**) |
 | `image-scan`             | Trivy image scan (**vulnerabilities only**)                    |
 | `build-images`           | multi-arch image build for every component (Buildx + QEMU)     |
 | `commitlint`             | Conventional Commits (pull requests only)                       |
 | `dco`                    | every commit carries a `Signed-off-by` trailer (pull requests only) |
-| `sbom`                   | CycloneDX SBOM of the Go module graph, retained 90 days (informational, not a merge gate) |
-| `verify-all`             | the umbrella check: red unless every verification job it depends on concluded green |
+| `sbom`                   | CycloneDX SBOM (a **software bill of materials** — the machine-readable parts list) of the Go module graph, retained 90 days (informational, not a merge gate) |
+| `verify-all`             | the umbrella check: red unless every verification job it depends on concluded green — the gates are wired in series, like a strand of old holiday lights: one dark bulb darkens the whole strand |
 
 > **Trivy is vulnerability-only here, by design.** Secret scanning is the separate
 > `secret-scan` job (gitleaks), which owns the `.gitleaks.toml` allow-list for the
@@ -139,43 +155,67 @@ release pipeline refuses to publish any tag whose CI run isn't green (see
 
 ## Testing layers
 
-probectl tests in layers, fast-to-slow, each catching a different class of bug.
+probectl tests in layers, fast-to-slow, each catching a different class of bug —
+sieves of decreasing mesh, where each pass is slower and catches what the
+previous mesh let through. The vocabulary: a **unit test** runs a function
+in-process with no real services — fast, deterministic, repeatable anywhere.
+An **integration test** talks to the real thing (a live Postgres, a real
+Kafka broker) over the wire, catching the bugs that only exist where two
+systems meet. The **race detector** (`-race`) instruments the test binary so
+that two goroutines touching the same memory without synchronization fail the
+run on the spot, instead of corrupting state in production some Tuesday. And a
+**build tag** (`-tags=integration`, `-tags=isolation`) is a compile-time label
+on a file: tagged tests exist only when the tag is passed, which is how the
+slow, service-needing suites stay out of the default fast path.
 
 ### Local test DSNs (documented dev-only plaintext)
 
-Integration and isolation tests fall back to `sslmode=disable` connection strings
+Integration and isolation tests fall back to `sslmode=disable` DSNs (**data
+source names** — database connection strings)
 **only when `PROBECTL_DATABASE_URL` is unset** — the local-dev convenience path
 against the `test/` compose stack. CI never uses those fallbacks: every DB-backed
 job starts Postgres with TLS under a per-run test CA and connects
 `sslmode=verify-full` (`scripts/ci_pg_tls.sh`), the production posture. The shipped
 deploy recipes are `sslmode=require` or stricter.
 
-- **Unit** (`make test`, `-race`) — hermetic, table-driven; the default fast path.
+- **Unit** (`make test`, `-race`) — hermetic (no real services, everything
+  in-process), table-driven (one test body run over a table of cases); the
+  default fast path.
 - **Integration** (`make test-integration`, `-tags=integration`) — against real
   Kafka (in-process kfake), Postgres, ClickHouse, and Prometheus, plus in-process
   HTTPS/DNS servers and loopback sockets for the probes. The DNS/HTTP/TLS canary
   behaviour (success / 5xx / slow / expired-cert / DNSSEC-bogus) lives here.
-- **Fuzz** (`make fuzz-smoke`) — Go fuzz targets over the untrusted-input parsers
+- **Fuzz** (`make fuzz-smoke`) — **fuzzing** feeds a parser thousands of
+  mutated, adversarial inputs hunting for the one that crashes it. The Go fuzz
+  targets cover the untrusted-input parsers
   (ICMP / Time-Exceeded / MPLS in `internal/path`, the BGP-event ingest in
   `internal/bgp`). The invariant is "never panic", and the bridge must
   additionally never publish a tenant-less event under fuzzing — the fail-closed
   tenancy rule (see the
   [non-negotiables](../CONTRIBUTING.md#non-negotiables)). CI runs a short smoke;
   run longer locally with `-fuzztime`.
-- **Property** (Hypothesis, in the analyzer suite) — the MRT parser and RPKI
+- **Property** (Hypothesis, in the analyzer suite) — where fuzzing asks "does it
+  crash?", a **property test** asserts a stated invariant holds for every
+  generated input: the MRT parser and RPKI
   validator are checked over thousands of generated inputs (robustness +
   round-trip + soundness), the Python counterpart to the Go fuzzers.
-- **Coverage gate** (`make cover-gate` → the `coverage` CI job) — a per-package
-  statement-coverage **floor** on the service-free logic / parser / probe packages
+- **Coverage gate** (`make cover-gate` → the `coverage` CI job) — **statement
+  coverage** is the fraction of code statements the tests actually executed; a
+  **floor** fails CI when a package drops below its number. This gate floors the
+  service-free logic / parser / probe packages
   (`scripts/check_coverage.sh`). The stateful DB/transport packages are gated for
   *correctness* by the `integration` and `cross-tenant-isolation` jobs instead — a
   stronger guarantee than a coverage percentage — so they are not floored here.
 
 ## Commits
 
-Use **Conventional Commits** (e.g. `feat(canary): add ICMP network test`), and
+Use **Conventional Commits** (e.g. `feat(canary): add ICMP network test`) — a
+machine-parseable subject format, `type(scope): summary`, which is what lets
+release notes be generated from history instead of written by hand — and
 sign off every commit (`git commit -s`, which adds the `Signed-off-by` trailer the
-`dco` CI job requires). See [`../CONTRIBUTING.md`](../CONTRIBUTING.md). You can
+`dco` CI job requires; the **DCO**, Developer Certificate of Origin, is your
+recorded assertion that you have the right to contribute the change). See
+[`../CONTRIBUTING.md`](../CONTRIBUTING.md). You can
 pre-load the message template with:
 
 ```sh

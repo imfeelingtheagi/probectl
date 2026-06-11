@@ -1,17 +1,31 @@
 # deploy/helm/
 
-Helm charts for deploying probectl on Kubernetes / OpenShift. Two charts ship
-here:
+Helm charts for deploying probectl on Kubernetes / OpenShift. **Helm** is
+Kubernetes' package manager: a **chart** is a parameterized bundle of
+Kubernetes manifests, **values** are the parameters, and `helm install`
+renders chart templates + your values into live cluster objects. In these
+charts the security hardening is welded into the templates and the values
+choose size and wiring — the way trim levels configure the same car without
+touching its safety cage. Two charts ship here:
 
-- [`probectl/`](probectl/) — the **control plane**: the API/UI Deployment, the
-  TLS-terminating ingress, the migration init container, NetworkPolicy / PDB /
-  HPA, and the sizing profiles below.
+- [`probectl/`](probectl/) — the **control plane**: the API/UI Deployment (the
+  controller that keeps N identical pods running), the
+  TLS-terminating ingress (the HTTPS front door object), the migration init
+  container (a container that must run to completion before the app starts),
+  NetworkPolicy (a pod-level firewall object) / PDB (PodDisruptionBudget — a
+  floor on how many replicas voluntary disruptions may take down) /
+  HPA (HorizontalPodAutoscaler — scales replicas with load), and the sizing
+  profiles below.
 - [`probectl-agent/`](probectl-agent/) — the **eBPF host agent** DaemonSet
-  (see [its section](#the-agent-chart-probectl-agent)).
+  (the controller that runs exactly one copy per node — right for a per-host
+  capture agent; see [its section](#the-agent-chart-probectl-agent)).
 
 The control-plane chart is **HTTPS-by-default**: the API is exposed only through
-a TLS-terminating ingress that emits HSTS and force-redirects HTTP → HTTPS; the
-Service is `ClusterIP`, so no plaintext API is reachable from outside the
+a TLS-terminating ingress that emits HSTS (the header telling browsers to
+refuse plaintext HTTP for this host from then on) and force-redirects
+HTTP → HTTPS; the
+Service is `ClusterIP` (a cluster-internal virtual IP, unreachable from
+outside), so no plaintext API is reachable from outside the
 cluster ("TLS on every listener" is a
 [non-negotiable](../../CONTRIBUTING.md#non-negotiables)). The database migration
 runs as an init container; the pod runs non-root with a read-only root
@@ -61,10 +75,15 @@ replicas.
 
 [`probectl-agent/`](probectl-agent/) deploys the eBPF host agent as a DaemonSet
 with its privilege contract declared **in the artifact**, not implied:
-capabilities drop ALL and add back exactly `CAP_BPF` + `CAP_PERFMON`
-(`capabilityMode: legacy` swaps in `CAP_SYS_ADMIN` for pre-5.8 kernels), a
-seccomp profile, a read-only root filesystem, and the
-`/sys/kernel/btf/vmlinux` host mount. It **fails closed**: the chart refuses to
+capabilities (the kernel's itemized slices of root privilege) drop ALL and add
+back exactly `CAP_BPF` + `CAP_PERFMON`
+(`capabilityMode: legacy` swaps in `CAP_SYS_ADMIN` for pre-5.8 kernels, which
+predate the two finer-grained capabilities), a
+seccomp profile (a kernel-enforced syscall filter on the process), a read-only
+root filesystem, and the
+`/sys/kernel/btf/vmlinux` host mount (the running kernel's type catalog, which
+lets one compiled BPF object adapt to any kernel). It **fails closed**: the
+chart refuses to
 render without a `tenantID` (every captured flow must belong to a tenant), and
 refuses plaintext Kafka unless you set the explicit dev-only
 `bus.allowPlaintext=true`.
@@ -97,8 +116,14 @@ Pick a sizing profile and layer your overrides on top:
 `/readyz` drain probe, HSTS, no default credentials — the chart refuses to
 render without an envelope key) are enforced by `make helm-gate`, which runs
 [`scripts/check_helm_hardening.sh`](../../scripts/check_helm_hardening.sh):
-hardening assertions plus `helm lint` over every profile **and** the agent
-chart. CI's `helm-gate` job runs the same gate plus kubeconform on the rendered
+hardening assertions against the rendered default / medium / large /
+multitenant / strict profiles, `helm lint` across the default and
+small/medium/large/multitenant profiles, **and** the agent chart's privilege
+contract + lint. (The strict profile is render-asserted — closed holes,
+ServiceMonitor, backup CronJobs — rather than linted; the multiregion profile
+reuses the same templates but is not separately exercised by the gate.) CI's
+`helm-gate` job runs the same gate plus kubeconform (a schema validator
+proving the rendered YAML is well-formed Kubernetes) on the rendered
 charts, so a hardening regression fails the build, not a customer install.
 
 Opt-in extras, both off by default and enabled in the strict profile:
@@ -110,12 +135,18 @@ ServiceMonitor.
 **NetworkPolicy is ON by default** in every profile, with two
 documented holes until tightened per deployment: empty `ingressFrom` admits
 any in-cluster pod to the API port, and empty `egressTo` allows all egress.
+The holes are deliberate — think of a new apartment handed over with the door
+fitted but two windows propped open and flagged with tape, because the
+installer can't know your furniture (your ingress controller, your datastore
+addresses); you close them once you do.
 `values-large.yaml` ships the filled reference egress allow-list (datastores/
 bus/TSDB on private ranges + a clearly-marked HTTPS-anywhere rule for IdP and
 open-data feeds — delete that rule when air-gapped); `values-strict.yaml`
 closes **both** holes for regulated/air-gapped clusters (named ingress-controller
 selector + explicit egress allow-list). Enforcement needs a
-NetworkPolicy-capable CNI; the gate asserts the object renders by default.
+NetworkPolicy-capable CNI (the cluster's container-network plugin, e.g.
+Calico or Cilium — without an enforcing one the object is accepted but inert);
+the gate asserts the object renders by default.
 Terraform + GitOps wrap this same chart; see
 [`docs/iac-gitops.md`](../../docs/iac-gitops.md). Full guide:
 [`docs/install.md`](../../docs/install.md).

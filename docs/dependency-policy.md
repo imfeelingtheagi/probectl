@@ -3,7 +3,10 @@
 ## The idea in one line
 
 Every piece of third-party code probectl uses is **pinned to an exact version,
-verified cryptographically, and upgraded deliberately by a human**. A floating
+verified cryptographically, and upgraded deliberately by a human**. The
+**supply chain** is everything that flows into the build from outside —
+libraries, compilers, base images, CI actions: code you run but didn't write.
+A floating
 version (`@latest`, an unpinned base image, a loosely-ranged package) is a
 supply-chain input that nobody reviewed — so probectl doesn't allow any. This page
 is the map of *where* the pins live and *what* enforces them.
@@ -23,6 +26,17 @@ exactly, verify, upgrade on purpose.
 | Container images (compose, Helm, CI services) | digest pins (`@sha256:...`) on infrastructure images; release-tag pins on probectl's own | the supply-pins gate (no `:latest` under `deploy/`) + review + the scheduled security scan |
 | npm (`web/`, `browser-worker/`) | lockfiles + `npm ci` | `npm audit` gate in the `web` and `security-scan` jobs |
 | Go toolchain | the `go` directive in `go.mod` (exact patch), a verified upstream release | see [`build/toolchain.md`](build/toolchain.md) |
+
+Three mechanisms recur in that table. A **checksum** is the cryptographic
+fingerprint of a file's exact bytes — change one bit and the fingerprint
+changes, so a verified download is provably the published one. A **lockfile**
+(`go.sum`, `package-lock.json`, `requirements-dev.lock`) records the resolved
+version *and* checksum of every package in the dependency tree, so an install
+reproduces the recorded set instead of re-resolving whatever is newest. And a
+**digest pin** addresses a container image by the hash of its content
+(`@sha256:...`) rather than by a tag a registry owner can quietly re-point —
+ordering by serial number instead of by model name: the model name can be
+reissued on different goods; the serial number can't.
 
 The supply-pins gate (`scripts/check_supply_pins.sh`, run by the `action-pins`
 job) is the backstop that mechanically fails the build on a floating reference:
@@ -56,7 +70,8 @@ and earn an explicit note.
 
 The eBPF agent loads kernel programs through `cilium/ebpf`, which is **pre-1.0**:
 its API contract explicitly allows breaking changes between minor versions. It
-sits on probectl's most privileged path — the `bpf()` syscall, `CAP_BPF`.
+sits on probectl's most privileged path — the `bpf()` syscall, `CAP_BPF` (the
+Linux capability that permits loading eBPF programs into the kernel).
 
 Why this dependency is accepted, with eyes open:
 
@@ -65,7 +80,9 @@ Why this dependency is accepted, with eyes open:
   scale than probectl. The only more-"mature" alternative is a cgo dependency on
   libbpf, which brings its own costs.
 - **Pre-1.0 here means API instability, not kernel-safety instability.** The
-  kernel verifier — not the library — is the safety boundary for what a loaded
+  kernel verifier (the in-kernel static checker every BPF program must pass
+  before it is allowed to run) — not the library — is the safety boundary for
+  what a loaded
   program is allowed to do, and probectl's programs are observe-only, with a CI
   gate (`internal/ebpf/observeonly_test.go`) enforcing that invariant
   independently of the library.
@@ -136,6 +153,10 @@ The repo pins what *it* controls; operators should pin what *they* deploy:
 
 ## Software bill of materials (SBOM)
 
+An **SBOM** is the machine-readable parts list of a piece of software — every
+dependency, with versions — the document a security team greps the day a CVE
+drops to answer "do we ship that anywhere?". CycloneDX and SPDX are the two
+standard SBOM document formats; probectl produces both at different points.
 Every CI run produces a **CycloneDX SBOM** of the Go module graph
 (`probectl-sbom.cdx.json`) via the `sbom` job, which installs `cyclonedx-gomod`
 pinned and checksum-verified (`go install ...@v1.7.0`) — no third-party action.

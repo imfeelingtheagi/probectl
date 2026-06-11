@@ -1,11 +1,18 @@
 # deploy/terraform/
 
-Terraform modules for deploying probectl. The core module deploys the hardened
+Terraform modules for deploying probectl. **Terraform** is
+infrastructure-as-code: you declare the desired end state in `.tf` files and
+`terraform apply` makes the live system match it. A **module** is Terraform's
+reusable unit — a folder of configuration with typed inputs and outputs,
+invoked like a function — and this one is a wall socket: a small, fixed plug
+shape on the front (the variables below), the wiring hidden behind the
+plate. The core module deploys the hardened
 Helm chart plus the sensitive config as a Kubernetes Secret, on **any**
 Kubernetes cluster (EKS/GKE/AKS/OpenShift/k3s) — provision the cluster + managed
-Postgres with your cloud's own modules and pass the DSN in.
+Postgres with your cloud's own modules and pass the DSN (the database
+connection string) in.
 
-```
+```text
 deploy/terraform/
 ├── modules/probectl/       # the reusable module (helm_release + Secret + namespace)
 │   └── versions.tf · variables.tf · main.tf · outputs.tf
@@ -14,7 +21,9 @@ deploy/terraform/
 ```
 
 The module requires Terraform >= 1.5 with the `hashicorp/helm` (~> 2.12) and
-`hashicorp/kubernetes` (~> 2.25) providers (`versions.tf`). It is kept honest in
+`hashicorp/kubernetes` (~> 2.25) providers (`versions.tf`) — **providers** are
+Terraform's drivers, the plugins that each speak one API (here: Helm releases
+and the Kubernetes API). It is kept honest in
 CI: the `terraform-gate` job runs `make terraform-gate` — `terraform fmt
 -recursive -check` plus `terraform validate` of the example root that consumes
 the module.
@@ -67,7 +76,14 @@ client secret) into a Kubernetes `Secret` and sets the chart's
 `secrets.existingSecret` to it — so no credential is ever rendered into the
 ConfigMap or the Helm release values. Mark `database_url` / `envelope_key` /
 `oidc_client_secret` sensitive (they are) and source them from your secret
-manager or CI variables; never commit `terraform.tfvars`.
+manager or CI variables; never commit `terraform.tfvars` (the file `apply`
+reads variable values from).
+
+One Terraform reality to plan around: Terraform records everything it manages
+in its **state** (the `terraform.tfstate` file, or a remote state backend).
+Marking a variable `sensitive` redacts it from plan/apply *output* — the value
+still lands in state. So treat the state backend with the same access control
+and encryption as the secrets themselves.
 
 ### Security posture
 
