@@ -34,8 +34,12 @@ and an AI assistant that explains root cause <em>across</em> them. Telemetry nev
      answering "why is checkout slow?" with cited cross-plane evidence.
      <p align="center"><img src="docs/assets/hero-topology.gif" width="820"></p> -->
 
-probectl unifies five observability planes — **active/synthetic testing,
-BGP/routing intelligence, flow analytics, device telemetry, and eBPF host/L7** —
+probectl unifies five observability planes — **active/synthetic testing**
+(scheduled probes that send traffic and time the answer), **BGP/routing
+intelligence** (BGP being the protocol networks use to tell each other which
+routes exist), **flow analytics** (the per-connection traffic summaries routers
+export), **device telemetry**, and **eBPF host/L7** (sandboxed programs the
+Linux kernel runs to observe real connections from the inside) —
 into one **OpenTelemetry-native** control plane, then layers cross-plane AI
 root-cause analysis, a security/threat signal layer, change-aware topology with
 what-if simulation, and cost/SLO intelligence on top.
@@ -43,7 +47,8 @@ what-if simulation, and cost/SLO intelligence on top.
 One codebase serves two operating modes: **sovereign single-tenant** (a
 regulated or air-gapped org self-hosts; the deployment *is* the tenant) and
 **multi-tenant / provider** (an MSP self-hosts once and serves many
-hard-isolated, white-labeled tenants). The single-tenant install is just the
+hard-isolated, white-labeled tenants). A **tenant** is one isolated customer or
+organization in a deployment, and the single-tenant install is just the
 one-tenant case — there is no separate code path, no enterprise fork to drift
 out of sync. **Tenant is the outermost scope and security boundary** on every
 record, agent, query, metric, event, and object.
@@ -85,7 +90,9 @@ Three choices set it apart:
   operators that isn't a nice-to-have — it's the requirement.
 - **It's unified and standard.** One OpenTelemetry-native model spans all five
   planes, so a flow record, a probe result, and a BGP event share the same
-  schema and the same query layer. The receiver ingests all three OTLP signals
+  schema and the same query layer. (OpenTelemetry is the vendor-neutral open
+  standard for telemetry; OTLP is its wire protocol.) The receiver ingests all
+  three OTLP signals
   — **metrics, traces, and logs** — bounded for correlation, and re-exports
   probectl's own signals as OTLP **metrics**; the schemas follow OTel resource +
   network semantic conventions everywhere ([`docs/otlp.md`](docs/otlp.md)).
@@ -98,12 +105,15 @@ Three choices set it apart:
 probectl is organized around the questions operators actually ask at 2 a.m.:
 
 - *"The Berlin office says the app is slow — is it the network, the path in
-  between, or the server?"* — synthetic probes, ECMP/MPLS-aware path discovery,
-  and flow show you **where** the latency is, not just that it exists.
+  between, or the server?"* — synthetic probes, ECMP/MPLS-aware path discovery
+  (it maps correctly even through networks that split traffic across parallel
+  paths), and flow show you **where** the latency is, not just that it exists.
 - *"Did the 14:03 change cause this?"* — change-aware topology correlates
   config/deploy events with the symptoms that followed them.
 - *"Why did this prefix go dark — is it us, or the internet?"* — BGP/routing
-  intelligence from RouteViews/RIPE RIS, RPKI validity, and a collective outage
+  intelligence from RouteViews/RIPE RIS (public archives of the internet's
+  routing table), RPKI validity (signed records of who may announce which
+  address block), and a collective outage
   view separate a you-problem from an everyone-problem.
 - *"What breaks if I drain this node?"* — the topology **what-if** simulates the
   blast radius before you touch production.
@@ -131,7 +141,7 @@ The five observability planes:
 
 | Plane | What it covers |
 |---|---|
-| **Active / synthetic** | canaries (ICMP/TCP/UDP/HTTP/DNS/…), ECMP/MPLS-aware path discovery, browser-synthetic checks, endpoint digital-experience monitoring |
+| **Active / synthetic** | canaries — scheduled probes that send traffic and time the answer (ICMP/TCP/UDP/HTTP/DNS/…) — plus ECMP/MPLS-aware path discovery, browser-synthetic checks, endpoint digital-experience monitoring |
 | **BGP / routing** | RouteViews + RIPE RIS ingestion, route/path analysis, RPKI validity, a collective internet-outage view |
 | **Flow analytics** | NetFlow / sFlow / IPFIX into ClickHouse, with per-tenant anomaly detection |
 | **Device telemetry** | SNMP polling + gNMI streaming, folded into the topology graph |
@@ -141,14 +151,14 @@ Intelligence, security, and platform layers built across the planes:
 
 | Layer | What it does |
 |---|---|
-| **AI assistant** | cross-plane RCA grounded in correlated incidents, natural-language semantic query, AI test authoring, and an **MCP server** (read-only tools + a proposal-only remediation tool) — all **tenant- then RBAC-scoped**. **Default engine: a deterministic in-process heuristic — no LLM is involved or contacted unless you explicitly connect one** (local Ollama/vLLM for full air-gap, or a cloud provider as explicit opt-in; start with [`docs/ai-quickstart.md`](docs/ai-quickstart.md)) |
+| **AI assistant** | cross-plane RCA grounded in correlated incidents, natural-language semantic query, AI test authoring, and an **MCP server** (MCP — the Model Context Protocol, how external AI apps call tools; here read-only tools + a proposal-only remediation tool) — all **tenant- then RBAC-scoped**. **Default engine: a deterministic in-process heuristic — no LLM is involved or contacted unless you explicitly connect one** (local Ollama/vLLM for full air-gap, or a cloud provider as explicit opt-in; start with [`docs/ai-quickstart.md`](docs/ai-quickstart.md)) |
 | **Topology** | a versioned, change-aware dependency graph with **what-if** impact simulation |
 | **Security / threat** | TLS/cert posture + NDR-lite, **confidence-scored detections** (a signal exported to your SIEM — never an inline IPS) |
 | **Cost / SLO** | FinOps egress-cost attribution, an OpenSLO engine, and segmentation/compliance validation with evidence |
 | **Guarded remediation** | the AI **proposes** a fix grounded in RCA + a dry-run; a human **approves**; probectl **never executes** — proposal-only, blast-radius-limited, fully audited |
 | **Multi-tenancy** | **pooled / siloed / hybrid** isolation, selectable per deployment and per tenant |
 | **Provider / MSP plane** | tenant lifecycle, fleet-across-tenants, per-tenant metering + quotas, white-label branding, and audited break-glass (no implicit access to tenant telemetry) |
-| **Sovereignty & crypto** | mTLS/SPIFFE agent identity, envelope encryption, per-tenant **BYOK**, per-tenant export + verifiable erasure, and an optional build against the **FIPS 140-3-validated Go Cryptographic Module** (CMVP cert **#5247**; probectl itself holds no product-level certificate — see [`docs/hardening.md`](docs/hardening.md)) |
+| **Sovereignty & crypto** | mTLS/SPIFFE agent identity (mutual TLS — both ends prove who they are — with standard workload-identity naming), envelope encryption, per-tenant **BYOK** (bring-your-own-key), per-tenant export + verifiable erasure, and an optional build against the **FIPS 140-3-validated Go Cryptographic Module** (CMVP cert **#5247**; probectl itself holds no product-level certificate — see [`docs/hardening.md`](docs/hardening.md)) |
 
 ## How it works
 
@@ -158,7 +168,8 @@ probes and watch the wire, then push results onto a **bus**. The stateless
 fits it (Postgres for state, ClickHouse for high-cardinality events,
 Prometheus/VictoriaMetrics for metrics), and continuously builds incidents and a
 versioned topology graph. Every record, query, metric, and message is scoped by
-`tenant_id` **first**, then by your RBAC — the API, web UI, AI assistant, and
+`tenant_id` **first**, then by your RBAC (role-based access control — the
+caller's permission set) — the API, web UI, AI assistant, and
 MCP server all read through that same boundary, so a query cannot cross a
 tenant line even by mistake.
 

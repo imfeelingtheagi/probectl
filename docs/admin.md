@@ -18,9 +18,15 @@ installation see [install.md](install.md); for every config key see
 ## Identity, roles, and access (RBAC)
 
 probectl enforces a **two-level boundary** on every API path: the request first
-resolves to exactly one tenant, then RBAC decides whether the caller may perform
-that route's action. Authentication is **OIDC SSO**
-(`PROBECTL_AUTH_MODE=session`). The `dev` mode grants every request all access
+resolves to exactly one tenant (one isolated customer/organization in the
+deployment), then RBAC — role-based access control, the caller's permission set
+— decides whether the caller may perform
+that route's action. Tenant first, permissions second, always in that order: a
+permission can never widen a request beyond its tenant. Authentication is
+**OIDC SSO** (`PROBECTL_AUTH_MODE=session`) — SSO is single sign-on through
+your existing identity provider (IdP: Okta, Entra ID, Keycloak, …), and OIDC
+(OpenID Connect) is the standard protocol it speaks — so probectl never stores
+or even sees a user password. The `dev` mode grants every request all access
 with no authentication and is for local evaluation only — release binaries do
 not even contain it (setting it makes the control plane refuse to start; see
 [getting-started.md](getting-started.md) for the fenced evaluation path).
@@ -36,18 +42,31 @@ Seeded system roles (one set per tenant):
 A **new SSO user is created with no roles** (the secure default) and is denied
 scoped resources until an admin grants one. Inspect your own effective access at
 `GET /v1/me`. Role bindings live in the `role_bindings` table. Users and roles
-within a tenant are provisioned by your IdP over **SCIM 2.0** (the `/scim/v2/...`
-endpoints, authenticated by a per-tenant SCIM bearer token); deprovisioning a
-user revokes their access.
+within a tenant are provisioned by your IdP over **SCIM 2.0** — the standard
+user-provisioning protocol, where the IdP *pushes* user create/update/delete to
+probectl instead of probectl polling the IdP (the `/scim/v2/...`
+endpoints, authenticated by a per-tenant SCIM bearer token — a secret string
+presented in the `Authorization` header; whoever holds it bears the access);
+deprovisioning a user revokes their access.
 
 ## The audit trail
 
 Every configuration change (creating, updating, or deleting a test, agent,
 alert, or incident) and every authentication (the `auth.login` action) is
 written to an **immutable, hash-chained, tamper-evident** audit log — in the
-*same database transaction* as the action it records, and scoped to the tenant by
-RLS. Provider-plane and break-glass actions go to a **separate** provider audit
+*same database transaction* as the action it records (so an action and its
+audit record commit together or not at all — there is no window where one
+exists without the other), and scoped to the tenant by
+RLS (row-level security — the Postgres feature where the database itself
+filters every row by tenant, beneath the application code). Provider-plane and
+break-glass actions go to a **separate** provider audit
 stream.
+
+**Hash-chained** means each record carries a hash of the record before it —
+like a chain where every link is engraved with the previous link's serial
+number: remove, alter, or reorder one link and every engraving after it stops
+matching. That is what makes the log tamper-*evident* rather than merely
+append-only.
 
 Read and verify it (requires the `audit.read` permission — `admin` by default):
 
@@ -70,7 +89,11 @@ The audit log is built for export. `GET /v1/audit?after=<cursor>` is a pull
 cursor: advance `after` to the last `seq` you've consumed. For programmatic
 delivery, the engine exposes the `audit.Sink` hook plus `audit.Drain` (read a
 page → deliver it → advance the cursor) — the stable contract the SIEM
-connectors build on. probectl ships connectors for **syslog, CEF, ECS, and OTLP**
+connectors build on. (A SIEM — security information and event management — is
+the SOC's central log-collection and alerting system.) probectl ships
+connectors for **syslog, CEF, ECS, and OTLP** — respectively the classic Unix
+log-line format, ArcSight's Common Event Format, the Elastic Common Schema, and
+the OpenTelemetry protocol
 (select the wire format with `PROBECTL_SIEM_FORMAT`). The `audit.export`
 permission gates streaming export.
 
@@ -80,7 +103,9 @@ Configure a single IdP per deployment with `PROBECTL_OIDC_ISSUER`,
 `PROBECTL_OIDC_CLIENT_ID`, `PROBECTL_OIDC_CLIENT_SECRET`, and
 `PROBECTL_OIDC_REDIRECT_URL` (`https://HOST/auth/callback`). Register that
 callback with your IdP. Login begins at `GET /auth/login`; the session cookie is
-`Secure + HttpOnly + SameSite=Lax`, with lifetime `PROBECTL_SESSION_TTL`
+`Secure + HttpOnly + SameSite=Lax` — sent only over HTTPS, unreadable to page
+scripts, and not attached to cross-site requests — with lifetime
+`PROBECTL_SESSION_TTL`
 (default 12 h). Per-tenant IdPs (a tenant bringing its own SSO) resolve through a
 provider factory; the factory exists today, but DB-backed per-tenant IdP
 configuration is still to come — until it lands, the single env-configured IdP is
@@ -97,10 +122,15 @@ model lives in [agent/enrollment.md](agent/enrollment.md).
 
 The one idea underneath all of it: an agent is useless until it holds an
 **SVID** — a short-lived mTLS client certificate whose identity names *both* its
-tenant and its agent id. No SVID, no transport: the control plane refuses the
+tenant and its agent id (mTLS is mutual TLS: not only does the agent verify the
+server, the server demands and verifies the agent's certificate too). No SVID,
+no transport: the control plane refuses the
 connection at the TLS handshake, so nothing the agent sends lands anywhere. You
 never hand-copy certificates around; agents *earn* an identity by redeeming a
-one-time token, and the runtime keeps it fresh on its own.
+one-time token, and the runtime keeps it fresh on its own. The whole lifecycle
+behaves like a hotel keycard system: a card that expires every 24 hours, a
+runtime that re-issues it before checkout, and a front desk that can put any
+card — or any *guest* — on the deny-list instantly.
 
 ### Enrolling an agent
 

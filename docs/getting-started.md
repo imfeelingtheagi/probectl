@@ -52,7 +52,9 @@ here runs entirely inside Docker.
 
 > **Eval-only, on purpose.** The eval stack runs the API in `dev` auth — every
 > request is an unauthenticated, all-powerful admin — so the control plane
-> **binds loopback only and is never published to your network**; you read it
+> **binds loopback only and is never published to your network** (loopback is
+> `127.0.0.1`, the interface whose packets never leave their host — an API bound
+> there is physically unreachable from outside); you read it
 > through an in-container helper. It also uses a plaintext bus and a self-signed
 > certificate. Perfect for a laptop, never for production. The production-shaped
 > stack is [`deploy/compose/probectl.yml`](../deploy/compose/probectl.yml) (see
@@ -147,7 +149,9 @@ once**, run the dev dependency stack, and run the control plane **from source**
 wired to it. That single control plane serves **all three** producer paths below.
 
 > **Everything below assumes one tenant**, the built-in default tenant
-> `00000000-0000-0000-0000-000000000001`. In a real multi-tenant or provider
+> `00000000-0000-0000-0000-000000000001`. (A **tenant** is one isolated
+> customer or organization in a deployment — the outermost boundary every
+> record, agent, and query is scoped by.) In a real multi-tenant or provider
 > deployment you create tenants first (see [`admin.md`](admin.md)); the
 > single-tenant case is just the one-tenant version of the same code.
 
@@ -162,7 +166,9 @@ make build           # ./bin/probectl-control, probectl-agent, probectl-ebpf-age
 make build-devauth   # ./bin/probectl-control-devauth  (LOCAL EVALUATION ONLY)
 ```
 
-**2. Start the backing services** (Postgres + Kafka + ClickHouse + Prometheus):
+**2. Start the backing services** (Postgres — the relational store for durable
+state; Kafka — the message bus; ClickHouse — the high-volume event store;
+Prometheus — metrics):
 
 ```sh
 make compose-up      # docker compose -f deploy/compose/dev.yml up -d --wait
@@ -170,8 +176,10 @@ make compose-up      # docker compose -f deploy/compose/dev.yml up -d --wait
 
 **3. Run the control plane from source, wired to those services.** This single
 environment turns on what every path below needs — the agent **gRPC/mTLS** listener
-(for the canary) and the **Kafka** bus + **ClickHouse** stores (for the bus-based
-producers):
+(gRPC is the HTTP/2-based remote-procedure-call protocol the agents stream
+over; mTLS is *mutual* TLS — both ends present certificates, not just the
+server) for the canary, and the **Kafka** bus + **ClickHouse** stores for the
+bus-based producers:
 
 ```sh
 # Apply the schema once.
@@ -236,7 +244,9 @@ Path 2, the agent lines are harmless.
 >    interface.
 >
 > This is why the shared setup binds `127.0.0.1`. For anything beyond a laptop,
-> use the real path: `PROBECTL_AUTH_MODE=session` with an OIDC IdP (see
+> use the real path: `PROBECTL_AUTH_MODE=session` with an OIDC IdP — OIDC is
+> OpenID Connect, the standard web-login protocol, and the IdP is your identity
+> provider: Okta, Entra ID, Keycloak, … (see
 > [`install.md`](install.md) and [`admin.md`](admin.md)). The control plane is
 > **HTTPS/TLS everywhere by design** — in production there is no plaintext or
 > no-auth mode to lean on.
@@ -399,7 +409,8 @@ model), see [`agent/enrollment.md`](agent/enrollment.md).
 
 ## Path 2 — Real host flows (the eBPF agent)
 
-**Linux with `CAP_BPF`** for live capture; **any OS** (including macOS) for the
+**Linux with `CAP_BPF`** (the Linux capability that permits loading eBPF
+programs without root) for live capture; **any OS** (including macOS) for the
 recorded-sample path. The eBPF agent loads tiny, sandboxed observation programs
 into the Linux kernel and watches **every real TCP connection** the host makes or
 accepts — with the process and container behind it — and rolls those into a live
@@ -412,9 +423,11 @@ Unlike the canary, the eBPF agent **does not stream over gRPC**. It is a separat
 process from the control plane, so the two cannot share an in-process channel —
 they meet on the **message bus**. The agent publishes flow + service-edge batches
 to the topic `probectl.ebpf.flows`; a control-plane consumer drains that topic and
-folds the edges into the **topology graph**. That bus is **Kafka** (which is why
+folds the edges into the **topology graph**. That bus is **Kafka** — the
+open-source distributed message log: producers append, consumers read at their
+own pace, and neither has to be up for the other to keep working — which is why
 the shared setup runs `dev.yml` and wired the control plane to
-`PROBECTL_BUS_MODE=kafka`).
+`PROBECTL_BUS_MODE=kafka`.
 
 > **Where eBPF data shows up — read this carefully.** The eBPF host agent feeds the
 > **topology / service-map** plane (`GET /v1/topology`). The `/v1/flows/*`
@@ -451,7 +464,9 @@ the pipeline work end-to-end.
 ### Option B — live flows (Linux + `CAP_BPF`)
 
 The live kernel loader is compiled in only with the **`-tags ebpf` build**, which
-needs a Linux host, a BTF-enabled kernel, and `clang` (the shipped
+needs a Linux host, a BTF-enabled kernel (BTF — the kernel's embedded type
+catalog, which is what lets one compiled agent adapt to any kernel), and `clang`
+(the C compiler that builds the BPF objects; the shipped
 `probectl-ebpf-agent` container image is this live build). Build it and run with a
 config:
 
@@ -460,6 +475,10 @@ make ebpf-agent      # builds ./bin/probectl-ebpf-agent WITH the live CO-RE load
 # needs CAP_BPF (+CAP_PERFMON); the plaintext-bus opt-in is env-only:
 sudo PROBECTL_EBPF_BUS_ALLOW_PLAINTEXT=true ./bin/probectl-ebpf-agent -config ebpf.yml
 ```
+
+(CO-RE — *compile once, run everywhere* — is the eBPF build model where the
+compiled program carries relocation info and adapts itself to the running
+kernel at load time, instead of being recompiled per kernel.)
 
 A minimal `ebpf.yml` for the dev stack (see
 [`deploy/agent/probectl-ebpf-agent.example.yml`](../deploy/agent/probectl-ebpf-agent.example.yml)):

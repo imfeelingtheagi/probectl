@@ -5,10 +5,13 @@
 probectl is a self-hosted control plane plus agents. This guide gets the
 **control plane** running two ways: an all-in-one Docker Compose stack (fastest
 path, good for a single host or evaluation) and a Kubernetes Helm chart
-(production / multi-tenant).
+(production / multi-tenant — Helm is Kubernetes's package manager, and a chart
+is the installable package of manifests it deploys).
 
 The rule that shapes both: probectl is **HTTPS-by-default**. Every shipped deploy
-serves the API over TLS, sends HSTS, and exposes **no plaintext listener at all**.
+serves the API over TLS (the encryption layer under `https://`), sends HSTS
+(the response header telling browsers to never retry this host over plain
+HTTP), and exposes **no plaintext listener at all**.
 This is deliberate — a network-observability control plane handles tenant data,
 so there is no "just turn off TLS for a sec" mode to trip over (see
 [`hardening.md`](hardening.md) for the full transport posture). The practical consequence: every example below talks to `https://`,
@@ -23,8 +26,10 @@ operation (audit, roles, SSO), see [`admin.md`](admin.md).
   version the shipped compose stack pins), or the ability to build one
   (`make images`).
 - **Compose path:** Docker with Compose v2.
-- **Helm path:** a Kubernetes cluster with an ingress controller (nginx in the
-  examples) and a way to supply a TLS certificate (cert-manager, or a pre-created
+- **Helm path:** a Kubernetes cluster with an ingress controller (the cluster's
+  HTTP front door, which routes outside traffic to in-cluster services — nginx
+  in the examples) and a way to supply a TLS certificate (cert-manager — the
+  in-cluster operator that obtains and renews certificates — or a pre-created
   secret).
 
 ## Option A — Docker Compose (all-in-one)
@@ -33,6 +38,10 @@ operation (audit, roles, SSO), see [`admin.md`](admin.md).
 plane behind TLS with a bundled Postgres. On first boot a one-shot `certgen`
 service generates a **self-signed certificate** (`probectl-control gen-cert`) so
 you can start immediately; you swap in a real CA-issued cert for production.
+Self-signed means the server vouches for itself rather than a certificate
+authority (CA — a trusted issuer your clients already know): traffic is fully
+encrypted either way, but your client must be *told* to trust this server —
+which is exactly what step 3 (copy out `ca.crt`) and `--cacert` in step 4 do.
 
 ```sh
 # 1. Configure.
@@ -60,7 +69,13 @@ curl --cacert ./ca.crt https://localhost:8443/readyz
 curl --cacert ./ca.crt https://localhost:8443/.well-known/security.txt
 ```
 
-A note on the envelope key: if you leave `PROBECTL_ENVELOPE_KEY` empty, the
+A note on the envelope key: this is probectl's **KEK** (key-encryption key) for
+**envelope encryption** — each stored secret is sealed with its own data key,
+and those data keys are sealed with this one. Think of a hotel key cabinet: the
+KEK is not the key to every room, it is the one key that opens the cabinet
+holding them — which is why losing it makes every sealed value unreadable, and
+why it must be backed up like key material rather than like configuration. If
+you leave `PROBECTL_ENVELOPE_KEY` empty, the
 control plane generates one on first boot and persists it on the `controldata`
 volume (mode 0600) — back that volume up like key material. Supplying your own key
 (from a KMS or secret manager) is recommended for production and always wins.
@@ -78,8 +93,11 @@ also drop the database and certs).
 
 The chart in [`deploy/helm/probectl`](../deploy/helm/probectl) terminates TLS at
 the ingress, force-redirects HTTP → HTTPS, and emits HSTS; the Service is
-`ClusterIP`, so nothing plaintext is reachable from outside the cluster.
-Migrations run as an init container, and the pod runs non-root with a read-only
+`ClusterIP` (a cluster-internal-only address), so nothing plaintext is
+reachable from outside the cluster.
+Migrations run as an init container (a one-shot container Kubernetes runs to
+completion before the main one starts — so the schema is always in place before
+the server boots), and the pod runs non-root with a read-only
 root filesystem.
 
 ```sh
@@ -141,7 +159,9 @@ Don't follow a one-off recipe here — the canonical journey is already written:
 ## First-run checklist
 
 1. **Authentication.** Outside evaluation, run with `authMode=session` and a real
-   OIDC IdP. A brand-new SSO user is provisioned with **no roles** — an admin must
+   OIDC IdP (OIDC — OpenID Connect, the standard web-login protocol; the IdP is
+   your identity provider — Okta, Entra ID, Keycloak, …). A brand-new SSO user
+   is provisioned with **no roles** — an admin must
    grant access (see [`admin.md`](admin.md)). This is intentional: access is
    default-deny, not default-allow.
 2. **Envelope key.** Set `PROBECTL_ENVELOPE_KEY` to a real 32-byte base64 key

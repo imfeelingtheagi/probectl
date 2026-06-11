@@ -4,7 +4,9 @@ Docker Compose stacks for running probectl. Three distinct shapes live here —
 one **production-shaped** all-in-one deploy, one **evaluation** stack for seeing
 first data on a laptop, and one **dev dependency** stack for developing the
 control plane from source. Pick by what you are trying to do; they are not
-interchangeable.
+interchangeable: think the road car (`probectl.yml`), a fenced-off test track
+with a crash dummy (`eval.yml` — sample data, never public roads), and the
+garage with the engine out (`dev.yml` — backing services, no control plane).
 
 One rule applies to all of them: the control plane is a **consumer** — it stores
 and serves, but observes nothing on its own. A stack with no producer (agent /
@@ -22,14 +24,16 @@ stack bundles a producer; for the others, attach one next
 | `dev.yml` | Local dev **dependency** stack: Postgres, Kafka, ClickHouse, Prometheus — no control plane (you run that from source) |
 | `prometheus.yml` | Prometheus config used by the `dev.yml` stack |
 | `clickhouse-backups.xml` | ClickHouse server config that whitelists `/backups` as a server-side `BACKUP`/`RESTORE` path (used by `dev.yml`) |
-| `dr-drill.yml` | overlay that adds a streaming Postgres replica so `scripts/failover_drill.sh` can time a real promote-the-standby failover |
+| `dr-drill.yml` | overlay that adds a streaming Postgres replica (a standby continuously replaying the primary's writes) so `scripts/failover_drill.sh` can time a real promote-the-standby failover |
 
 ## Shipped all-in-one (`probectl.yml`) — HTTPS-by-default
 
 Runs the control plane behind TLS with a Postgres backing store. The API is
 exposed **only over HTTPS** (port 8443); there is no plaintext listener,
 deliberately — the shipped deploys never expose an unencrypted API. A
-self-signed certificate is generated on first boot (`probectl-control gen-cert`)
+**self-signed** certificate (one the server signs for itself: traffic is
+encrypted, but clients must be told to trust it — which is what `--cacert
+ca.crt` does below) is generated on first boot (`probectl-control gen-cert`)
 for an immediate quickstart — production replaces it with a CA-issued cert.
 
 ```sh
@@ -60,11 +64,13 @@ docker compose -f deploy/compose/eval.yml --profile tools run --rm viewer
 
 It is fenced as evaluation-only on purpose: the API runs **dev auth** (every
 request is an unauthenticated admin), so it **binds loopback inside the
-container and publishes no port** — you read it through the in-namespace
-`viewer` helper; the bus is plaintext and the cert self-signed. The release
-image refuses dev auth outright, so this stack builds its own local dev-auth
-image. Layer `eval-synthetic.yml` on top to add an enrolled canary running
-synthetic probes. The full walkthrough is
+container and publishes no port** — loopback is `127.0.0.1`, the interface
+whose traffic never leaves its host (here, never even leaves the container), so
+the no-auth API is physically unreachable from your network; you read it
+through the in-namespace `viewer` helper. The bus is plaintext and the cert
+self-signed. The release image refuses dev auth outright, so this stack builds
+its own local dev-auth image. Layer `eval-synthetic.yml` on top to add an
+enrolled canary running synthetic probes. The full walkthrough is
 [`docs/getting-started.md`](../../docs/getting-started.md); for anything real,
 use `probectl.yml`.
 
