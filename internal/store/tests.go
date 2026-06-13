@@ -134,8 +134,16 @@ func (Tests) ListPage(ctx context.Context, s tenancy.Scope, afterID string, limi
 	if limit <= 0 || limit > maxTestPageSize {
 		limit = DefaultTestPageSize
 	}
-	rows, err := s.Q.Query(ctx,
-		`SELECT `+testCols+` FROM tests WHERE id > $1 ORDER BY id LIMIT $2`, afterID, limit)
+	// SCALE-002: empty cursor = first page. id is a uuid PK, so we must NOT bind
+	// "" to `id > $1` (Postgres rejects an empty string as uuid, SQLSTATE 22P02);
+	// omit the cursor predicate entirely on the first page.
+	q := `SELECT ` + testCols + ` FROM tests WHERE id > $1 ORDER BY id LIMIT $2`
+	args := []any{afterID, limit}
+	if afterID == "" {
+		q = `SELECT ` + testCols + ` FROM tests ORDER BY id LIMIT $1`
+		args = []any{limit}
+	}
+	rows, err := s.Q.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

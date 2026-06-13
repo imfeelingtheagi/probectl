@@ -60,9 +60,17 @@ func TestProviderCannotReadCrossTenantAudit(t *testing.T) {
 		t.Fatalf("provider scoped to A read %d of A's own audit rows, want >=1 (erase-verify must still work)", n)
 	}
 
-	// 4) The DELETE capability still functions (USING true + explicit WHERE):
-	//    erasing tenant A's chain leaves zero, B untouched.
+	// 4) The DELETE capability still functions, exactly as the production erase
+	//    drives it: the provider sets the tenant GUC, then DELETEs by explicit
+	//    WHERE. The GUC matters — after 0045 the provider's SELECT policy is
+	//    GUC-scoped, and a `DELETE ... WHERE` must READ the rows to match them,
+	//    so with no GUC the rows are invisible and nothing is deleted. The real
+	//    erase (tenantlife.go) sets probectl.tenant_id in the same provider tx;
+	//    mirror that here. Erasing tenant A's chain leaves zero, B untouched.
 	if err := tenancy.InProvider(ctx, pool, func(ctx context.Context, q tenancy.Querier) error {
+		if _, err := q.Exec(ctx, `SELECT set_config('probectl.tenant_id', $1, true)`, ta); err != nil {
+			return err
+		}
 		_, err := q.Exec(ctx, `DELETE FROM audit_events WHERE tenant_id = $1`, ta)
 		return err
 	}); err != nil {

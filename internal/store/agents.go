@@ -150,8 +150,16 @@ func (Agents) ListPage(ctx context.Context, s tenancy.Scope, afterID string, lim
 	if limit <= 0 || limit > 1000 {
 		limit = DefaultAgentPageSize
 	}
-	rows, err := s.Q.Query(ctx,
-		`SELECT `+agentCols+` FROM agents WHERE id > $1 ORDER BY id LIMIT $2`, afterID, limit)
+	// SCALE-002/012: empty cursor = first page. id is a uuid PK; binding "" to
+	// `id > $1` makes Postgres reject the empty string as uuid (SQLSTATE 22P02),
+	// so omit the cursor predicate on the first page.
+	q := `SELECT ` + agentCols + ` FROM agents WHERE id > $1 ORDER BY id LIMIT $2`
+	args := []any{afterID, limit}
+	if afterID == "" {
+		q = `SELECT ` + agentCols + ` FROM agents ORDER BY id LIMIT $1`
+		args = []any{limit}
+	}
+	rows, err := s.Q.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
