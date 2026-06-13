@@ -7,6 +7,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var errClosed = errors.New("bus: closed")
@@ -90,6 +91,25 @@ func (m *Memory) subscriberCount(topic string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.subs[topic])
+}
+
+// WaitForSubscribers blocks until at least n subscribers are registered on
+// topic, or ctx is done (TEST-002). It is the race-free replacement for the
+// fixed pre-publish time.Sleep that tests used to "let the consumer
+// subscribe": a live pub/sub bus only delivers to subscribers present at
+// publish time, so a test must SYNCHRONIZE on registration, not guess a
+// duration. Returns true once the count is reached, false if ctx ended first.
+func (m *Memory) WaitForSubscribers(ctx context.Context, topic string, n int) bool {
+	for {
+		if m.subscriberCount(topic) >= n {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(time.Millisecond):
+		}
+	}
 }
 
 // Publish delivers value to every current subscriber of topic.

@@ -59,7 +59,11 @@ func TestConsumerWritesToTSDB(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() { _ = c.Run(ctx); close(done) }()
-	time.Sleep(200 * time.Millisecond) // let the consumer subscribe
+	// TEST-002: synchronize on the subscription instead of a fixed sleep — a
+	// live pub/sub bus only delivers to subscribers present at publish time.
+	if !b.WaitForSubscribers(ctx, bus.NetworkResultsTopic, 1) {
+		t.Fatal("consumer did not subscribe to the network results topic")
+	}
 
 	payload, err := proto.Marshal(&resultv1.Result{TenantId: "t1", AgentId: "a1", CanaryType: "noop", Success: true})
 	if err != nil {
@@ -99,7 +103,10 @@ func TestConsumerWritesEndpointResults(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() { _ = c.Run(ctx); close(done) }()
-	time.Sleep(200 * time.Millisecond) // let both subscriptions establish
+	// TEST-002: synchronize on the endpoint subscription instead of a fixed sleep.
+	if !b.WaitForSubscribers(ctx, bus.EndpointResultsTopic, 1) {
+		t.Fatal("consumer did not subscribe to the endpoint results topic")
+	}
 
 	payload, err := proto.Marshal(&resultv1.Result{
 		TenantId: "t9", AgentId: "laptop-1", CanaryType: "endpoint.attribution", Success: false,
