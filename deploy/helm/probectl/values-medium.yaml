@@ -5,6 +5,17 @@
 # Three replicas spread across nodes, a PodDisruptionBudget so the S34 rolling
 # upgrade / node drains keep a quorum, and NetworkPolicy ready to enable (set
 # networkPolicy.ingressFrom / egressTo for your cluster, then flip enabled).
+#
+# ⚠️  INTERIM CONSTRAINT (ARCH-003): several read views are still served from
+# per-replica process memory — topology, /v1/results/latest, threat detections,
+# TLS posture, and endpoint views. Across replicas these are NOT yet coherent:
+# the same query can return different answers depending on which replica serves
+# it, because each replica only sees the bus traffic IT consumed. Durable,
+# replica-coherent view serving (leader-elected view consumers / shared derived
+# store) is landing in the durable-serving-layer work. UNTIL THEN, if you depend
+# on those views being consistent, run replicaCount: 1 (the result/flow/device
+# INGEST pipelines and all TSDB/ClickHouse-backed queries are already coherent
+# at any replica count — only the in-RAM views are affected). See docs/ha.md.
 
 replicaCount: 3
 
