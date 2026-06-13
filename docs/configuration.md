@@ -58,8 +58,9 @@ CA-issued cert). The other subcommands are covered with their features:
 enrollment — [`agent/enrollment.md`](agent/enrollment.md)), `scim-token`
 (SCIM, below), `mcp-stdio` and `mcp-token` (MCP server, below), `preflight`
 (the storage-encryption preflight — [`hardening.md`](hardening.md)),
-`support-bundle` (supportability, below), and `backup-seal` / `backup-open`
-(sealed backups — *Tenant lifecycle*, below).
+`support-bundle` (supportability, below), `backup-seal` / `backup-open`
+(sealed backups — *Tenant lifecycle*, below), and `replay-deadletter`
+(re-ingest dead-lettered records — [`ops/dead-letter-replay.md`](ops/dead-letter-replay.md)).
 
 A note on the defaults: the listen address is `:8080`, the database DSN — the
 *data source name*, the one connection string carrying host, user, password,

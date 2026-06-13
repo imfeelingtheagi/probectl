@@ -107,10 +107,10 @@ func run(cmd string) error {
 	case "backup-open":
 		// OPS-002: decrypt an encrypted backup container for restore.
 		return backupOpen(os.Args[2:])
-	case "serve", "migrate", "mcp-stdio", "mcp-token", "scim-token", "agent-ca", "enroll-token", "revoke-agent", "revoke-enroll-token", "register-collector":
+	case "serve", "migrate", "mcp-stdio", "mcp-token", "scim-token", "agent-ca", "enroll-token", "revoke-agent", "revoke-enroll-token", "register-collector", "replay-deadletter":
 		// fall through to the configured path below
 	default:
-		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | agent-ca | enroll-token | revoke-agent | revoke-enroll-token | register-collector | gen-cert | support-bundle | preflight | backup-seal | backup-open | version)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve | migrate | mcp-stdio | mcp-token | scim-token | agent-ca | enroll-token | revoke-agent | revoke-enroll-token | register-collector | replay-deadletter | gen-cert | support-bundle | preflight | backup-seal | backup-open | version)", cmd)
 	}
 
 	cfg, err := config.LoadFromEnv()
@@ -218,6 +218,11 @@ func run(cmd string) error {
 		// ARCH-011: register a bus-publishing collector (eBPF/flow/device) and
 		// print its UUID identity; no cert (bus auth is separate).
 		return runRegisterCollector(context.Background(), db, os.Args[2:])
+	case "replay-deadletter":
+		// ARCH-001: drain a probectl.deadletter.* topic and re-ingest each parked
+		// record onto its source topic (operator-driven recovery after a store
+		// outage outlived the retry budget).
+		return runReplayDeadLetter(cfg, log, os.Args[2:])
 	}
 
 	if cfg.MigrateOnBoot {
