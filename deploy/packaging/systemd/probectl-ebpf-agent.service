@@ -22,14 +22,42 @@ RestartSec=5s
 AmbientCapabilities=CAP_BPF CAP_PERFMON
 CapabilityBoundingSet=CAP_BPF CAP_PERFMON
 NoNewPrivileges=true
+# BPF maps/ringbuf need locked memory.
+LimitMEMLOCK=infinity
+
+# --- resource caps (EBPF-002/EBPF-007): a privileged host agent must never ---
+# starve the workloads it observes, and MemoryMax is the OOM backstop. Mirrors
+# the template unit (deploy/agent/probectl-ebpf-agent.service).
+CPUQuota=100%
+CPUWeight=100
+MemoryHigh=384M
+MemoryMax=512M
+TasksMax=128
+IOWeight=100
+
+# --- filesystem / namespace / kernel hardening (EBPF-002: parity with the ---
+# template unit so deb/rpm operators get the same confinement as Helm). ---
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/var/lib/probectl-ebpf-agent
 StateDirectory=probectl-ebpf-agent
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
 LockPersonality=true
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+# --- syscall filter (mirror of the template unit + seccomp profile) ---
 SystemCallArchitectures=native
-SystemCallFilter=@system-service @bpf
+SystemCallFilter=@system-service bpf perf_event_open
+SystemCallFilter=~@mount @module @reboot @swap @obsolete @cpu-emulation @keyring ptrace
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
