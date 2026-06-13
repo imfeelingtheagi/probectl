@@ -24,7 +24,7 @@ import {
 import { useCreateTest, useDeleteTest, useTests, type Test } from '../api/tests'
 import { AuthoringPanel } from './AuthoringPanel'
 import { ResultDetail } from './ResultDetail'
-import { useAgents, type Agent } from '../api/agents'
+import { useAgents, flattenAgents, type Agent } from '../api/agents'
 import { useSecretsHealth, type SecretBackendHealth } from '../api/secrets'
 import { useEditions, type FeatureInfo } from '../api/editions'
 import { useLifecycle } from '../api/lifecycle'
@@ -378,7 +378,9 @@ function SecretBackendsCard() {
 }
 
 export function AdminPage() {
-  const { data, isPending, isError } = useAgents()
+  const { data, isPending, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useAgents()
+  // UX-004: flatten the cursor-paged result into the rows fetched so far.
+  const agents = flattenAgents(data?.pages)
 
   const columns: Column<Agent>[] = [
     { key: 'name', header: 'Agent', render: (a) => <strong>{a.name}</strong> },
@@ -416,19 +418,30 @@ export function AdminPage() {
           ) : isError ? (
             <ErrorState description="Could not load agents." />
           ) : (
-            <Table
-              caption="Registered agents"
-              columns={columns}
-              rows={data ?? []}
-              rowKey={(a) => a.id}
-              empty={
-                <EmptyState
-                  icon="admin"
-                  title="No agents registered"
-                  description="Deploy a probectl agent to begin."
-                />
-              }
-            />
+            <>
+              <Table
+                caption="Registered agents"
+                columns={columns}
+                rows={agents}
+                rowKey={(a) => a.id}
+                empty={
+                  <EmptyState
+                    icon="admin"
+                    title="No agents registered"
+                    description="Deploy a probectl agent to begin."
+                  />
+                }
+              />
+              {hasNextPage && (
+                <button
+                  type="button"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                >
+                  {isFetchingNextPage ? 'Loading…' : 'Load more agents'}
+                </button>
+              )}
+            </>
           )}
         </CardBody>
       </Card>

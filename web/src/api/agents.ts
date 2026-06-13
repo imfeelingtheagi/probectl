@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiFetch } from './client'
 
 export interface Agent {
@@ -11,9 +11,34 @@ export interface Agent {
   last_seen_at?: string
 }
 
+interface AgentsPage {
+  items: Agent[]
+  next_cursor?: string
+}
+
+// UX-004: the agent fleet can be large, so the list MUST ride the backend's
+// cursor pagination (handleListAgents: ?after=<id>&limit=<n>, next_cursor when a
+// full page is returned). Previously useAgents() fetched bare `/agents` and
+// rendered every row — unbounded at fleet scale. Now it pages with
+// useInfiniteQuery; the page wires a load-more control and the Table bounds the
+// rows it actually renders.
+export const AGENTS_PAGE_SIZE = 100
+
 export function useAgents() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['agents'],
-    queryFn: () => apiFetch<{ items: Agent[] }>('/agents').then((r) => r.items),
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: String(AGENTS_PAGE_SIZE) })
+      if (pageParam) params.set('after', pageParam)
+      return apiFetch<AgentsPage>(`/agents?${params.toString()}`)
+    },
+    // next_cursor is present only when the page was full; absent = end of set.
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
   })
+}
+
+/** Flatten the paged result into the agent rows fetched so far. */
+export function flattenAgents(pages: AgentsPage[] | undefined): Agent[] {
+  return (pages ?? []).flatMap((p) => p.items)
 }
