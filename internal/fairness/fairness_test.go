@@ -50,11 +50,19 @@ func (m *memSource) PolicyFor(_ context.Context, tenantID string) (Policy, bool,
 // eventually polls until fn() is true (the async policy refresh).
 func eventually(t *testing.T, fn func() bool) {
 	t.Helper()
-	for range 200 {
+	// Generous, load-tolerant budget: the gate refreshes policy ASYNCHRONOUSLY
+	// (go g.refresh), so this polls for an off-hot-path goroutine to land. The
+	// old 200×1ms (~200ms) budget was too tight under -race on a loaded CI
+	// runner — the refresh goroutine may not even be scheduled in that window —
+	// which flaked TestPolicyLifecycle ("condition not reached"). A ~5s deadline
+	// still fails fast on a real break (the loop returns the instant fn() is
+	// true) but absorbs scheduler/-race jitter.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
 		if fn() {
 			return
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("condition not reached")
 }
