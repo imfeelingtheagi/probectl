@@ -1,5 +1,16 @@
 # Browser / transaction synthetic
 
+> **Status: ROADMAP — not yet wired (ARCH-010).** The browser/transaction
+> synthetic engine (`internal/browser`) and the Playwright worker exist as
+> components, but no canary type is registered that drives them, so you cannot
+> schedule a browser synthetic today: there is no `browser` entry in the canary
+> registry and the agent has no plugin that executes one. This document
+> describes the intended design, not shipped behavior. Wiring it (registering
+> the canary type and the worker dispatch path) is tracked under ARCH-010 and is
+> deferred behind the higher-priority ingest/registration work; the bigger lift
+> here (a managed browser worker fleet) is why it trails the A2A wiring. Until
+> then, treat everything below as the plan of record.
+
 ## What it is
 
 This is the **canary** (probectl's name for one scheduled synthetic test type)
