@@ -27,6 +27,13 @@ type Agent struct {
 	l7source L7Source
 	l7man    *l7.Manager
 	l7conns  map[uint64]l7conn
+	// l7seen tracks last-activity per connID so idle entries are swept on flush
+	// (FUZZ-001) — connID is the SSL* pointer with no socket-close signal yet,
+	// so without a TTL sweep l7conns + l7man.conns grow without bound.
+	l7seen     map[uint64]time.Time
+	l7connsCap int
+	l7connsTTL time.Duration
+	l7Evicted  atomic.Uint64
 
 	lastDrops      uint64
 	lastFilteredV6 uint64
@@ -43,6 +50,10 @@ func (a *Agent) Ready() bool { return a.ready.Load() }
 
 // Live reports that the agent process is up and running its loop.
 func (a *Agent) Live() bool { return a.started.Load() }
+
+// L7Evicted reports how many L7 connection identities the agent has evicted
+// (cap or idle-TTL) — the FUZZ-001 observability signal that the bound is live.
+func (a *Agent) L7Evicted() uint64 { return a.l7Evicted.Load() }
 
 // l7conn remembers a connection's client→server identity so a call (which may be
 // completed by a response event) is attributed to the request-direction edge.
@@ -103,24 +114,40 @@ func New(cfg *Config, b bus.Bus, log *slog.Logger) (*Agent, error) {
 	if eerr != nil {
 		return nil, eerr // RED-006: malformed silo namespace refuses start
 	}
+	// EBPF-001/SCALE-003/FUZZ-001: wire the bounded maps into the LIVE runtime.
+	// The bounded service map and the L7 connection caps existed but nothing in
+	// the production path enabled them — so the default agent now sets them.
+	agg.ServiceMap().SetBounds(cfg.MaxServiceEdges, cfg.L7ConnIdleTTL)
+	l7man := l7.NewManager()
+	l7man.SetBounds(cfg.MaxL7Conns, cfg.L7ConnIdleTTL)
 	return &Agent{
-		cfg:      cfg,
-		log:      log,
-		source:   src,
-		l7source: l7src,
-		enricher: NewProcEnricher(cfg.ProcRoot),
-		emitter:  emitter,
-		agg:      agg,
-		l7man:    l7.NewManager(),
-		l7conns:  map[uint64]l7conn{},
+		cfg:        cfg,
+		log:        log,
+		source:     src,
+		l7source:   l7src,
+		enricher:   NewProcEnricher(cfg.ProcRoot),
+		emitter:    emitter,
+		agg:        agg,
+		l7man:      l7man,
+		l7conns:    map[uint64]l7conn{},
+		l7seen:     map[uint64]time.Time{},
+		l7connsCap: cfg.MaxL7Conns,
+		l7connsTTL: cfg.L7ConnIdleTTL,
 	}, nil
 }
 
-// newAgentWith is a test seam: build an Agent from explicit collaborators.
+// newAgentWith is a test seam: build an Agent from explicit collaborators. It
+// honors cfg's map bounds so tests exercise the SAME bounded path production
+// uses (the bound is wired in, not bypassed).
 func newAgentWith(cfg *Config, log *slog.Logger, src Source, enr Enricher, em Emitter) *Agent {
+	agg := NewAggregator()
+	agg.ServiceMap().SetBounds(cfg.MaxServiceEdges, cfg.L7ConnIdleTTL)
+	l7man := l7.NewManager()
+	l7man.SetBounds(cfg.MaxL7Conns, cfg.L7ConnIdleTTL)
 	return &Agent{
 		cfg: cfg, log: log, source: src, enricher: enr, emitter: em,
-		agg: NewAggregator(), l7man: l7.NewManager(), l7conns: map[uint64]l7conn{},
+		agg: agg, l7man: l7man, l7conns: map[uint64]l7conn{},
+		l7seen: map[uint64]time.Time{}, l7connsCap: cfg.MaxL7Conns, l7connsTTL: cfg.L7ConnIdleTTL,
 	}
 }
 
@@ -201,6 +228,12 @@ func (a *Agent) observe(f Flow) {
 // rolls any completed calls onto the request-direction edge.
 func (a *Agent) observeL7(ev L7Event) {
 	if ev.Data.Kind == l7.Request {
+		// FUZZ-001: cap the per-connection identity map. connID has no
+		// socket-close correlation yet, so a churn of distinct connections would
+		// grow l7conns (and l7man) without bound. Evict the oldest-seen first.
+		if _, known := a.l7conns[ev.ConnID]; !known && a.l7connsCap > 0 && len(a.l7conns) >= a.l7connsCap {
+			a.evictOldestL7Conn()
+		}
 		a.l7conns[ev.ConnID] = l7conn{
 			src:       ev.Source,
 			dst:       ev.Destination,
@@ -209,6 +242,7 @@ func (a *Agent) observeL7(ev L7Event) {
 			encrypted: ev.Encrypted,
 		}
 	}
+	a.l7seen[ev.ConnID] = a.l7now(ev)
 	meta, ok := a.l7conns[ev.ConnID]
 	if !ok {
 		return // a response with no prior request — can't attribute; drop
@@ -230,7 +264,58 @@ func (a *Agent) observeL7(ev L7Event) {
 	}
 }
 
+// l7now returns the event's timestamp (falling back to wall-clock), used as the
+// last-seen marker that drives the idle sweep (FUZZ-001).
+func (a *Agent) l7now(ev L7Event) time.Time {
+	if !ev.Data.Time.IsZero() {
+		return ev.Data.Time
+	}
+	return time.Now()
+}
+
+// evictOldestL7Conn drops the least-recently-seen connection's identity AND its
+// parser tracker (l7man.Close), keeping l7conns and l7man bounded together.
+func (a *Agent) evictOldestL7Conn() {
+	var oldestID uint64
+	var oldest time.Time
+	first := true
+	for id := range a.l7conns {
+		seen := a.l7seen[id]
+		if first || seen.Before(oldest) {
+			oldestID, oldest, first = id, seen, false
+		}
+	}
+	if !first {
+		delete(a.l7conns, oldestID)
+		delete(a.l7seen, oldestID)
+		a.l7man.Close(oldestID) // flush+drop the parser tracker too
+		a.l7Evicted.Add(1)
+	}
+}
+
+// pruneL7 abandons connections idle longer than l7connsTTL (FUZZ-001), closing
+// their parser trackers — and prunes the service map on the same cadence. It is
+// driven by the flush ticker so the live agent enforces the bound continuously.
+func (a *Agent) pruneL7(now time.Time) {
+	if a.l7connsTTL > 0 {
+		cutoff := now.Add(-a.l7connsTTL)
+		for id, seen := range a.l7seen {
+			if seen.Before(cutoff) {
+				delete(a.l7conns, id)
+				delete(a.l7seen, id)
+				a.l7man.Close(id)
+				a.l7Evicted.Add(1)
+			}
+		}
+	}
+	// Prune the L7 manager's own trackers (covers ids that produced data but no
+	// l7conns identity) and the service map's idle edges.
+	a.l7man.Prune(now)
+	a.agg.ServiceMap().Prune(now)
+}
+
 func (a *Agent) flush(ctx context.Context) {
+	a.pruneL7(time.Now())
 	a.syncDrops()
 	a.syncFilteredNonIPv4()
 	flows, edges := a.agg.Drain()

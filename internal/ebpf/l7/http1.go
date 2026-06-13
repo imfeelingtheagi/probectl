@@ -30,6 +30,13 @@ func newHTTP1Parser() *http1Parser { return &http1Parser{} }
 
 func (p *http1Parser) OnData(d DataEvent) []Call {
 	if d.Kind == Request {
+		// FUZZ-001: cap the per-direction buffer. A peer that dribbles bytes but
+		// never completes a message (or non-HTTP bytes on an HTTP port) would
+		// otherwise grow reqBuf without bound. Drop+reset on overflow.
+		if len(p.reqBuf)+len(d.Payload) > l7MaxBufBytes {
+			p.reqBuf = p.reqBuf[:0]
+			return nil
+		}
 		p.reqBuf = append(p.reqBuf, d.Payload...)
 		for {
 			msg, rest, ok := scanHTTP1Message(p.reqBuf)
@@ -38,6 +45,10 @@ func (p *http1Parser) OnData(d DataEvent) []Call {
 			}
 			p.reqBuf = rest
 			if method, path, ok := parseRequestLine(msg); ok {
+				// FUZZ-001: cap in-flight unmatched requests; drop OLDEST when full.
+				if len(p.pending) >= l7MaxPending {
+					p.pending = p.pending[1:]
+				}
 				p.pending = append(p.pending, pendingReq{method: method, path: path, start: d.Time, bytes: uint64(len(msg))})
 			}
 		}
@@ -45,6 +56,10 @@ func (p *http1Parser) OnData(d DataEvent) []Call {
 	}
 
 	var calls []Call
+	if len(p.respBuf)+len(d.Payload) > l7MaxBufBytes {
+		p.respBuf = p.respBuf[:0]
+		return nil
+	}
 	p.respBuf = append(p.respBuf, d.Payload...)
 	for {
 		msg, rest, ok := scanHTTP1Message(p.respBuf)

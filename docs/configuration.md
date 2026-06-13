@@ -805,7 +805,10 @@ fail-closed posture for the most sensitive thing this agent can do.
 | `PROBECTL_EBPF_L7_REDACTION`   | `headers`   | how much of a payload may survive capture: `headers` zeroes the bodies in place before anything is retained (protocol metadata survives); `length` captures NO payload bytes (traffic shape only, no parsed calls); `full` (consented debugging) disables masking |
 | `PROBECTL_EBPF_L7_KERNEL_WINDOW` | `1024`    | max plaintext bytes per chunk that may cross from kernel into userspace under `headers` redaction (128–4095); bytes past the window never leave the kernel. `length` forces 0, `full` forces 4095. An unprogrammed kernel defaults to length-only, so it ships no plaintext |
 | `PROBECTL_EBPF_PROC_ROOT`      | `/proc`     | procfs root for process/cgroup enrichment                      |
-| `PROBECTL_EBPF_FLUSH_INTERVAL` | `10s`       | how often flows + the service map are emitted                  |
+| `PROBECTL_EBPF_FLUSH_INTERVAL` | `10s`       | how often flows + the service map are emitted (also the idle-prune cadence) |
+| `PROBECTL_EBPF_MAX_SERVICE_EDGES` | `50000`  | cap on live service-map edges (EBPF-001/SCALE-003); least-recently-seen evicted past the cap. `0` = unbounded (lightweight/test only) |
+| `PROBECTL_EBPF_MAX_L7_CONNS`   | `8192`      | cap on live L7 per-connection trackers (FUZZ-001); oldest-seen connection evicted past the cap. `0` = unbounded |
+| `PROBECTL_EBPF_L7_CONN_IDLE_TTL` | `5m`      | a connection/edge idle longer than this is abandoned on the flush ticker (FUZZ-001) — connIDs have no socket-close signal yet, so this sweep bounds the maps |
 | `PROBECTL_EBPF_HEALTH_ADDR`    | (none)      | bind a liveness/readiness probe server (e.g. `:9090`; `/healthz` = process up, `/readyz` = flow source attached). Empty disables it. The Helm DaemonSet sets it from `health.port` |
 | `PROBECTL_EBPF_LOG_LEVEL`      | `info`      | `debug` \| `info` \| `warn` \| `error`                         |
 | `PROBECTL_EBPF_LOG_FORMAT`     | `json`      | `json` \| `text`                                               |

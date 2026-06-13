@@ -38,6 +38,16 @@ type Config struct {
 	// FlushInterval is how often accumulated flows + the service map are emitted.
 	FlushInterval time.Duration `yaml:"flush_interval"`
 
+	// Map bounds (EBPF-001/SCALE-003/FUZZ-001). On a busy or hostile host the
+	// service map and the L7 per-connection maps would otherwise grow without
+	// limit. MaxServiceEdges caps the live service-edge set (LRU evict);
+	// MaxL7Conns caps live L7 trackers; L7ConnIdleTTL abandons a connection idle
+	// for this long (also the service-map idle window). Zero leaves a bound
+	// UNSET (unbounded — lightweight/test mode only); Default() sets sane caps.
+	MaxServiceEdges int           `yaml:"max_service_edges"`
+	MaxL7Conns      int           `yaml:"max_l7_conns"`
+	L7ConnIdleTTL   time.Duration `yaml:"l7_conn_idle_ttl"`
+
 	// HealthAddr binds the liveness/readiness probe server (OPS-001), e.g.
 	// ":9090". Empty disables it (the no-k8s/dev default).
 	HealthAddr string `yaml:"health_addr"`
@@ -91,6 +101,11 @@ func Default() *Config {
 		FlushInterval:      10 * time.Second,
 		RingBufferBytes:    1 << 24,
 		L7CaptureRedaction: RedactHeaders, // U-003: capture off by default; bodies zeroed when on
+		// EBPF-001/SCALE-003/FUZZ-001: bound the live maps by default so the
+		// shipped production agent enforces the cap (not just tests).
+		MaxServiceEdges: 50_000,
+		MaxL7Conns:      8192,
+		L7ConnIdleTTL:   5 * time.Minute,
 	}
 }
 
@@ -147,6 +162,21 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	if v := getenv("PROBECTL_EBPF_FLUSH_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			c.FlushInterval = d
+		}
+	}
+	if v := getenv("PROBECTL_EBPF_MAX_SERVICE_EDGES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.MaxServiceEdges = n
+		}
+	}
+	if v := getenv("PROBECTL_EBPF_MAX_L7_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.MaxL7Conns = n
+		}
+	}
+	if v := getenv("PROBECTL_EBPF_L7_CONN_IDLE_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.L7ConnIdleTTL = d
 		}
 	}
 	if v := getenv("PROBECTL_EBPF_HEALTH_ADDR"); v != "" {

@@ -57,6 +57,12 @@ func newHTTP2Parser() *http2Parser {
 
 func (p *http2Parser) OnData(d DataEvent) []Call {
 	if d.Kind == Request {
+		// FUZZ-001: cap the per-direction buffer (an incomplete/oversized frame
+		// stream would otherwise grow reqBuf without bound). Drop+reset.
+		if len(p.reqBuf)+len(d.Payload) > l7MaxBufBytes {
+			p.reqBuf = p.reqBuf[:0]
+			return nil
+		}
 		p.reqBuf = append(p.reqBuf, d.Payload...)
 		if !p.prefaceSkipped {
 			if len(p.reqBuf) < len(http2Preface) {
@@ -66,6 +72,10 @@ func (p *http2Parser) OnData(d DataEvent) []Call {
 			p.prefaceSkipped = true
 		}
 		return p.consume(&p.reqBuf, p.reqDec, true, d.Time)
+	}
+	if len(p.respBuf)+len(d.Payload) > l7MaxBufBytes {
+		p.respBuf = p.respBuf[:0]
+		return nil
 	}
 	p.respBuf = append(p.respBuf, d.Payload...)
 	return p.consume(&p.respBuf, p.respDec, false, d.Time)
@@ -88,7 +98,13 @@ func (p *http2Parser) consume(buf *[]byte, dec *hpack.Decoder, isReq bool, ts ti
 		}
 		st := p.streams[fr.stream]
 		if st == nil {
-			st = &h2stream{}
+			// FUZZ-001: cap concurrent streams (a flood of HEADERS opening
+			// streams that never END_STREAM would otherwise grow without bound).
+			// Evict the oldest unfinished stream when full.
+			if len(p.streams) >= l7MaxPending {
+				p.evictOldestStream()
+			}
+			st = &h2stream{start: ts}
 			p.streams[fr.stream] = st
 		}
 
@@ -153,6 +169,22 @@ func applyFrameSize(st *h2stream, isReq bool, fr h2frame) {
 		st.reqBytes += n
 	} else {
 		st.respBytes += n
+	}
+}
+
+// evictOldestStream drops the least-recently-started unfinished stream
+// (FUZZ-001), bounding p.streams under a flood of never-completing streams.
+func (p *http2Parser) evictOldestStream() {
+	var oldestID uint32
+	var oldest time.Time
+	first := true
+	for id, st := range p.streams {
+		if first || st.start.Before(oldest) {
+			oldestID, oldest, first = id, st.start, false
+		}
+	}
+	if !first {
+		delete(p.streams, oldestID)
 	}
 }
 
