@@ -3,6 +3,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -53,5 +56,29 @@ func TestEBPFSystemdUnitsHardeningParity(t *testing.T) {
 	denylist := "SystemCallFilter=~@mount @module @reboot @swap @obsolete @cpu-emulation @keyring ptrace"
 	if !strings.Contains(packaged, denylist) {
 		t.Errorf("packaged unit missing the syscall denylist %q (EBPF-002)", denylist)
+	}
+}
+
+// OPS-006: the packaged eBPF unit must not reference a seccomp JSON profile
+// that the package never ships (nfpm bundles none for this agent). A dangling
+// "deploy/.../*.json" reference in the unit would make an operator believe a
+// confinement file is in place when it isn't — so any file path the unit names
+// must actually exist in the repo, and the syscall surface must instead be
+// bounded by the in-unit SystemCallFilter (which the parity test above checks).
+func TestEBPFPackagedUnitHasNoDanglingSeccompReference(t *testing.T) {
+	packaged := readArtifact(t, "deploy/packaging/systemd/probectl-ebpf-agent.service")
+	root := repoRoot(t)
+
+	// Catch any referenced *.json path (seccomp profiles are the concern).
+	jsonRef := regexp.MustCompile(`[\w./-]+\.json`)
+	for _, m := range jsonRef.FindAllString(packaged, -1) {
+		if _, err := os.Stat(filepath.Join(root, m)); err != nil {
+			t.Errorf("packaged eBPF unit references %q which does not exist in the repo — dangling seccomp/profile reference (OPS-006): %v", m, err)
+		}
+	}
+
+	// The unit must still carry an in-unit syscall filter (the real confinement).
+	if !strings.Contains(packaged, "SystemCallFilter=") {
+		t.Error("packaged eBPF unit must bound syscalls via an in-unit SystemCallFilter (OPS-006)")
 	}
 }

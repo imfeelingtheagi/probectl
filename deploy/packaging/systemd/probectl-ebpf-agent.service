@@ -17,8 +17,9 @@ Restart=on-failure
 RestartSec=5s
 
 # eBPF needs exactly these — NOT full root. CAP_BPF loads programs/maps;
-# CAP_PERFMON opens the perf/tracepoint links. A shipped seccomp profile
-# further bounds the syscall surface (deploy/packaging/seccomp/ebpf.json).
+# CAP_PERFMON opens the perf/tracepoint links. The syscall surface is bounded
+# by the in-unit SystemCallFilter below (no external seccomp JSON is bundled by
+# nfpm for this package, so the unit is self-contained — OPS-006).
 AmbientCapabilities=CAP_BPF CAP_PERFMON
 CapabilityBoundingSet=CAP_BPF CAP_PERFMON
 NoNewPrivileges=true
@@ -53,7 +54,8 @@ LockPersonality=true
 MemoryDenyWriteExecute=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
-# --- syscall filter (mirror of the template unit + seccomp profile) ---
+# --- syscall filter (mirror of the template unit; the unit's own filter is ---
+# --- the syscall confinement — no external seccomp JSON dependency) ---
 SystemCallArchitectures=native
 SystemCallFilter=@system-service bpf perf_event_open
 SystemCallFilter=~@mount @module @reboot @swap @obsolete @cpu-emulation @keyring ptrace
