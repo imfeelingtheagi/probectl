@@ -678,8 +678,13 @@ func Load(getenv func(string) string) (*Config, error) {
 		FairnessIngestBytesPerSec:   l.float("PROBECTL_FAIRNESS_INGEST_BYTES_PER_SEC", 2<<20),
 		FairnessDeviceMetricsPerSec: l.float("PROBECTL_FAIRNESS_DEVICE_METRICS_PER_SEC", 2000),
 		FairnessBurstSeconds:        l.float("PROBECTL_FAIRNESS_BURST_SECONDS", 10),
-		FairnessQueryConcurrency:    l.intRange("PROBECTL_FAIRNESS_QUERY_CONCURRENCY", 0, 0, 100000),
-		FairnessQueriesPerMin:       l.float("PROBECTL_FAIRNESS_QUERIES_PER_MIN", 0),
+		// SCALE-011: bound query load by DEFAULT (was 0/0 = unbounded, so one
+		// tenant could monopolize the query path). 4 concurrent queries and 120
+		// queries/min per tenant are generous for interactive + dashboard use
+		// while capping a runaway client; 0 still means unbounded for operators
+		// who deliberately opt out.
+		FairnessQueryConcurrency: l.intRange("PROBECTL_FAIRNESS_QUERY_CONCURRENCY", 4, 0, 100000),
+		FairnessQueriesPerMin:    l.float("PROBECTL_FAIRNESS_QUERIES_PER_MIN", 120),
 
 		SIEMEnabled:      l.boolean("PROBECTL_SIEM_ENABLED", false),
 		SIEMPreset:       l.enum("PROBECTL_SIEM_PRESET", "generic", "generic", "splunk", "sentinel", "elastic", "chronicle"),

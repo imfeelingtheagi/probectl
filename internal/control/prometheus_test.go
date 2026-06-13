@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -108,9 +109,13 @@ func TestGrafanaDatasourceSequence(t *testing.T) {
 	}
 
 	// 6. range query, form-POSTed the way Grafana does
+	// Range within the SCALE-011 31-day cap (an unbounded 0..9999999999 window
+	// is now rejected; use a realistic last-hour window around the inserted data).
+	rangeStart := strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)
+	rangeEnd := strconv.FormatInt(time.Now().Add(time.Minute).Unix(), 10)
 	env = decodeEnvelope(t, doForm(srv, http.MethodPost, "/v1/grafana/api/v1/query_range", url.Values{
 		"query": {`probectl_result_rtt_ms{agent_id="a1"}`},
-		"start": {"0"}, "end": {"9999999999"}, "step": {"15"},
+		"start": {rangeStart}, "end": {rangeEnd}, "step": {"15"},
 	}), 200)
 	if !strings.Contains(string(env.Data), `"matrix"`) || !strings.Contains(string(env.Data), `"15"`) {
 		t.Fatalf("range = %s", env.Data)

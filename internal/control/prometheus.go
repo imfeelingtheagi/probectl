@@ -165,6 +165,13 @@ func (s *Server) handlePromQueryRange(w http.ResponseWriter, r *http.Request) er
 		promapi.WriteError(w, http.StatusBadRequest, "bad_data", "invalid start/end")
 		return nil
 	}
+	// SCALE-011: cap the queryable window so a single unbounded range query
+	// can't scan the whole TSDB and exhaust the query path for other tenants.
+	const maxRange = 31 * 24 * time.Hour
+	if end.Sub(start) > maxRange {
+		promapi.WriteError(w, http.StatusBadRequest, "bad_data", "query range exceeds the 31-day maximum; narrow start/end")
+		return nil
+	}
 	if snap, ok := s.tsdbWriter.(promSnapshotter); ok {
 		res, qerr := promapi.Range(snap.Snapshot(), forced, start, end, 0)
 		if qerr != nil {
