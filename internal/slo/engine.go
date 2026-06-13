@@ -89,15 +89,29 @@ type Engine struct {
 	slos    []SLO
 	tenants map[string]map[string]*sloState // tenant → slo name → state
 	clock   func() time.Time
+	// dataSince records when each tenant's error-budget window started filling
+	// in THIS process (CORRECT-008). The SLO engine is in-RAM, so a restart
+	// resets budgets; surfacing dataSince stops the UI from showing a freshly
+	// reset budget as a full-window attainment.
+	dataSince map[string]time.Time
 }
 
 // NewEngine builds the engine over validated SLOs.
 func NewEngine(slos []SLO) *Engine {
 	return &Engine{
-		slos:    append([]SLO(nil), slos...),
-		tenants: map[string]map[string]*sloState{},
-		clock:   time.Now,
+		slos:      append([]SLO(nil), slos...),
+		tenants:   map[string]map[string]*sloState{},
+		clock:     time.Now,
+		dataSince: map[string]time.Time{},
 	}
+}
+
+// DataSince reports when this tenant's in-RAM SLO accumulators started filling
+// (zero if the tenant has produced no data yet) — CORRECT-008.
+func (e *Engine) DataSince(tenant string) time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.dataSince[tenant]
 }
 
 // WithClock overrides the engine's time source and returns the engine.
@@ -125,6 +139,9 @@ func (e *Engine) state(tenant, name string) *sloState {
 	if !ok {
 		ts = map[string]*sloState{}
 		e.tenants[tenant] = ts
+		if _, seen := e.dataSince[tenant]; !seen {
+			e.dataSince[tenant] = e.clock() // CORRECT-008: window-open time
+		}
 	}
 	st, ok := ts[name]
 	if !ok {

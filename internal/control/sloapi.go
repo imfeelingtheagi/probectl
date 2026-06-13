@@ -69,6 +69,9 @@ func (s *Server) handleSLOs(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"slo_running": true,
 		"items":       s.sloEngine.Statuses(tid),
+		// CORRECT-008: when these in-RAM budgets started filling, so a restart's
+		// reset window is visible rather than passed off as a full-window result.
+		"data_since": s.sloEngine.DataSince(tid),
 	})
 	return nil
 }

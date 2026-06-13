@@ -108,6 +108,11 @@ type Summary struct {
 	ChattyPairs   []PairFlow           `json:"chatty_pairs"`
 	Trend         []TrendPoint         `json:"trend"`
 	Budgets       []BudgetStatus       `json:"budgets"`
+	// DataSince is when these in-RAM totals started accumulating (CORRECT-008).
+	// The cost engine rebuilds from the live stream, so a control-plane restart
+	// resets it; exposing it stops the UI from presenting a partial post-restart
+	// window as a complete month. Zero when the tenant has no data yet.
+	DataSince time.Time `json:"data_since,omitempty"`
 }
 
 // DefaultChattyThresholdBytes flags a zone-pair conversation as "chatty"
@@ -134,6 +139,12 @@ type tenantCost struct {
 	monthUSD  map[string]float64        // budget key → month-to-date spend
 	month     string                    // "2006-01" the accumulators cover
 	alerted   map[string]bool           // budget key → alerted this month
+	// dataSince is when this tenant's accumulators started filling — the wall
+	// time of its FIRST observed flow in this process (CORRECT-008). The cost
+	// engine is in-RAM and rebuilds from the live stream, so a restart resets it
+	// to "now"; surfacing dataSince lets the UI/API say "totals cover data since
+	// T" instead of silently presenting a partial window as a complete one.
+	dataSince time.Time
 }
 
 // NewEngine builds the engine. prices nil = volume-only; mapper must be
@@ -163,6 +174,7 @@ func (e *Engine) tenant(id string) *tenantCost {
 			trend:     map[time.Time]*TrendPoint{},
 			monthUSD:  map[string]float64{},
 			alerted:   map[string]bool{},
+			dataSince: e.clock(), // CORRECT-008: when this tenant's window opened
 		}
 		e.tenants[id] = tc
 	}
@@ -319,6 +331,7 @@ func (e *Engine) Summary(tenant string) Summary {
 		ByClass:     map[TrafficClass]Agg{},
 		ByService:   map[string]Agg{},
 		ByTeam:      map[string]Agg{},
+		DataSince:   tc.dataSince, // CORRECT-008: window-open time for this tenant
 	}
 	if e.prices != nil {
 		s.PricingSource = e.prices.Source
