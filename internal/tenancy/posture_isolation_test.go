@@ -84,3 +84,48 @@ func TestAssertIsolationPostureCatchesUnforcedRLS(t *testing.T) {
 		t.Fatalf("posture check must reject an unforced tenant table, got %v", err)
 	}
 }
+
+// TENANT-008: the boot self-check must also scan SILOED per-tenant schemas, not
+// just public. We create a per-tenant schema with a tenant_id table whose RLS
+// is ENABLED but NOT FORCED — the exact silo blind spot — and assert the
+// posture check catches it and names the schema-qualified offender. All inside
+// a rolled-back tx so the database is never left weakened.
+func TestAssertIsolationPostureCoversSiloedSchema(t *testing.T) {
+	ctx := context.Background()
+	pool := setup(ctx, t)
+	defer pool.Close()
+
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const schema = "t_isoposture"
+	for _, ddl := range []string{
+		`CREATE SCHEMA IF NOT EXISTS ` + schema,
+		`CREATE TABLE ` + schema + `.probes (tenant_id uuid NOT NULL, name text)`,
+		// RLS enabled but deliberately NOT forced — the silo blind spot.
+		`ALTER TABLE ` + schema + `.probes ENABLE ROW LEVEL SECURITY`,
+	} {
+		if _, err := tx.Exec(ctx, ddl); err != nil {
+			t.Fatalf("provision silo schema (%s): %v", ddl, err)
+		}
+	}
+	if _, err := tx.Exec(ctx, "SET LOCAL ROLE "+tenancy.AppRole); err != nil {
+		t.Fatalf("assume app role: %v", err)
+	}
+	err = tenancy.AssertPostureTx(ctx, tx)
+	if err == nil {
+		t.Fatal("posture check passed despite an unforced tenant table in a SILOED schema (TENANT-008 blind spot)")
+	}
+	if !strings.Contains(err.Error(), "FORCE ROW LEVEL SECURITY") || !strings.Contains(err.Error(), schema+".probes") {
+		t.Fatalf("posture error must name the schema-qualified silo offender, got %v", err)
+	}
+}

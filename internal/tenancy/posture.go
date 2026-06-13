@@ -67,16 +67,25 @@ func AssertPostureTx(ctx context.Context, q postureQuerier) error {
 		return fmt.Errorf("isolation posture: the app role %q has BYPASSRLS — tenant isolation is OFF (refusing to start)", roleName)
 	}
 
-	// 2. Every tenant-owned table (has a tenant_id column, in the current
-	// schema search path) must FORCE row security — otherwise the table owner
-	// (and any future grant) reads across tenants. relforcerowsecurity catches
-	// the subtle case the audit named: RLS enabled but not forced.
+	// 2. Every tenant-owned table (has a tenant_id column) must FORCE row
+	// security — otherwise the table owner (and any future grant) reads across
+	// tenants. relforcerowsecurity catches the subtle case the audit named: RLS
+	// enabled but not forced.
+	//
+	// TENANT-008: this scans EVERY non-system schema, not just public. Siloed
+	// tenants' tables live in per-tenant schemas (ee/silo provisions them with
+	// ENABLE+FORCE RLS); the boot guard must inspect those too, so a
+	// partially-provisioned or hand-edited silo schema with RLS enabled-but-not-
+	// forced can never pass boot. We report schema.table so an offender in a
+	// silo schema is identifiable.
 	rows, err := q.Query(ctx, `
-		SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+		SELECT n.nspname, c.relname, c.relrowsecurity, c.relforcerowsecurity
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE c.relkind = 'r'
-		  AND n.nspname = 'public'
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		  AND n.nspname NOT LIKE 'pg_toast%'
+		  AND n.nspname NOT LIKE 'pg_temp%'
 		  AND EXISTS (
 		      SELECT 1 FROM pg_attribute a
 		      WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped
@@ -89,14 +98,14 @@ func AssertPostureTx(ctx context.Context, q postureQuerier) error {
 	var offenders []string
 	var checked int
 	for rows.Next() {
-		var name string
+		var schema, name string
 		var enabled, forced bool
-		if err := rows.Scan(&name, &enabled, &forced); err != nil {
+		if err := rows.Scan(&schema, &name, &enabled, &forced); err != nil {
 			return fmt.Errorf("isolation posture: scan: %w", err)
 		}
 		checked++
 		if !enabled || !forced {
-			offenders = append(offenders, fmt.Sprintf("%s(rls=%t,force=%t)", name, enabled, forced))
+			offenders = append(offenders, fmt.Sprintf("%s.%s(rls=%t,force=%t)", schema, name, enabled, forced))
 		}
 	}
 	if err := rows.Err(); err != nil {
