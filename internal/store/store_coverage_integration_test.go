@@ -259,7 +259,7 @@ func TestEnrollmentStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enroll token create 2: %v", err)
 	}
-	if err := et.Revoke(ctx, revID); err != nil {
+	if _, err := et.Revoke(ctx, revID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
