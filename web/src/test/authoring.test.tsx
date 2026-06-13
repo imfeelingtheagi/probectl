@@ -7,7 +7,14 @@ import { jsonResponse } from './fetchStub'
 const discover = {
   proposals: [
     {
-      spec: { name: 'payments.svc (HTTP)', type: 'http', target: 'https://payments.svc', interval_seconds: 60, timeout_seconds: 3, enabled: true },
+      spec: {
+        name: 'payments.svc (HTTP)',
+        type: 'http',
+        target: 'https://payments.svc',
+        interval_seconds: 60,
+        timeout_seconds: 3,
+        enabled: true,
+      },
       rationale: 'Observed 50× on the service plane with no monitoring test.',
       score: 52,
       source: 'service',
@@ -16,7 +23,14 @@ const discover = {
 }
 
 const proposal = {
-  spec: { name: '9.9.9.9 (ICMP)', type: 'icmp', target: '9.9.9.9', interval_seconds: 60, timeout_seconds: 3, enabled: true },
+  spec: {
+    name: '9.9.9.9 (ICMP)',
+    type: 'icmp',
+    target: '9.9.9.9',
+    interval_seconds: 60,
+    timeout_seconds: 3,
+    enabled: true,
+  },
   rationale: 'Detected an IP address in the request.',
   source: 'heuristic',
 }
@@ -27,7 +41,9 @@ function stub() {
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined
+      const body = init?.body
+        ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+        : undefined
       if (init?.method === 'POST') posts.push({ url, body })
       if (url.endsWith('/v1/tests') && init?.method === 'POST') {
         return jsonResponse({ id: 't9', ...body, params: {}, created_at: '', updated_at: '' }, 201)
@@ -37,7 +53,7 @@ function stub() {
       if (url.endsWith('/v1/ai/discover')) return jsonResponse(discover)
       if (url.endsWith('/v1/ai/author')) return jsonResponse(proposal)
       return jsonResponse({ error: { code: 'x', message: 'no route' } }, 404)
-    }) as unknown as typeof fetch,
+    }),
   )
   return posts
 }
@@ -52,7 +68,9 @@ describe('AI test authoring', () => {
     await screen.findByText(/payments\.svc/i)
 
     // Author from natural language → a proposal appears (nothing created yet).
-    fireEvent.change(screen.getByLabelText(/describe a test/i), { target: { value: 'ping 9.9.9.9' } })
+    fireEvent.change(screen.getByLabelText(/describe a test/i), {
+      target: { value: 'ping 9.9.9.9' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /propose a test/i }))
     await screen.findByText('9.9.9.9 (ICMP)')
     expect(posts.some((p) => p.url.endsWith('/v1/tests'))).toBe(false) // not created on propose
@@ -60,7 +78,9 @@ describe('AI test authoring', () => {
     // Confirm → the test is created.
     fireEvent.click(screen.getByRole('button', { name: /create test/i }))
     await screen.findByText(/test created/i)
-    expect(posts.some((p) => p.url.endsWith('/v1/tests') && p.body?.target === '9.9.9.9')).toBe(true)
+    expect(posts.some((p) => p.url.endsWith('/v1/tests') && p.body?.target === '9.9.9.9')).toBe(
+      true,
+    )
   })
 
   test('the authoring surface has no a11y violations', async () => {

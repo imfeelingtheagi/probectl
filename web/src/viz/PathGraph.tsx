@@ -113,7 +113,11 @@ export function PathGraph({
         </svg>
 
         {active && !active.isSource ? (
-          <div className={styles.tooltip} style={{ left: active.x + NODE_W + 10, top: active.y }} role="presentation">
+          <div
+            className={styles.tooltip}
+            style={{ left: active.x + NODE_W + 10, top: active.y }}
+            role="presentation"
+          >
             <strong className={styles.ttIp}>{active.ip}</strong>
             <dl className={styles.ttList}>
               <div>

@@ -44,30 +44,131 @@ export interface SurfaceDecl {
 
 export const SURFACES: SurfaceDecl[] = [
   // --- native screens (S8a shell) ---
-  { capability: 'Synthetic tests CRUD + per-type result detail', sprint: 'S9/S-FE5', kind: 'native', route: '/targets' },
-  { capability: 'AI test authoring + auto-discovery', sprint: 'S26', kind: 'native', route: '/targets' },
+  {
+    capability: 'Synthetic tests CRUD + per-type result detail',
+    sprint: 'S9/S-FE5',
+    kind: 'native',
+    route: '/targets',
+  },
+  {
+    capability: 'AI test authoring + auto-discovery',
+    sprint: 'S26',
+    kind: 'native',
+    route: '/targets',
+  },
   { capability: 'Path / topology visualization', sprint: 'S11', kind: 'native', route: '/path' },
-  { capability: 'Incidents list + cross-plane timeline', sprint: 'S17', kind: 'native', route: '/incidents' },
-  { capability: 'Alerting: active alerts, silence/ack, rule config', sprint: 'S-FE1', kind: 'native', route: '/alerts' },
-  { capability: 'TLS/cert posture inventory + trustctl handoff', sprint: 'S-FE2', kind: 'native', route: '/security' },
-  { capability: 'Threat-intel / IOC + NDR detection triage', sprint: 'S-FE3/S42', kind: 'native', route: '/security' },
-  { capability: 'Endpoint / last-mile / WiFi DEM fleet + attribution', sprint: 'S-FE4', kind: 'native', route: '/endpoints' },
-  { capability: 'AI assistant (NL query + RCA with citations)', sprint: 'S24', kind: 'native', route: '/ask' },
+  {
+    capability: 'Incidents list + cross-plane timeline',
+    sprint: 'S17',
+    kind: 'native',
+    route: '/incidents',
+  },
+  {
+    capability: 'Alerting: active alerts, silence/ack, rule config',
+    sprint: 'S-FE1',
+    kind: 'native',
+    route: '/alerts',
+  },
+  {
+    capability: 'TLS/cert posture inventory + trustctl handoff',
+    sprint: 'S-FE2',
+    kind: 'native',
+    route: '/security',
+  },
+  {
+    capability: 'Threat-intel / IOC + NDR detection triage',
+    sprint: 'S-FE3/S42',
+    kind: 'native',
+    route: '/security',
+  },
+  {
+    capability: 'Endpoint / last-mile / WiFi DEM fleet + attribution',
+    sprint: 'S-FE4',
+    kind: 'native',
+    route: '/endpoints',
+  },
+  {
+    capability: 'AI assistant (NL query + RCA with citations)',
+    sprint: 'S24',
+    kind: 'native',
+    route: '/ask',
+  },
   { capability: 'Agent fleet admin', sprint: 'S9', kind: 'native', route: '/admin' },
-  { capability: 'Topology dependency graph + what-if impact simulation', sprint: 'S43', kind: 'native', route: '/topology' },
-  { capability: 'Network egress cost summary + budgets (FinOps showback)', sprint: 'S44', kind: 'native', route: '/cost' },
-  { capability: 'SLOs, error budgets + multi-window burn rates (OpenSLO)', sprint: 'S45', kind: 'native', route: '/slos' },
-  { capability: 'Segmentation validation + audit evidence (PCI/NIST/zero-trust)', sprint: 'S46', kind: 'native', route: '/compliance' },
-  { capability: 'Collective internet-outage view (open data + your vantages)', sprint: 'S47a', kind: 'native', route: '/outages' },
-  { capability: 'RUM convergence: real-user impact joined with synthetic coverage', sprint: 'S47b', kind: 'native', route: '/endpoints' },
-  { capability: 'Voice/RTP quality tests: MOS (E-model), jitter, loss', sprint: 'S47c', kind: 'native', route: '/targets' },
-  { capability: 'Carbon/energy estimate (ESG view of network traffic)', sprint: 'S48', kind: 'native', route: '/cost' },
-  { capability: 'Secret-backend config + credential health', sprint: 'S41', kind: 'native', route: '/admin' },
-  { capability: 'Editions / license state (Admin → Editions)', sprint: 'S-T0', kind: 'native', route: '/admin' },
-  { capability: 'Tenant data lifecycle: export, retention, residency visibility', sprint: 'S-T5', kind: 'native', route: '/admin' },
+  {
+    capability: 'Topology dependency graph + what-if impact simulation',
+    sprint: 'S43',
+    kind: 'native',
+    route: '/topology',
+  },
+  {
+    capability: 'Network egress cost summary + budgets (FinOps showback)',
+    sprint: 'S44',
+    kind: 'native',
+    route: '/cost',
+  },
+  {
+    capability: 'SLOs, error budgets + multi-window burn rates (OpenSLO)',
+    sprint: 'S45',
+    kind: 'native',
+    route: '/slos',
+  },
+  {
+    capability: 'Segmentation validation + audit evidence (PCI/NIST/zero-trust)',
+    sprint: 'S46',
+    kind: 'native',
+    route: '/compliance',
+  },
+  {
+    capability: 'Collective internet-outage view (open data + your vantages)',
+    sprint: 'S47a',
+    kind: 'native',
+    route: '/outages',
+  },
+  {
+    capability: 'RUM convergence: real-user impact joined with synthetic coverage',
+    sprint: 'S47b',
+    kind: 'native',
+    route: '/endpoints',
+  },
+  {
+    capability: 'Voice/RTP quality tests: MOS (E-model), jitter, loss',
+    sprint: 'S47c',
+    kind: 'native',
+    route: '/targets',
+  },
+  {
+    capability: 'Carbon/energy estimate (ESG view of network traffic)',
+    sprint: 'S48',
+    kind: 'native',
+    route: '/cost',
+  },
+  {
+    capability: 'Secret-backend config + credential health',
+    sprint: 'S41',
+    kind: 'native',
+    route: '/admin',
+  },
+  {
+    capability: 'Editions / license state (Admin → Editions)',
+    sprint: 'S-T0',
+    kind: 'native',
+    route: '/admin',
+  },
+  {
+    capability: 'Tenant data lifecycle: export, retention, residency visibility',
+    sprint: 'S-T5',
+    kind: 'native',
+    route: '/admin',
+  },
   // The provider/operator console (ee/) is deliberately OFF the tenant nav: a
   // separate privilege domain, hidden when unlicensed (the API 404s).
-  { capability: 'Provider console: tenant lifecycle, fleet, break-glass (operators)', sprint: 'S-T1', kind: 'native', route: '/provider', offNav: true },
+  {
+    capability: 'Provider console: tenant lifecycle, fleet, break-glass (operators)',
+    sprint: 'S-T1',
+    kind: 'native',
+    route: '/provider',
+    offNav: true,
+  },
 
   // --- federated surfaces (by design) ---
   {
@@ -80,7 +181,10 @@ export const SURFACES: SurfaceDecl[] = [
     capability: 'Metrics exploration + dashboards (Grafana datasource)',
     sprint: 'S40',
     kind: 'federated',
-    evidence: ['file:deploy/grafana/provisioning/datasources/probectl.yml', 'openapi:/v1/grafana/api/v1/query'],
+    evidence: [
+      'file:deploy/grafana/provisioning/datasources/probectl.yml',
+      'openapi:/v1/grafana/api/v1/query',
+    ],
   },
   {
     capability: 'Prometheus federation + remote-write interop',
@@ -103,9 +207,12 @@ export const SURFACES: SurfaceDecl[] = [
 
   // --- declared placeholders (engine lands with the named sprint) ---
 
-
-  { capability: 'Curated in-app dashboards', sprint: 'S45 (Grafana covers it today via S40)', kind: 'placeholder', route: '/dashboards' },
-
+  {
+    capability: 'Curated in-app dashboards',
+    sprint: 'S45 (Grafana covers it today via S40)',
+    kind: 'placeholder',
+    route: '/dashboards',
+  },
 ]
 
 /** RegistryViolation is one coverage/consistency failure (gate output). */
@@ -118,13 +225,19 @@ export interface RegistryViolation {
  *  destination is registered, every routed declaration points at a nav
  *  destination, and every declaration is well-formed. The render/a11y checks
  *  live in the gate test (they need the DOM). */
-export function checkRegistryShape(navRoutes: string[], surfaces: SurfaceDecl[]): RegistryViolation[] {
+export function checkRegistryShape(
+  navRoutes: string[],
+  surfaces: SurfaceDecl[],
+): RegistryViolation[] {
   const violations: RegistryViolation[] = []
   const routed = new Map<string, SurfaceDecl[]>()
   for (const s of surfaces) {
     if (s.kind === 'federated') {
       if (!s.evidence || s.evidence.length === 0) {
-        violations.push({ capability: s.capability, problem: 'federated surface declares no evidence' })
+        violations.push({
+          capability: s.capability,
+          problem: 'federated surface declares no evidence',
+        })
       }
       continue
     }
@@ -136,16 +249,25 @@ export function checkRegistryShape(navRoutes: string[], surfaces: SurfaceDecl[])
   }
   for (const nav of navRoutes) {
     if (!routed.has(nav)) {
-      violations.push({ capability: `nav:${nav}`, problem: 'nav destination has no registered surface (register it native or placeholder)' })
+      violations.push({
+        capability: `nav:${nav}`,
+        problem: 'nav destination has no registered surface (register it native or placeholder)',
+      })
     }
   }
   for (const [route, decls] of routed) {
     if (!navRoutes.includes(route) && !decls.every((d) => d.offNav)) {
-      violations.push({ capability: decls[0].capability, problem: `route ${route} is not a nav destination` })
+      violations.push({
+        capability: decls[0].capability,
+        problem: `route ${route} is not a nav destination`,
+      })
     }
     const kinds = new Set(decls.map((d) => d.kind))
     if (kinds.size > 1) {
-      violations.push({ capability: decls[0].capability, problem: `route ${route} is declared both native and placeholder` })
+      violations.push({
+        capability: decls[0].capability,
+        problem: `route ${route} is declared both native and placeholder`,
+      })
     }
   }
   return violations

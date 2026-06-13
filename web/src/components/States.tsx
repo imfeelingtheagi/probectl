@@ -55,6 +55,12 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
-export function Skeleton({ width = '100%', height = 14 }: { width?: string | number; height?: string | number }) {
+export function Skeleton({
+  width = '100%',
+  height = 14,
+}: {
+  width?: string | number
+  height?: string | number
+}) {
   return <span className={styles.skeleton} style={{ width, height }} aria-hidden="true" />
 }

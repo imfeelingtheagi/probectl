@@ -44,7 +44,9 @@ export function OutagesPage() {
             <>
               {(data.coverage_notes?.length ?? 0) > 0 && (
                 <div className={styles.coverage} role="note" aria-label="coverage notes">
-                  {data.coverage_notes?.map((n) => <span key={n}>{n}</span>)}
+                  {data.coverage_notes?.map((n) => (
+                    <span key={n}>{n}</span>
+                  ))}
                 </div>
               )}
               {(data.events?.length ?? 0) === 0 && (data.vantage_events?.length ?? 0) === 0 ? (
@@ -65,7 +67,9 @@ export function OutagesPage() {
                       columns={eventColumns}
                       rows={data.events ?? []}
                       rowKey={(e) => e.id}
-                      empty={<EmptyState icon="outage" title="No external events" description="—" />}
+                      empty={
+                        <EmptyState icon="outage" title="No external events" description="—" />
+                      }
                     />
                   )}
                   {(data.vantage_events?.length ?? 0) > 0 && (
@@ -75,7 +79,9 @@ export function OutagesPage() {
                         columns={eventColumns}
                         rows={data.vantage_events ?? []}
                         rowKey={(e) => e.id}
-                        empty={<EmptyState icon="outage" title="No vantage detections" description="—" />}
+                        empty={
+                          <EmptyState icon="outage" title="No vantage detections" description="—" />
+                        }
                       />
                     </div>
                   )}

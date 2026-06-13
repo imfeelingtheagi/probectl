@@ -117,7 +117,8 @@ function CreateTestModal({ open, onClose }: { open: boolean; onClose: () => void
           reset()
           onClose()
         },
-        onError: (e) => push({ tone: 'danger', title: 'Create failed', message: (e as Error).message }),
+        onError: (e) =>
+          push({ tone: 'danger', title: 'Create failed', message: (e).message }),
       },
     )
   }
@@ -139,7 +140,12 @@ function CreateTestModal({ open, onClose }: { open: boolean; onClose: () => void
       }
     >
       <div className={styles.form}>
-        <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="edge-dns" />
+        <Field
+          label="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="edge-dns"
+        />
         <Select
           label="Type"
           value={type}
@@ -150,7 +156,9 @@ function CreateTestModal({ open, onClose }: { open: boolean; onClose: () => void
           label="Target"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          placeholder={type === 'tcp' || type === 'udp' || type === 'voice' ? 'host:port' : '1.1.1.1'}
+          placeholder={
+            type === 'tcp' || type === 'udp' || type === 'voice' ? 'host:port' : '1.1.1.1'
+          }
           hint={type === 'noop' ? 'Not required for noop.' : undefined}
         />
         <Field
@@ -174,7 +182,8 @@ export function TargetsPage() {
   function remove(t: Test) {
     del.mutate(t.id, {
       onSuccess: () => push({ tone: 'success', title: 'Test deleted', message: t.name }),
-      onError: (e) => push({ tone: 'danger', title: 'Delete failed', message: (e as Error).message }),
+      onError: (e) =>
+        push({ tone: 'danger', title: 'Delete failed', message: (e).message }),
     })
   }
 
@@ -187,7 +196,11 @@ export function TargetsPage() {
       key: 'status',
       header: 'Status',
       render: (t) =>
-        t.enabled ? <StatusDot tone="success" label="Enabled" /> : <StatusDot tone="neutral" label="Disabled" />,
+        t.enabled ? (
+          <StatusDot tone="success" label="Enabled" />
+        ) : (
+          <StatusDot tone="neutral" label="Disabled" />
+        ),
     },
     {
       key: 'actions',
@@ -195,10 +208,20 @@ export function TargetsPage() {
       align: 'end',
       render: (t) => (
         <>
-          <Button variant="ghost" size="sm" onClick={() => setResultsFor(t)} aria-label={`Results for ${t.name}`}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setResultsFor(t)}
+            aria-label={`Results for ${t.name}`}
+          >
             Results
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => remove(t)} aria-label={`Delete ${t.name}`}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(t)}
+            aria-label={`Delete ${t.name}`}
+          >
             Delete
           </Button>
         </>
@@ -217,23 +240,40 @@ export function TargetsPage() {
       }
     >
       <div className={styles.statRow}>
-        <ChartShell title="Avg RTT (24h)" height={120} toolbar={<Badge tone="neutral">sample</Badge>}>
-          <Sparkline label="Average round-trip time, last 24 hours" data={[20, 18, 22, 19, 24, 30, 26, 21, 23, 19, 17, 20]} />
+        <ChartShell
+          title="Avg RTT (24h)"
+          height={120}
+          toolbar={<Badge tone="neutral">sample</Badge>}
+        >
+          <Sparkline
+            label="Average round-trip time, last 24 hours"
+            data={[20, 18, 22, 19, 24, 30, 26, 21, 23, 19, 17, 20]}
+          />
         </ChartShell>
-        <ChartShell title="Packet loss (24h)" height={120} toolbar={<Badge tone="neutral">sample</Badge>}>
-          <Sparkline label="Packet loss, last 24 hours" data={[0, 0, 0, 1, 0, 0, 3, 8, 2, 0, 0, 0]} />
+        <ChartShell
+          title="Packet loss (24h)"
+          height={120}
+          toolbar={<Badge tone="neutral">sample</Badge>}
+        >
+          <Sparkline
+            label="Packet loss, last 24 hours"
+            data={[0, 0, 0, 1, 0, 0, 3, 8, 2, 0, 0, 0]}
+          />
         </ChartShell>
       </div>
 
       <AuthoringPanel />
 
       <Card>
-        <CardHeader title="Tests" description="Open Results on any test for its per-type latest result detail." />
+        <CardHeader
+          title="Tests"
+          description="Open Results on any test for its per-type latest result detail."
+        />
         <CardBody>
           {isPending ? (
             <LoadingState label="Loading tests…" />
           ) : isError ? (
-            <ErrorState description={(error as Error)?.message ?? 'Could not load tests.'} />
+            <ErrorState description={(error)?.message ?? 'Could not load tests.'} />
           ) : (
             <Table
               caption="Synthetic tests"
@@ -366,7 +406,10 @@ export function AdminPage() {
   return (
     <Page title="Admin & Settings" subtitle="The agent fleet registered to this tenant.">
       <Card>
-        <CardHeader title="Agents" description="Agents register over mTLS; identity is certificate-derived." />
+        <CardHeader
+          title="Agents"
+          description="Agents register over mTLS; identity is certificate-derived."
+        />
         <CardBody>
           {isPending ? (
             <LoadingState label="Loading agents…" />
@@ -378,7 +421,13 @@ export function AdminPage() {
               columns={columns}
               rows={data ?? []}
               rowKey={(a) => a.id}
-              empty={<EmptyState icon="admin" title="No agents registered" description="Deploy a probectl agent to begin." />}
+              empty={
+                <EmptyState
+                  icon="admin"
+                  title="No agents registered"
+                  description="Deploy a probectl agent to begin."
+                />
+              }
             />
           )}
         </CardBody>
@@ -419,7 +468,9 @@ function RemediationCard() {
         p.dry_run.blast_radius < 0 ? (
           <Badge tone="warning">unknown</Badge>
         ) : (
-          <Badge tone={p.dry_run.blast_radius > 0 ? 'accent' : 'neutral'}>{p.dry_run.blast_radius}</Badge>
+          <Badge tone={p.dry_run.blast_radius > 0 ? 'accent' : 'neutral'}>
+            {p.dry_run.blast_radius}
+          </Badge>
         ),
     },
     {
@@ -451,7 +502,11 @@ function RemediationCard() {
             >
               Approve
             </Button>
-            <Button variant="ghost" disabled={decide.isPending} onClick={() => decide.mutate({ id: p.id, decision: 'reject' })}>
+            <Button
+              variant="ghost"
+              disabled={decide.isPending}
+              onClick={() => decide.mutate({ id: p.id, decision: 'reject' })}
+            >
               Reject
             </Button>
           </span>
@@ -468,8 +523,9 @@ function RemediationCard() {
       <CardBody>
         {!approvalsEnabled ? (
           <p role="status" className={styles.editionsLede}>
-            <Badge tone="neutral">advisory-only</Badge> Approvals are disabled — proposals are review-only until an operator enables
-            them (<code>PROBECTL_REMEDIATION_APPROVALS_ENABLED=true</code>).
+            <Badge tone="neutral">advisory-only</Badge> Approvals are disabled — proposals are
+            review-only until an operator enables them (
+            <code>PROBECTL_REMEDIATION_APPROVALS_ENABLED=true</code>).
           </p>
         ) : null}
         {isError ? (
@@ -491,7 +547,7 @@ function RemediationCard() {
         )}
         {decide.isError ? (
           <p role="alert" className={styles.editionsLede}>
-            {(decide.error as Error).message}
+            {(decide.error).message}
           </p>
         ) : null}
       </CardBody>
@@ -515,7 +571,11 @@ function KeysCard() {
 
   const columns: Column<KeyInfo>[] = [
     { key: 'version', header: 'Version', render: (k) => <strong>v{k.version}</strong> },
-    { key: 'mode', header: 'Mode', render: (k) => <Badge tone={k.mode === 'byok' ? 'accent' : 'neutral'}>{k.mode}</Badge> },
+    {
+      key: 'mode',
+      header: 'Mode',
+      render: (k) => <Badge tone={k.mode === 'byok' ? 'accent' : 'neutral'}>{k.mode}</Badge>,
+    },
     {
       key: 'state',
       header: 'State',
@@ -572,8 +632,16 @@ function KeysCard() {
                 {byokRef ? 'Activate BYOK' : 'Rotate managed key'}
               </Button>
             </form>
-            {rotate.isSuccess ? <p className={styles.editionsLede}>Rotated — new data seals under v{rotate.data.version}.</p> : null}
-            {rotate.isError ? <p role="alert" className={styles.editionsLede}>{(rotate.error as Error).message}</p> : null}
+            {rotate.isSuccess ? (
+              <p className={styles.editionsLede}>
+                Rotated — new data seals under v{rotate.data.version}.
+              </p>
+            ) : null}
+            {rotate.isError ? (
+              <p role="alert" className={styles.editionsLede}>
+                {(rotate.error).message}
+              </p>
+            ) : null}
           </>
         )}
       </CardBody>
@@ -622,14 +690,21 @@ function LifecycleCard() {
         ) : (
           <>
             <p className={styles.editionsLede}>
-              Isolation: <Badge tone={data?.isolation_model === 'pooled' ? 'neutral' : 'accent'}>{data?.isolation_model ?? 'pooled'}</Badge>
+              Isolation:{' '}
+              <Badge tone={data?.isolation_model === 'pooled' ? 'neutral' : 'accent'}>
+                {data?.isolation_model ?? 'pooled'}
+              </Badge>
               {data?.residency ? <> · residency {data.residency}</> : null}
               {' · '}
               <a href="/v1/lifecycle/export" download>
                 Export my data (tar.gz)
               </a>
               {' · '}
-              <a href="/v1/lifecycle/export?redact=true" download title="PII (IP addresses, emails, geo, …) masked per the data-governance policy">
+              <a
+                href="/v1/lifecycle/export?redact=true"
+                download
+                title="PII (IP addresses, emails, geo, …) masked per the data-governance policy"
+              >
                 Redacted export
               </a>
             </p>
@@ -639,14 +714,20 @@ function LifecycleCard() {
                 inputMode="numeric"
                 value={days}
                 onChange={(e) => setDays(e.target.value)}
-                placeholder={data?.flow_retention_days != null ? String(data.flow_retention_days) : 'default'}
+                placeholder={
+                  data?.flow_retention_days != null ? String(data.flow_retention_days) : 'default'
+                }
               />
               <Button type="submit" variant="primary">
                 Save retention
               </Button>
             </form>
             {saved ? <p className={styles.editionsLede}>Retention saved.</p> : null}
-            {error ? <p role="alert" className={styles.editionsLede}>{error}</p> : null}
+            {error ? (
+              <p role="alert" className={styles.editionsLede}>
+                {error}
+              </p>
+            ) : null}
           </>
         )}
       </CardBody>
@@ -660,7 +741,8 @@ function LifecycleCard() {
 function SupportCard() {
   const { data, isPending, isError } = useDiagnostics()
 
-  const tone = (s: HealthStatus) => (s === 'ok' ? 'success' : s === 'degraded' ? 'warning' : 'danger')
+  const tone = (s: HealthStatus) =>
+    s === 'ok' ? 'success' : s === 'degraded' ? 'warning' : 'danger'
 
   return (
     <Card>
@@ -670,7 +752,11 @@ function SupportCard() {
       />
       <CardBody>
         <p className={styles.editionsLede}>
-          {data ? <Badge tone={tone(data.status)}>{data.status}</Badge> : <Badge tone="neutral">unknown</Badge>}
+          {data ? (
+            <Badge tone={tone(data.status)}>{data.status}</Badge>
+          ) : (
+            <Badge tone="neutral">unknown</Badge>
+          )}
           {' · '}
           <a href="/v1/diagnostics/bundle" download>
             Download support bundle (tar.gz)
@@ -684,7 +770,11 @@ function SupportCard() {
           <Table
             caption="Component health"
             columns={[
-              { key: 'name', header: 'Component', render: (c: { name: string }) => <code>{c.name}</code> },
+              {
+                key: 'name',
+                header: 'Component',
+                render: (c: { name: string }) => <code>{c.name}</code>,
+              },
               {
                 key: 'status',
                 header: 'Status',
@@ -697,7 +787,11 @@ function SupportCard() {
                     <StatusDot tone="danger" label="Down" />
                   ),
               },
-              { key: 'detail', header: 'Detail', render: (c: { detail?: string }) => c.detail || '—' },
+              {
+                key: 'detail',
+                header: 'Detail',
+                render: (c: { detail?: string }) => c.detail || '—',
+              },
             ]}
             rows={data?.checks ?? []}
             rowKey={(c) => c.name}
@@ -758,10 +852,15 @@ function EditionsCard() {
         ) : (
           <>
             <p className={styles.editionsLede}>
-              {stateBadge()}{' '}
-              <strong>{(data?.tier ?? 'community').toUpperCase()}</strong>
-              {data?.customer ? <> · licensed to {data.customer}</> : <> — the full core, free forever</>}
-              {data?.expires_at ? <> · expires {new Date(data.expires_at).toLocaleDateString()}</> : null}
+              {stateBadge()} <strong>{(data?.tier ?? 'community').toUpperCase()}</strong>
+              {data?.customer ? (
+                <> · licensed to {data.customer}</>
+              ) : (
+                <> — the full core, free forever</>
+              )}
+              {data?.expires_at ? (
+                <> · expires {new Date(data.expires_at).toLocaleDateString()}</>
+              ) : null}
               {data?.state === 'grace' && data.read_only_at ? (
                 <> · read-only from {new Date(data.read_only_at).toLocaleDateString()}</>
               ) : null}
@@ -770,9 +869,16 @@ function EditionsCard() {
             {data?.fips && (data.fips.build_tag || data.fips.module_active) ? (
               <p className={styles.editionsLede}>
                 <Badge tone={data.fips.module_active ? 'success' : 'warning'}>
-                  FIPS {data.fips.module_active ? `mode active${data.fips.module_version ? ` · ${data.fips.module_version}` : ''}` : 'build (module inactive)'}
+                  FIPS{' '}
+                  {data.fips.module_active
+                    ? `mode active${data.fips.module_version ? ` · ${data.fips.module_version}` : ''}`
+                    : 'build (module inactive)'}
                 </Badge>
-                {data.fips.self_test_passed ? <> · crypto self-test passed</> : <> · self-test not confirmed</>}
+                {data.fips.self_test_passed ? (
+                  <> · crypto self-test passed</>
+                ) : (
+                  <> · self-test not confirmed</>
+                )}
                 {data.fips.enforced ? <> · enforced</> : null}
               </p>
             ) : null}

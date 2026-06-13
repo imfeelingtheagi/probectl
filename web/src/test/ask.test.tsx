@@ -13,19 +13,32 @@ const answer = {
   model: 'builtin',
   insufficient_evidence: false,
   findings: [
-    { statement: 'The highest cause-likelihood signal is the routing event.', citations: [{ evidence_id: 'E1' }] },
+    {
+      statement: 'The highest cause-likelihood signal is the routing event.',
+      citations: [{ evidence_id: 'E1' }],
+    },
     { statement: 'Corroborated by elevated latency.', citations: [{ evidence_id: 'E2' }] },
   ],
   evidence: [
     {
-      id: 'E1', domain: 'entities', plane: 'bgp', severity: 'critical',
-      title: 'possible hijack 192.0.2.0/24', summary: 'AS64500 originated a more-specific',
-      ref: 'incident:inc-1', occurred_at: '2026-01-01T00:01:00Z',
+      id: 'E1',
+      domain: 'entities',
+      plane: 'bgp',
+      severity: 'critical',
+      title: 'possible hijack 192.0.2.0/24',
+      summary: 'AS64500 originated a more-specific',
+      ref: 'incident:inc-1',
+      occurred_at: '2026-01-01T00:01:00Z',
       fields: { kind: 'incident', severity: 'critical' },
     },
     {
-      id: 'E2', domain: 'metrics', plane: 'metrics', severity: 'warning',
-      title: 'p95 latency elevated', summary: '950ms', occurred_at: '2026-01-01T00:00:00Z',
+      id: 'E2',
+      domain: 'metrics',
+      plane: 'metrics',
+      severity: 'warning',
+      title: 'p95 latency elevated',
+      summary: '950ms',
+      occurred_at: '2026-01-01T00:00:00Z',
     },
   ],
 }
@@ -41,7 +54,7 @@ function stubAI() {
       if (url.endsWith('/v1/ai/ask')) return jsonResponse(answer)
       if (url.endsWith('/v1/ai/feedback')) return new Response(null, { status: 204 })
       return jsonResponse({ error: { code: 'not_found', message: 'no route' } }, 404)
-    }) as unknown as typeof fetch,
+    }),
   )
   return calls
 }
@@ -63,10 +76,14 @@ describe('AI assistant surface', () => {
     await askAndRender()
 
     // The hijack text appears in both the root cause and its cited evidence.
-    expect(screen.getAllByText(/possible hijack 192\.0\.2\.0\/24/i).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText(/possible hijack 192\.0\.2\.0\/24/i).length).toBeGreaterThanOrEqual(
+      2,
+    )
     expect(screen.getByText(/high confidence/i)).toBeTruthy()
     // Trust summary spells out the grounding breadth.
-    expect(screen.getByText(/grounded in 2 signal\(s\) across 2 plane\(s\): bgp, metrics/i)).toBeTruthy()
+    expect(
+      screen.getByText(/grounded in 2 signal\(s\) across 2 plane\(s\): bgp, metrics/i),
+    ).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /yes, helpful/i }))
     await screen.findByText(/thanks/i)
@@ -101,7 +118,10 @@ describe('AI assistant surface', () => {
     await screen.findByText(/thanks/i)
 
     const fb = calls.find((c) => c.url.endsWith('/v1/ai/feedback'))
-    expect(fb?.body).toMatchObject({ rating: 'down', comment: 'the real cause was the upstream peer' })
+    expect(fb?.body).toMatchObject({
+      rating: 'down',
+      comment: 'the real cause was the upstream peer',
+    })
   })
 
   test('the answered surface has no a11y violations', async () => {

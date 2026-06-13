@@ -23,8 +23,11 @@ const proposals: Proposal[] = [
   },
 ]
 
-function licensedFetch(opts?: { approvals?: boolean; onDecide?: (url: string, body: unknown) => void }) {
-  const base = defaultFetch() as unknown as (i: RequestInfo | URL, n?: RequestInit) => Promise<Response>
+function licensedFetch(opts?: {
+  approvals?: boolean
+  onDecide?: (url: string, body: unknown) => void
+}) {
+  const base = defaultFetch()
   // Stateful: a decision persists so the post-mutation list refetch reflects it.
   let row = { ...proposals[0] }
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -33,7 +36,11 @@ function licensedFetch(opts?: { approvals?: boolean; onDecide?: (url: string, bo
       return jsonResponse({ items: [row], approvals_enabled: opts?.approvals ?? false })
     if (url.includes('/v1/remediation/proposals/rem-1/') && init?.method === 'POST') {
       opts?.onDecide?.(url, JSON.parse(String(init.body)))
-      row = { ...row, state: url.endsWith('/approve') ? 'approved' : 'rejected', decided_by: 'user:dev@probectl.local' }
+      row = {
+        ...row,
+        state: url.endsWith('/approve') ? 'approved' : 'rejected',
+        decided_by: 'user:dev@probectl.local',
+      }
       return jsonResponse(row)
     }
     return base(input, init)
@@ -60,7 +67,10 @@ describe('guarded remediation (S-EE5)', () => {
 
   test('approvals enabled: Approve posts to the approve route (human sign-off, no execution)', async () => {
     const calls: { url: string; body: unknown }[] = []
-    vi.stubGlobal('fetch', licensedFetch({ approvals: true, onDecide: (url, body) => calls.push({ url, body }) }))
+    vi.stubGlobal(
+      'fetch',
+      licensedFetch({ approvals: true, onDecide: (url, body) => calls.push({ url, body }) }),
+    )
     renderApp('/admin')
     const approve = await screen.findByRole('button', { name: /approve/i })
     expect(approve).toBeEnabled()

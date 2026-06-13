@@ -2,11 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -20,34 +16,15 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": [
-      "node",
-      "vitest/globals",
-      "@testing-library/jest-dom"
-    ],
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"],
     "baseUrl": ".",
     "paths": {
-      "@ee/*": [
-        "../ee/web/*"
-      ],
-      "react": [
-        "./node_modules/@types/react"
-      ],
-      "react/jsx-runtime": [
-        "./node_modules/@types/react/jsx-runtime"
-      ],
-      "react-dom": [
-        "./node_modules/@types/react-dom"
-      ],
-      "react-dom/*": [
-        "./node_modules/@types/react-dom/*"
-      ]
+      "@ee/*": ["../ee/web/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "react-dom/*": ["./node_modules/@types/react-dom/*"]
     }
   },
-  "include": [
-    "src",
-    "../ee/web",
-    "vite.config.ts",
-    "eslint.config.js"
-  ]
+  "include": ["src", "../ee/web", "vite.config.ts", "eslint.config.js"]
 }

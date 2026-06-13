@@ -13,22 +13,44 @@ function alertsBackend() {
   const state = {
     rules: [
       {
-        id: 'r1', tenant_id: 't', name: 'rtt high', enabled: true,
-        metric: 'probectl_result_rtt_ms', type: 'threshold', comparison: 'gt',
-        threshold: 100, for_n: 1, severity: 'critical',
-        created_at: since, updated_at: since,
+        id: 'r1',
+        tenant_id: 't',
+        name: 'rtt high',
+        enabled: true,
+        metric: 'probectl_result_rtt_ms',
+        type: 'threshold',
+        comparison: 'gt',
+        threshold: 100,
+        for_n: 1,
+        severity: 'critical',
+        created_at: since,
+        updated_at: since,
       } as AlertRule,
     ],
     active: [
       {
-        fingerprint: 'fp-1', rule_id: 'r1', rule_name: 'rtt high', severity: 'critical',
-        metric: 'probectl_result_rtt_ms', labels: { target: 'db', tenant_id: 't' },
-        value: 250, reason: 'probectl_result_rtt_ms=250 gt 100', since, last_seen_at: since,
+        fingerprint: 'fp-1',
+        rule_id: 'r1',
+        rule_name: 'rtt high',
+        severity: 'critical',
+        metric: 'probectl_result_rtt_ms',
+        labels: { target: 'db', tenant_id: 't' },
+        value: 250,
+        reason: 'probectl_result_rtt_ms=250 gt 100',
+        since,
+        last_seen_at: since,
       } as ActiveAlert,
       {
-        fingerprint: 'fp-2', rule_id: 'r1', rule_name: 'rtt high', severity: 'warning',
-        metric: 'probectl_result_rtt_ms', labels: { target: 'web', tenant_id: 't' },
-        value: 120, reason: 'probectl_result_rtt_ms=120 gt 100', since, last_seen_at: since,
+        fingerprint: 'fp-2',
+        rule_id: 'r1',
+        rule_name: 'rtt high',
+        severity: 'warning',
+        metric: 'probectl_result_rtt_ms',
+        labels: { target: 'web', tenant_id: 't' },
+        value: 120,
+        reason: 'probectl_result_rtt_ms=120 gt 100',
+        since,
+        last_seen_at: since,
       } as ActiveAlert,
     ],
     requests: [] as { method: string; url: string }[],
@@ -63,8 +85,10 @@ function alertsBackend() {
     if (url.endsWith('/v1/alerts') && method === 'POST') {
       const rule = {
         ...(body as unknown as AlertRule),
-        id: `r${state.rules.length + 1}`, tenant_id: 't',
-        created_at: '2026-06-04T12:10:00Z', updated_at: '2026-06-04T12:10:00Z',
+        id: `r${state.rules.length + 1}`,
+        tenant_id: 't',
+        created_at: '2026-06-04T12:10:00Z',
+        updated_at: '2026-06-04T12:10:00Z',
       }
       state.rules.push(rule)
       return jsonResponse(rule, 201)
@@ -80,7 +104,10 @@ function alertsBackend() {
       state.rules = state.rules.filter((x) => x.id !== ruleMatch[1])
       return new Response(null, { status: 204 })
     }
-    return jsonResponse({ error: { code: 'not_found', message: `unstubbed ${method} ${url}` } }, 404)
+    return jsonResponse(
+      { error: { code: 'not_found', message: `unstubbed ${method} ${url}` } },
+      404,
+    )
   }) as unknown as typeof fetch
 
   return { state, fetcher }
@@ -103,15 +130,22 @@ describe('alerting surface (S-FE1)', () => {
     expect(within(table).getByText('critical')).toBeDefined()
 
     // Severity filter narrows to the warning series only.
-    await userEvent.selectOptions(screen.getByLabelText('Severity', { selector: 'select' }), 'warning')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Severity', { selector: 'select' }),
+      'warning',
+    )
     await waitFor(() => {
       const rows = within(screen.getByRole('table', { name: 'Active alerts' })).getAllByRole('row')
       expect(rows.length).toBe(2) // header + 1
     })
-    expect(within(screen.getByRole('table', { name: 'Active alerts' })).queryByText(/target=db/)).toBeNull()
+    expect(
+      within(screen.getByRole('table', { name: 'Active alerts' })).queryByText(/target=db/),
+    ).toBeNull()
 
     // The rules table shows the configured rule.
-    expect(within(screen.getByRole('table', { name: 'Alert rules' })).getByText('gt 100')).toBeDefined()
+    expect(
+      within(screen.getByRole('table', { name: 'Alert rules' })).getByText('gt 100'),
+    ).toBeDefined()
   })
 
   test('silence + acknowledge act through the API and render the ENGINE state', async () => {
@@ -127,7 +161,11 @@ describe('alerting surface (S-FE1)', () => {
     // Silence -> the API was called and the UI reflects the engine's answer.
     await userEvent.click(within(dialog).getByRole('button', { name: 'Silence' }))
     await waitFor(() => {
-      expect(state.requests.some((r) => r.url.endsWith('/v1/alerts/active/silence') && r.method === 'POST')).toBe(true)
+      expect(
+        state.requests.some(
+          (r) => r.url.endsWith('/v1/alerts/active/silence') && r.method === 'POST',
+        ),
+      ).toBe(true)
     })
     expect(await within(dialog).findByText('Silenced until')).toBeDefined()
     expect(within(dialog).getByRole('button', { name: 'Unsilence' })).toBeDefined()
@@ -139,7 +177,9 @@ describe('alerting surface (S-FE1)', () => {
     // The list reflects engine state after refetch: one silenced badge.
     await userEvent.click(within(dialog).getByRole('button', { name: /close/i }))
     await waitFor(() => {
-      expect(within(screen.getByRole('table', { name: 'Active alerts' })).getByText('silenced')).toBeDefined()
+      expect(
+        within(screen.getByRole('table', { name: 'Active alerts' })).getByText('silenced'),
+      ).toBeDefined()
     })
   })
 
@@ -162,7 +202,9 @@ describe('alerting surface (S-FE1)', () => {
     expect(state.rules[1].metric).toBe('probectl_result_loss_pct')
     // The new rule appears in the table (cache invalidated -> refetched).
     await waitFor(() => {
-      expect(within(screen.getByRole('table', { name: 'Alert rules' })).getByText('loss high')).toBeDefined()
+      expect(
+        within(screen.getByRole('table', { name: 'Alert rules' })).getByText('loss high'),
+      ).toBeDefined()
     })
   })
 
@@ -188,7 +230,7 @@ describe('alerting surface (S-FE1)', () => {
       if (url.endsWith('/v1/alerts/active') && (init?.method ?? 'GET') === 'GET') {
         return jsonResponse({ items: [], evaluator_running: false })
       }
-      return (fetcher as unknown as typeof fetch)(input, init)
+      return (fetcher)(input, init)
     }) as unknown as typeof fetch
     vi.stubGlobal('fetch', offFetcher)
     renderApp('/alerts')

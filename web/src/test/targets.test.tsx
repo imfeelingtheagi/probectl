@@ -9,9 +9,16 @@ describe('Targets & Tests (live /v1/tests CRUD)', () => {
     const user = userEvent.setup()
     let tests = [
       {
-        id: 't1', name: 'edge-dns', type: 'dns', target: '1.1.1.1',
-        interval_seconds: 30, timeout_seconds: 3, params: {}, enabled: true,
-        created_at: '', updated_at: '',
+        id: 't1',
+        name: 'edge-dns',
+        type: 'dns',
+        target: '1.1.1.1',
+        interval_seconds: 30,
+        timeout_seconds: 3,
+        params: {},
+        enabled: true,
+        created_at: '',
+        updated_at: '',
       },
     ]
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -31,7 +38,7 @@ describe('Targets & Tests (live /v1/tests CRUD)', () => {
       }
       return jsonResponse({ error: { code: 'x', message: 'no route' } }, 404)
     })
-    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+    vi.stubGlobal('fetch', fetchMock)
 
     renderApp('/targets')
     await screen.findByText('edge-dns')
@@ -47,7 +54,8 @@ describe('Targets & Tests (live /v1/tests CRUD)', () => {
     await screen.findByRole('button', { name: /delete my-test/i })
 
     const postCall = fetchMock.mock.calls.find(
-      ([url, init]) => String(url).endsWith('/v1/tests') && (init as RequestInit | undefined)?.method === 'POST',
+      ([url, init]) =>
+        String(url).endsWith('/v1/tests') && (init)?.method === 'POST',
     )
     expect(postCall).toBeTruthy()
     expect(String((postCall![1] as RequestInit).body)).toContain('"name":"my-test"')
@@ -61,7 +69,9 @@ describe('Targets & Tests (live /v1/tests CRUD)', () => {
   test('shows an error state when the API fails', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => jsonResponse({ error: { code: 'internal', message: 'boom' } }, 500)) as unknown as typeof fetch,
+      vi.fn(async () =>
+        jsonResponse({ error: { code: 'internal', message: 'boom' } }, 500),
+      ),
     )
     renderApp('/targets')
     expect(await screen.findByText(/boom/i, {}, { timeout: 4000 })).toBeInTheDocument()

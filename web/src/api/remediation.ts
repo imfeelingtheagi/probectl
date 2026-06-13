@@ -47,7 +47,15 @@ export function useRemediations() {
 export function useDecideRemediation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, decision, note }: { id: string; decision: 'approve' | 'reject'; note?: string }) =>
+    mutationFn: ({
+      id,
+      decision,
+      note,
+    }: {
+      id: string
+      decision: 'approve' | 'reject'
+      note?: string
+    }) =>
       apiFetch<Proposal>(`/remediation/proposals/${id}/${decision}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

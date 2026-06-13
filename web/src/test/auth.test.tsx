@@ -31,10 +31,15 @@ describe('AuthProvider — real session identity (SEC-001)', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         if (String(input).endsWith('/v1/me')) {
-          return jsonResponse({ tenant_id: 't-real', user_id: 'u9', email: 'ops@acme.example', display_name: 'Ops' })
+          return jsonResponse({
+            tenant_id: 't-real',
+            user_id: 'u9',
+            email: 'ops@acme.example',
+            display_name: 'Ops',
+          })
         }
         return jsonResponse({ error: { message: 'unstubbed' } }, 404)
-      }) as unknown as typeof fetch,
+      }),
     )
     render(
       <AuthProvider>
@@ -46,10 +51,12 @@ describe('AuthProvider — real session identity (SEC-001)', () => {
 
   test('unauthenticated → redirect to SSO login, NO demo identity rendered', async () => {
     const assign = vi.fn()
-    vi.stubGlobal('location', { assign, href: '', pathname: '/' } as unknown as Location)
+    vi.stubGlobal('location', { assign, href: '', pathname: '/' })
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => jsonResponse({ error: { message: 'authentication required' } }, 401)) as unknown as typeof fetch,
+      vi.fn(async () =>
+        jsonResponse({ error: { message: 'authentication required' } }, 401),
+      ),
     )
     render(
       <AuthProvider>
@@ -62,17 +69,18 @@ describe('AuthProvider — real session identity (SEC-001)', () => {
 
   test('signOut posts /auth/logout then redirects to login', async () => {
     const assign = vi.fn()
-    vi.stubGlobal('location', { assign, href: '', pathname: '/' } as unknown as Location)
+    vi.stubGlobal('location', { assign, href: '', pathname: '/' })
     const calls: string[] = []
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input)
         calls.push(`${init?.method ?? 'GET'} ${url}`)
-        if (url.endsWith('/v1/me')) return jsonResponse({ tenant_id: 't', user_id: 'u', email: 'e@x', display_name: 'E' })
+        if (url.endsWith('/v1/me'))
+          return jsonResponse({ tenant_id: 't', user_id: 'u', email: 'e@x', display_name: 'E' })
         if (url.endsWith('/auth/logout')) return new Response(null, { status: 204 })
         return jsonResponse({}, 404)
-      }) as unknown as typeof fetch,
+      }),
     )
     render(
       <AuthProvider>

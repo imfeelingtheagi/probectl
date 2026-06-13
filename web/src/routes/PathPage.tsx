@@ -55,7 +55,8 @@ export function PathPage() {
   function runDiscover() {
     discover.mutate(undefined, {
       onSuccess: () => push({ tone: 'success', title: 'Path discovered' }),
-      onError: (e) => push({ tone: 'danger', title: 'Discovery failed', message: (e as Error).message }),
+      onError: (e) =>
+        push({ tone: 'danger', title: 'Discovery failed', message: (e).message }),
     })
   }
 
@@ -73,7 +74,11 @@ export function PathPage() {
               onChange={(e) => setChosen(e.target.value)}
               options={(tests.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
             />
-            <Button variant="primary" onClick={runDiscover} disabled={discover.isPending || !testId}>
+            <Button
+              variant="primary"
+              onClick={runDiscover}
+              disabled={discover.isPending || !testId}
+            >
               <Icon name="path" size={16} /> {discover.isPending ? 'Discovering…' : 'Discover path'}
             </Button>
           </div>
@@ -115,7 +120,9 @@ export function PathPage() {
               {discover.isPending || path.isPending ? (
                 <LoadingState label="Discovering path…" />
               ) : path.isError ? (
-                <ErrorState description={(path.error as Error)?.message ?? 'Could not load the path.'} />
+                <ErrorState
+                  description={(path.error)?.message ?? 'Could not load the path.'}
+                />
               ) : !path.data ? (
                 <EmptyState
                   icon="path"

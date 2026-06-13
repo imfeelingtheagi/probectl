@@ -108,7 +108,10 @@ export function useSilenceAlert() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ fingerprint, minutes }: { fingerprint: string; minutes: number }) =>
-      apiFetch<ActiveAlert>('/alerts/active/silence', jsonInit('POST', { fingerprint, duration_minutes: minutes })),
+      apiFetch<ActiveAlert>(
+        '/alerts/active/silence',
+        jsonInit('POST', { fingerprint, duration_minutes: minutes }),
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['alerts', 'active'] }),
   })
 }

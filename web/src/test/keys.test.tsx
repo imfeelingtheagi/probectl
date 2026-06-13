@@ -10,18 +10,29 @@ import { jsonResponse, defaultFetch } from './fetchStub'
 
 const chain = [
   { version: 2, mode: 'managed', state: 'active', created_at: '2026-06-01T00:00:00Z' },
-  { version: 1, mode: 'managed', state: 'retired', created_at: '2026-01-01T00:00:00Z', retired_at: '2026-06-01T00:00:00Z' },
+  {
+    version: 1,
+    mode: 'managed',
+    state: 'retired',
+    created_at: '2026-01-01T00:00:00Z',
+    retired_at: '2026-06-01T00:00:00Z',
+  },
 ]
 
 function licensedFetch(onRotate?: (body: unknown) => void) {
-  const base = defaultFetch() as unknown as (i: RequestInfo | URL, n?: RequestInit) => Promise<Response>
+  const base = defaultFetch()
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/v1/security/keys') && (init?.method ?? 'GET') === 'GET')
       return jsonResponse({ items: chain })
     if (url.endsWith('/v1/security/keys/rotate') && init?.method === 'POST') {
       onRotate?.(JSON.parse(String(init.body)))
-      return jsonResponse({ version: 3, mode: 'byok', state: 'active', created_at: '2026-06-05T00:00:00Z' })
+      return jsonResponse({
+        version: 3,
+        mode: 'byok',
+        state: 'active',
+        created_at: '2026-06-05T00:00:00Z',
+      })
     }
     return base(input, init)
   }) as unknown as typeof fetch
@@ -48,7 +59,10 @@ describe('per-tenant keys / BYOK (S-T6)', () => {
 
   test('BYOK activation posts the secret reference; managed rotation posts no ref', async () => {
     const bodies: unknown[] = []
-    vi.stubGlobal('fetch', licensedFetch((b) => bodies.push(b)))
+    vi.stubGlobal(
+      'fetch',
+      licensedFetch((b) => bodies.push(b)),
+    )
     renderApp('/admin')
     const field = await screen.findByLabelText(/byok secret reference/i)
     await userEvent.type(field, 'vault:kv/tenants/acme#kek')

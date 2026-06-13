@@ -36,16 +36,22 @@ describe('frontend-coverage gate (S-FE6)', () => {
 
   test('the gate itself fails on a capability with no surface', () => {
     // A nav destination nobody registered → violation.
-    expect(checkRegistryShape(['/ghost'], SURFACES).some((v) => v.capability === 'nav:/ghost')).toBe(true)
+    expect(
+      checkRegistryShape(['/ghost'], SURFACES).some((v) => v.capability === 'nav:/ghost'),
+    ).toBe(true)
     // A federated claim without evidence → violation.
     const bad: SurfaceDecl[] = [{ capability: 'x', sprint: 'Sx', kind: 'federated' }]
     expect(checkRegistryShape([], bad)[0].problem).toMatch(/no evidence/)
     // A routed declaration outside the nav → violation.
-    const offNav: SurfaceDecl[] = [{ capability: 'y', sprint: 'Sy', kind: 'native', route: '/nowhere' }]
+    const offNav: SurfaceDecl[] = [
+      { capability: 'y', sprint: 'Sy', kind: 'native', route: '/nowhere' },
+    ]
     expect(checkRegistryShape([], offNav)[0].problem).toMatch(/not a nav destination/)
     // …unless it is EXPLICITLY declared offNav (S-T1: the provider console —
     // deliberately undiscoverable from the tenant app).
-    const declared: SurfaceDecl[] = [{ capability: 'y', sprint: 'Sy', kind: 'native', route: '/nowhere', offNav: true }]
+    const declared: SurfaceDecl[] = [
+      { capability: 'y', sprint: 'Sy', kind: 'native', route: '/nowhere', offNav: true },
+    ]
     expect(checkRegistryShape([], declared)).toEqual([])
   })
 

@@ -11,13 +11,7 @@ import {
   Table,
   type Column,
 } from '../components'
-import {
-  gib,
-  usd,
-  useCostSummary,
-  type BudgetStatus,
-  type ChattyPair,
-} from '../api/cost'
+import { gib, usd, useCostSummary, type BudgetStatus, type ChattyPair } from '../api/cost'
 import { useCarbon, type CarbonAgg } from '../api/carbon'
 
 /** CostPage (S44): the light native FinOps summary — spend by team/service
@@ -136,7 +130,8 @@ export function CostPage() {
                   <dd>
                     {s.priced ? (
                       <span>
-                        {s.pricing_source} <span className={styles.kind}>(as of {s.pricing_as_of})</span>
+                        {s.pricing_source}{' '}
+                        <span className={styles.kind}>(as of {s.pricing_as_of})</span>
                       </span>
                     ) : (
                       'none'
@@ -228,8 +223,18 @@ function CarbonCard() {
   const columns: Column<{ name: string; agg: CarbonAgg }>[] = [
     { key: 'team', header: 'Team', render: (r) => r.name },
     { key: 'gb', header: 'Volume (GiB)', numeric: true, render: (r) => gib(r.agg.bytes) },
-    { key: 'kwh', header: 'Energy (kWh, est.)', numeric: true, render: (r) => r.agg.kwh.toFixed(3) },
-    { key: 'g', header: 'Carbon (gCO2e, est.)', numeric: true, render: (r) => r.agg.gco2e.toFixed(1) },
+    {
+      key: 'kwh',
+      header: 'Energy (kWh, est.)',
+      numeric: true,
+      render: (r) => r.agg.kwh.toFixed(3),
+    },
+    {
+      key: 'g',
+      header: 'Carbon (gCO2e, est.)',
+      numeric: true,
+      render: (r) => r.agg.gco2e.toFixed(1),
+    },
   ]
 
   return (

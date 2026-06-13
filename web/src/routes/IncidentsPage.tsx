@@ -37,7 +37,8 @@ function Timeline({ incidentId }: { incidentId: string }) {
   const resolve = useResolveIncident(incidentId)
 
   if (incident.isLoading) return <LoadingState label="Loading incident…" />
-  if (incident.isError || !incident.data) return <ErrorState description="Could not load the incident." />
+  if (incident.isError || !incident.data)
+    return <ErrorState description="Could not load the incident." />
 
   const inc = incident.data
   const signals = inc.signals ?? []
@@ -48,7 +49,11 @@ function Timeline({ incidentId }: { incidentId: string }) {
         title={inc.title || inc.target || 'Incident'}
         actions={
           inc.status === 'open' ? (
-            <Button variant="secondary" onClick={() => resolve.mutate()} disabled={resolve.isPending}>
+            <Button
+              variant="secondary"
+              onClick={() => resolve.mutate()}
+              disabled={resolve.isPending}
+            >
               Resolve
             </Button>
           ) : (
@@ -134,7 +139,9 @@ export function IncidentsPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (r) => <StatusDot tone={r.status === 'open' ? 'warning' : 'success'} label={r.status} />,
+      render: (r) => (
+        <StatusDot tone={r.status === 'open' ? 'warning' : 'success'} label={r.status} />
+      ),
     },
     { key: 'signals', header: 'Signals', numeric: true, render: (r) => r.signal_count },
     { key: 'last_seen', header: 'Last activity', render: (r) => when(r.last_seen_at) },
@@ -147,7 +154,10 @@ export function IncidentsPage() {
       ) : incidents.isError ? (
         <ErrorState description="Could not load incidents." />
       ) : !incidents.data || incidents.data.length === 0 ? (
-        <EmptyState title="No incidents" description="Correlated signals will appear here as incidents." />
+        <EmptyState
+          title="No incidents"
+          description="Correlated signals will appear here as incidents."
+        />
       ) : (
         <div className={styles.layout}>
           <Table

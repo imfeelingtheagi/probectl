@@ -27,7 +27,12 @@ function fixture(): OutagesResponse {
         evidence_url: 'https://ioda.inetintel.cc.gatech.edu/asn/64500',
         ongoing: true,
         affected_tests: [
-          { canary_type: 'http', target: 'web.testland.example:443', failures: 3, last_failure: '2026-06-05T10:20:00Z' },
+          {
+            canary_type: 'http',
+            target: 'web.testland.example:443',
+            failures: 3,
+            last_failure: '2026-06-05T10:20:00Z',
+          },
         ],
       },
       {
@@ -50,22 +55,32 @@ function fixture(): OutagesResponse {
         severity: 'warning',
         confidence: 0.9,
         title: 'Vantage-detected outage: Testland Telecom (AS64500)',
-        summary: '2 of 2 observed targets in Testland Telecom (AS64500) failing over the last 15m0s',
+        summary:
+          '2 of 2 observed targets in Testland Telecom (AS64500) failing over the last 15m0s',
         start: '2026-06-05T10:05:00Z',
         ongoing: true,
       },
     ],
     feeds: [
       {
-        name: 'ioda', status: 'ok', last_success: '2026-06-05T10:30:00Z', events: 12,
+        name: 'ioda',
+        status: 'ok',
+        last_success: '2026-06-05T10:30:00Z',
+        events: 12,
         license: 'IODA data-usage terms (academic project; attribution requested)',
-        attribution: 'IODA, Georgia Institute of Technology', commercial_use: 'unknown',
+        attribution: 'IODA, Georgia Institute of Technology',
+        commercial_use: 'unknown',
         url: 'https://ioda.inetintel.cc.gatech.edu/',
       },
       {
-        name: 'cloudflare_radar', status: 'failed', last_error: 'status 429', events: 0,
-        license: 'CC BY-NC 4.0 (non-commercial)', attribution: 'Cloudflare Radar',
-        commercial_use: 'restricted', url: 'https://radar.cloudflare.com/about',
+        name: 'cloudflare_radar',
+        status: 'failed',
+        last_error: 'status 429',
+        events: 0,
+        license: 'CC BY-NC 4.0 (non-commercial)',
+        attribution: 'Cloudflare Radar',
+        commercial_use: 'restricted',
+        url: 'https://radar.cloudflare.com/about',
       },
     ],
     coverage_notes: [
@@ -89,8 +104,12 @@ describe('outages / collective internet-outage view (S47a)', () => {
 
     // External events with the customer-impact correlation (the exit criterion).
     const events = await screen.findByRole('table', { name: /external outage events/i })
-    expect(within(events).getByText('Internet outage: Testland Telecom (AS64500)')).toBeInTheDocument()
-    expect(within(events).getByText(/web\.testland\.example:443 \(3 failures\)/)).toBeInTheDocument()
+    expect(
+      within(events).getByText('Internet outage: Testland Telecom (AS64500)'),
+    ).toBeInTheDocument()
+    expect(
+      within(events).getByText(/web\.testland\.example:443 \(3 failures\)/),
+    ).toBeInTheDocument()
     expect(within(events).getByText('ongoing')).toBeInTheDocument()
     expect(within(events).getByText('ended')).toBeInTheDocument()
     expect(within(events).getByText('critical')).toBeInTheDocument()
@@ -124,14 +143,19 @@ describe('outages / collective internet-outage view (S47a)', () => {
   })
 
   test('feeds-off empty state points at the opt-in env var', async () => {
-    vi.stubGlobal('fetch', stubWith({
-      outage_running: true,
-      feeds_enabled: false,
-      scope_resolution: true,
-      events: [],
-      vantage_events: [],
-      coverage_notes: ['external feeds are disabled (PROBECTL_OUTAGE_FEEDS_ENABLED) — the view shows only your own vantage detections'],
-    }))
+    vi.stubGlobal(
+      'fetch',
+      stubWith({
+        outage_running: true,
+        feeds_enabled: false,
+        scope_resolution: true,
+        events: [],
+        vantage_events: [],
+        coverage_notes: [
+          'external feeds are disabled (PROBECTL_OUTAGE_FEEDS_ENABLED) — the view shows only your own vantage detections',
+        ],
+      }),
+    )
     renderApp('/outages')
     expect(await screen.findByText(/no outage signals/i)).toBeInTheDocument()
     expect(screen.getAllByText(/PROBECTL_OUTAGE_FEEDS_ENABLED/).length).toBeGreaterThan(0)

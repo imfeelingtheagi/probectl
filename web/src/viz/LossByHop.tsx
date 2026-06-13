@@ -19,9 +19,7 @@ export function LossByHop({ path }: { path: Path }) {
       height={150}
       legend={
         worst > 0 ? (
-          <span>
-            Worst hop: {Math.round(worst * 100)}% loss
-          </span>
+          <span>Worst hop: {Math.round(worst * 100)}% loss</span>
         ) : (
           <span>No loss observed</span>
         )

@@ -10,7 +10,11 @@ function ms(v: number | undefined) {
 export function NodeDetailModal({ node, onClose }: { node: VizNode | null; onClose: () => void }) {
   const n = node?.node
   return (
-    <Modal open={!!node && !node.isSource} onClose={onClose} title={node ? `Hop ${node.ttl} · ${node.ip}` : ''}>
+    <Modal
+      open={!!node && !node.isSource}
+      onClose={onClose}
+      title={node ? `Hop ${node.ttl} · ${node.ip}` : ''}
+    >
       {n ? (
         <dl className={styles.detail}>
           <div>
@@ -29,7 +33,9 @@ export function NodeDetailModal({ node, onClose }: { node: VizNode | null; onClo
           <div>
             <dt>Loss</dt>
             <dd>
-              <Badge tone={n.loss_ratio === 0 ? 'success' : n.loss_ratio < 0.3 ? 'warning' : 'danger'}>
+              <Badge
+                tone={n.loss_ratio === 0 ? 'success' : n.loss_ratio < 0.3 ? 'warning' : 'danger'}
+              >
                 {Math.round(n.loss_ratio * 100)}% ({n.received}/{n.sent})
               </Badge>
             </dd>

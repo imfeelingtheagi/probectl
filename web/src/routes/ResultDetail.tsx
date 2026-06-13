@@ -41,7 +41,10 @@ function HTTPWaterfall({ r }: { r: LatestResult }) {
               <span className={styles.phaseName}>{name}</span>
               <span className={styles.track} aria-hidden="true">
                 {v !== undefined ? (
-                  <span className={styles.bar} style={{ left: `${left}%`, width: `${Math.max(width, 1)}%` }} />
+                  <span
+                    className={styles.bar}
+                    style={{ left: `${left}%`, width: `${Math.max(width, 1)}%` }}
+                  />
                 ) : null}
               </span>
               <span className={styles.value}>{num(v, ' ms')}</span>
@@ -59,7 +62,8 @@ function HTTPWaterfall({ r }: { r: LatestResult }) {
           <>
             <dt>Throughput</dt>
             <dd>
-              {num(m(r, 'http.throughput.kbps'), ' kbps', 0)} · {num(m(r, 'http.content.bytes'), ' bytes', 0)}
+              {num(m(r, 'http.throughput.kbps'), ' kbps', 0)} ·{' '}
+              {num(m(r, 'http.content.bytes'), ' bytes', 0)}
             </dd>
           </>
         ) : null}
@@ -100,7 +104,9 @@ function DNSBreakdown({ r }: { r: LatestResult }) {
         <>
           <dt>DNSSEC</dt>
           <dd>
-            <Badge tone={secure === 1 ? 'success' : 'warning'}>{secure === 1 ? 'validated' : 'not validated'}</Badge>
+            <Badge tone={secure === 1 ? 'success' : 'warning'}>
+              {secure === 1 ? 'validated' : 'not validated'}
+            </Badge>
           </dd>
         </>
       ) : null}
@@ -163,12 +169,14 @@ function VoiceBreakdown({ r }: { r: LatestResult }) {
       </dd>
       <dt>Jitter / loss</dt>
       <dd>
-        {num(m(r, 'voice.jitter.ms'), ' ms')} (RFC 3550) · loss {num(m(r, 'voice.loss.pct'), '%', 1)} ·{' '}
-        {num(m(r, 'packets.received'), '', 0)}/{num(m(r, 'packets.sent'), '', 0)} packets
+        {num(m(r, 'voice.jitter.ms'), ' ms')} (RFC 3550) · loss{' '}
+        {num(m(r, 'voice.loss.pct'), '%', 1)} · {num(m(r, 'packets.received'), '', 0)}/
+        {num(m(r, 'packets.sent'), '', 0)} packets
       </dd>
       <dt>Delay</dt>
       <dd>
-        one-way est. {num(m(r, 'voice.one_way.ms'), ' ms')} · RTT avg {num(m(r, 'rtt.avg.ms'), ' ms')}
+        one-way est. {num(m(r, 'voice.one_way.ms'), ' ms')} · RTT avg{' '}
+        {num(m(r, 'rtt.avg.ms'), ' ms')}
       </dd>
       <dt>Model</dt>
       <dd>
@@ -188,7 +196,9 @@ function GenericMetrics({ r }: { r: LatestResult }) {
     { key: 'value', header: 'Value', numeric: true, render: ([, v]) => String(v) },
   ]
   if (rows.length === 0) return <p>No metrics reported.</p>
-  return <Table caption={`Metrics for ${r.type}`} columns={columns} rows={rows} rowKey={([k]) => k} />
+  return (
+    <Table caption={`Metrics for ${r.type}`} columns={columns} rows={rows} rowKey={([k]) => k} />
+  )
 }
 
 function TypedBreakdown({ r }: { r: LatestResult }) {
@@ -211,7 +221,9 @@ function TypedBreakdown({ r }: { r: LatestResult }) {
 /** ResultDetail shows a test's latest result per reporting agent. */
 export function ResultDetail({ test, onClose }: { test: Test; onClose: () => void }) {
   const latest = useLatestResults()
-  const matches = (latest.data?.items ?? []).filter((r) => r.type === test.type && r.target === test.target)
+  const matches = (latest.data?.items ?? []).filter(
+    (r) => r.type === test.type && r.target === test.target,
+  )
 
   return (
     <Modal open onClose={onClose} title={`${test.name} — latest results`}>
@@ -230,7 +242,8 @@ export function ResultDetail({ test, onClose }: { test: Test; onClose: () => voi
             <dl className={styles.kv}>
               <dt>Agent</dt>
               <dd>
-                {r.agent_id || '—'} · <Badge tone={r.success ? 'success' : 'danger'}>{r.success ? 'ok' : 'failed'}</Badge>{' '}
+                {r.agent_id || '—'} ·{' '}
+                <Badge tone={r.success ? 'success' : 'danger'}>{r.success ? 'ok' : 'failed'}</Badge>{' '}
                 · {when(r.observed_at)}
               </dd>
               {r.error ? (

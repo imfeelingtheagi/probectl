@@ -1,7 +1,24 @@
 import { useState, type FormEvent } from 'react'
 import styles from './authoring.module.css'
-import { Badge, Button, Card, CardBody, CardHeader, EmptyState, ErrorState, Field, LoadingState, useToast } from '../components'
-import { specToInput, useAuthorTest, useDiscover, type TestProposal, type TestSpec } from '../api/authoring'
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  useToast,
+} from '../components'
+import {
+  specToInput,
+  useAuthorTest,
+  useDiscover,
+  type TestProposal,
+  type TestSpec,
+} from '../api/authoring'
 import { useCreateTest } from '../api/tests'
 
 function SpecSummary({ spec }: { spec: TestSpec }) {
@@ -81,13 +98,17 @@ export function AuthoringPanel() {
         push({ tone: 'success', title: 'Test created', message: label })
         author.reset()
       },
-      onError: (err) => push({ tone: 'danger', title: 'Create failed', message: (err as Error).message }),
+      onError: (err) =>
+        push({ tone: 'danger', title: 'Create failed', message: (err).message }),
     })
   }
 
   return (
     <Card>
-      <CardHeader title="Author with AI" description="Describe what to monitor, or add a suggested target. Nothing is created until you confirm." />
+      <CardHeader
+        title="Author with AI"
+        description="Describe what to monitor, or add a suggested target. Nothing is created until you confirm."
+      />
       <CardBody>
         <form className={styles.askForm} onSubmit={propose}>
           <Field
@@ -102,7 +123,9 @@ export function AuthoringPanel() {
         </form>
 
         {author.isError ? (
-          <ErrorState description={(author.error as Error)?.message ?? 'Could not author a test.'} />
+          <ErrorState
+            description={(author.error)?.message ?? 'Could not author a test.'}
+          />
         ) : author.data ? (
           <ProposalCard
             proposal={author.data}
@@ -119,7 +142,10 @@ export function AuthoringPanel() {
           ) : discover.isError ? (
             <ErrorState description="Could not load suggestions." />
           ) : !discover.data || discover.data.length === 0 ? (
-            <EmptyState title="No suggestions yet" description="probectl proposes targets seen in your telemetry that aren't monitored." />
+            <EmptyState
+              title="No suggestions yet"
+              description="probectl proposes targets seen in your telemetry that aren't monitored."
+            />
           ) : (
             <ul className={styles.suggestionList} aria-label="Suggested targets">
               {discover.data.map((d, i) => (
@@ -129,7 +155,12 @@ export function AuthoringPanel() {
                     <code className={styles.suggestionTarget}>{d.spec.target}</code>
                     <span className={styles.suggestionWhy}>{d.rationale}</span>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => apply(d.spec, d.spec.target)} disabled={create.isPending}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => apply(d.spec, d.spec.target)}
+                    disabled={create.isPending}
+                  >
                     Add
                   </Button>
                 </li>

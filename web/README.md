@@ -9,13 +9,13 @@ the AI **Ask** panel, the provider console, and more) are routes on top of it.
 
 ## Stack
 
-| Concern | Choice | Why |
-| ------- | ------ | --- |
-| Framework | **React 18 + TypeScript + Vite** | Richest ecosystem for data-dense observability UIs (tables, charts, the path/topology hero visuals); strong typing and tooling. |
-| Styling/theming | **CSS custom properties + CSS Modules** | Tokens are read live, so per-tenant **white-label** is a *runtime token override*, not a per-screen rewrite. No utility-class lock-in; no external / "phone-home" fonts (the sovereignty rule — [Non-negotiables](../CONTRIBUTING.md#non-negotiables)). |
-| Server state | **TanStack Query** | Caching/retries/loading-error states for the `/v1` API; UI state stays in React. |
-| Routing | **React Router** | Mature nested routing for the app-shell + outlet model. |
-| Tests | **Vitest + Testing Library + jest-axe** | Component, keyboard/focus, theme-swap, and an automated a11y gate — all runnable in CI without a browser. |
+| Concern         | Choice                                  | Why                                                                                                                                                                                                                                                     |
+| --------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework       | **React 18 + TypeScript + Vite**        | Richest ecosystem for data-dense observability UIs (tables, charts, the path/topology hero visuals); strong typing and tooling.                                                                                                                         |
+| Styling/theming | **CSS custom properties + CSS Modules** | Tokens are read live, so per-tenant **white-label** is a _runtime token override_, not a per-screen rewrite. No utility-class lock-in; no external / "phone-home" fonts (the sovereignty rule — [Non-negotiables](../CONTRIBUTING.md#non-negotiables)). |
+| Server state    | **TanStack Query**                      | Caching/retries/loading-error states for the `/v1` API; UI state stays in React.                                                                                                                                                                        |
+| Routing         | **React Router**                        | Mature nested routing for the app-shell + outlet model.                                                                                                                                                                                                 |
+| Tests           | **Vitest + Testing Library + jest-axe** | Component, keyboard/focus, theme-swap, and an automated a11y gate — all runnable in CI without a browser.                                                                                                                                               |
 
 ## How it's organized (`src/`)
 

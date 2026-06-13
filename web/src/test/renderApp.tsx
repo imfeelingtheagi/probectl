@@ -25,12 +25,13 @@ const DEFAULT_ME = {
  *  test that wants to exercise the real auth path can render <AuthProvider>
  *  directly with its own /v1/me stub (see auth.test.tsx). */
 export function renderApp(path = '/targets') {
-  const inner = globalThis.fetch as typeof fetch
+  const inner = globalThis.fetch
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     const u = String(input)
     // Serve the TENANT identity (/v1/me) only — NOT the provider console's
     // /provider/v1/me, which the test's own stub answers with an operator shape.
-    if (u.endsWith('/v1/me') && !u.includes('/provider/')) return Promise.resolve(jsonResponse(DEFAULT_ME))
+    if (u.endsWith('/v1/me') && !u.includes('/provider/'))
+      return Promise.resolve(jsonResponse(DEFAULT_ME))
     return inner(input, init)
   })
   return render(

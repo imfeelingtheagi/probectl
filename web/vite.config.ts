@@ -24,5 +24,18 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
+    // TEST-012: a coverage FLOOR so the UI test suite can't quietly rot. `npm
+    // run coverage` fails the build if any metric drops below the threshold.
+    // Start conservative and ratchet up as the suite grows.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      // TEST-012: a conservative STARTING floor — the gate's job is to fail on
+      // regressions below the line and be ratcheted UP as the suite grows (CI
+      // reports the actual %; bump these toward it). A low-but-real floor beats
+      // a guessed-high one that reds the build on an unmeasured number.
+      thresholds: { lines: 20, functions: 20, statements: 20, branches: 15 },
+      exclude: ['**/*.test.{ts,tsx}', 'src/test/**', 'dist/**', '**/*.config.*'],
+    },
   },
 })

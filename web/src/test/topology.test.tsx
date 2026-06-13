@@ -121,7 +121,7 @@ describe('topology + what-if (S43)', () => {
       'fetch',
       vi.fn(async () =>
         jsonResponse({ topology_running: false, nodes: [], edges: [] }),
-      ) as unknown as typeof fetch,
+      ),
     )
     renderApp('/topology')
     expect(await screen.findByText(/topology not wired/i)).toBeInTheDocument()
@@ -145,10 +145,7 @@ describe('topology + what-if (S43)', () => {
       label: `10.1.${Math.floor(i / 250)}.${i % 250}`,
     }))
     big.edges = []
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => jsonResponse(big)) as unknown as typeof fetch,
-    )
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(big)))
     renderApp('/topology')
     expect(await screen.findByText(/showing 400 of 450 nodes/i)).toBeInTheDocument()
   })
@@ -162,9 +159,9 @@ describe('topology + what-if (S43)', () => {
     const input = screen.getByLabelText(/as of/i)
     await userEvent.type(input, '2026-06-04T11:00')
     await waitFor(() => {
-      const urls = (fetcher as unknown as { mock: { calls: [RequestInfo | URL][] } }).mock.calls.map(
-        (c) => String(c[0]),
-      )
+      const urls = (
+        fetcher as unknown as { mock: { calls: [RequestInfo | URL][] } }
+      ).mock.calls.map((c) => String(c[0]))
       expect(urls.some((u) => u.includes('/v1/topology?at='))).toBe(true)
     })
   })

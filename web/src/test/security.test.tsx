@@ -25,20 +25,31 @@ function postureFixtures(): TLSPosture[] {
   })
   return [
     {
-      target: 'expired.acme.example:443', source: 'http', tls_version: '1.2',
+      target: 'expired.acme.example:443',
+      source: 'http',
+      tls_version: '1.2',
       cipher: 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
       leaf: leaf('CN=expired.acme.example', days(-2)),
-      findings: [{ kind: 'cert_expired', severity: 'critical', message: 'certificate expired 2 days ago' }],
+      findings: [
+        { kind: 'cert_expired', severity: 'critical', message: 'certificate expired 2 days ago' },
+      ],
       severity: 'critical',
       handoff: {
-        target: 'expired.acme.example:443', subject: 'CN=expired.acme.example',
-        issuer: 'CN=ACME Issuing CA', serial: '0a', not_after: days(-2),
-        reason: 'cert_expired', url: 'https://trustctl.acme.example/renew?serial=0a',
+        target: 'expired.acme.example:443',
+        subject: 'CN=expired.acme.example',
+        issuer: 'CN=ACME Issuing CA',
+        serial: '0a',
+        not_after: days(-2),
+        reason: 'cert_expired',
+        url: 'https://trustctl.acme.example/renew?serial=0a',
       },
       observed_at: new Date(now).toISOString(),
     },
     {
-      target: 'weak.acme.example:443', source: 'http', tls_version: '1.0', cipher: 'TLS_RSA_WITH_RC4_128_SHA',
+      target: 'weak.acme.example:443',
+      source: 'http',
+      tls_version: '1.0',
+      cipher: 'TLS_RSA_WITH_RC4_128_SHA',
       leaf: leaf('CN=weak.acme.example', days(200), { key_type: 'RSA', key_bits: 1024 }),
       findings: [
         { kind: 'weak_key', severity: 'warning', message: 'RSA 1024 below minimum' },
@@ -49,7 +60,10 @@ function postureFixtures(): TLSPosture[] {
       observed_at: new Date(now).toISOString(),
     },
     {
-      target: 'self.acme.example:8443', source: 'http', tls_version: '1.3', cipher: 'TLS_AES_128_GCM_SHA256',
+      target: 'self.acme.example:8443',
+      source: 'http',
+      tls_version: '1.3',
+      cipher: 'TLS_AES_128_GCM_SHA256',
       leaf: leaf('CN=self.acme.example', days(20), { self_signed: true }),
       findings: [
         { kind: 'cert_self_signed', severity: 'warning', message: 'self-signed leaf' },
@@ -59,16 +73,25 @@ function postureFixtures(): TLSPosture[] {
       observed_at: new Date(now).toISOString(),
     },
     {
-      target: 'ct.acme.example:443', source: 'http', tls_version: '1.3', cipher: 'TLS_AES_256_GCM_SHA384',
+      target: 'ct.acme.example:443',
+      source: 'http',
+      tls_version: '1.3',
+      cipher: 'TLS_AES_256_GCM_SHA384',
       leaf: leaf('CN=ct.acme.example', days(80)),
-      findings: [{ kind: 'ct_not_logged', severity: 'warning', message: 'leaf not found in CT logs' }],
+      findings: [
+        { kind: 'ct_not_logged', severity: 'warning', message: 'leaf not found in CT logs' },
+      ],
       severity: 'warning',
       observed_at: new Date(now).toISOString(),
     },
     {
-      target: 'clean.acme.example:443', source: 'http', tls_version: '1.3', cipher: 'TLS_AES_128_GCM_SHA256',
+      target: 'clean.acme.example:443',
+      source: 'http',
+      tls_version: '1.3',
+      cipher: 'TLS_AES_128_GCM_SHA256',
       leaf: leaf('CN=clean.acme.example', days(120)),
-      findings: [], severity: 'info',
+      findings: [],
+      severity: 'info',
       observed_at: new Date(now).toISOString(),
     },
   ]
@@ -82,7 +105,8 @@ function tlsBackend(items: TLSPosture[]) {
     if (url.endsWith('/v1/tls/posture')) {
       return jsonResponse({ items, collector_running: true })
     }
-    if (url.endsWith('/v1/alerts/active')) return jsonResponse({ items: [], evaluator_running: true })
+    if (url.endsWith('/v1/alerts/active'))
+      return jsonResponse({ items: [], evaluator_running: true })
     if (url.endsWith('/v1/alerts')) return jsonResponse({ items: [] })
     return jsonResponse({ error: { code: 'not_found', message: `unstubbed ${url}` } }, 404)
   }) as unknown as typeof fetch
@@ -176,7 +200,8 @@ describe('TLS/cert posture surface (S-FE2)', () => {
   test('collector-off is stated, not guessed', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.endsWith('/v1/tls/posture')) return jsonResponse({ items: [], collector_running: false })
+      if (url.endsWith('/v1/tls/posture'))
+        return jsonResponse({ items: [], collector_running: false })
       return jsonResponse({ items: [] })
     }) as unknown as typeof fetch
     vi.stubGlobal('fetch', fetcher)

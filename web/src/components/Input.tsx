@@ -14,7 +14,8 @@ export function Field({ label, hint, error, leading, id, className, ...rest }: F
   const inputId = id ?? reactId
   const hintId = `${inputId}-hint`
   const errId = `${inputId}-err`
-  const describedBy = [hint ? hintId : null, error ? errId : null].filter(Boolean).join(' ') || undefined
+  const describedBy =
+    [hint ? hintId : null, error ? errId : null].filter(Boolean).join(' ') || undefined
 
   return (
     <div className={[styles.field, className].filter(Boolean).join(' ')}>

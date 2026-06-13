@@ -37,8 +37,7 @@ export function SLOsPage() {
     {
       key: 'attainment',
       header: 'Attainment',
-      render: (s) =>
-        s.cold_start ? <Badge tone="neutral">cold start</Badge> : pct(s.attainment),
+      render: (s) => (s.cold_start ? <Badge tone="neutral">cold start</Badge> : pct(s.attainment)),
     },
     {
       key: 'budget',
@@ -46,12 +45,7 @@ export function SLOsPage() {
       render: (s) => {
         if (s.cold_start) return '—'
         const remaining = Math.max(0, Math.min(1, s.error_budget_remaining))
-        const cls =
-          remaining <= 0
-            ? styles.budgetGone
-            : remaining < 0.25
-              ? styles.budgetLow
-              : ''
+        const cls = remaining <= 0 ? styles.budgetGone : remaining < 0.25 ? styles.budgetLow : ''
         return (
           <div className={`${styles.budgetCell} ${cls}`}>
             {pct(remaining)} left

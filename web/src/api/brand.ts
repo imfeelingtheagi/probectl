@@ -19,7 +19,8 @@ export const DEFAULT_BRAND: Brand = { product_name: 'probectl' }
 /** Only S8a brandable tokens may be touched at runtime (mirror of the core
  *  allowlist — defense in depth on the client). */
 const TOKEN_NAME = /^--(color-[a-z0-9-]+|radius-(sm|md|lg)|font-sans|font-mono)$/
-const TOKEN_VALUE = /^(#[0-9a-fA-F]{3,8}|rgba?\([0-9.,/% ]+\)|hsla?\([0-9.,/% deg]+\)|[0-9]{1,3}(px|rem|em|%)|[A-Za-z0-9 ,'"-]{1,120})$/
+const TOKEN_VALUE =
+  /^(#[0-9a-fA-F]{3,8}|rgba?\([0-9.,/% ]+\)|hsla?\([0-9.,/% deg]+\)|[0-9]{1,3}(px|rem|em|%)|[A-Za-z0-9 ,'"-]{1,120})$/
 
 export async function fetchBrand(): Promise<Brand> {
   try {

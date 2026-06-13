@@ -12,12 +12,7 @@ import {
   Field,
   LoadingState,
 } from '../components'
-import {
-  useTopology,
-  useWhatIf,
-  type TopoNode,
-  type WhatIfImpact,
-} from '../api/topology'
+import { useTopology, useWhatIf, type TopoNode, type WhatIfImpact } from '../api/topology'
 import { layoutTopology, T_NODE_H, T_NODE_W } from '../viz/topoLayout'
 
 /** TopologyPage (S43, PR1): the tenant's dependency graph — agents, hops,
@@ -30,10 +25,7 @@ export function TopologyPage() {
   const whatIf = useWhatIf()
   const [selected, setSelected] = useState<TopoNode | null>(null)
 
-  const layout = useMemo(
-    () => layoutTopology(data?.nodes ?? [], data?.edges ?? []),
-    [data],
-  )
+  const layout = useMemo(() => layoutTopology(data?.nodes ?? [], data?.edges ?? []), [data])
   const impact = whatIf.data ?? null
   const impacted = useMemo(() => impactedNodeIDs(impact), [impact])
 
@@ -101,7 +93,9 @@ export function TopologyPage() {
             <CardBody>
               {(data.coverage?.notes?.length ?? 0) > 0 && (
                 <div className={styles.coverage} role="note" aria-label="coverage gaps">
-                  {data.coverage?.notes?.map((n) => <span key={n}>{n}</span>)}
+                  {data.coverage?.notes?.map((n) => (
+                    <span key={n}>{n}</span>
+                  ))}
                 </div>
               )}
               {layout.truncated && (
@@ -198,10 +192,7 @@ export function TopologyPage() {
                       <dd>{selected.label}</dd>
                     </dl>
                     <p>
-                      <Button
-                        onClick={() => simulate(selected.id)}
-                        disabled={whatIf.isPending}
-                      >
+                      <Button onClick={() => simulate(selected.id)} disabled={whatIf.isPending}>
                         {whatIf.isPending ? 'Simulating…' : 'Simulate failure'}
                       </Button>
                     </p>
@@ -237,7 +228,9 @@ function ImpactCard({ impact }: { impact: WhatIfImpact }) {
       <CardBody>
         {(impact.coverage.notes?.length ?? 0) > 0 && (
           <div className={styles.coverage} role="note" aria-label="simulation coverage gaps">
-            {impact.coverage.notes?.map((n) => <span key={n}>{n}</span>)}
+            {impact.coverage.notes?.map((n) => (
+              <span key={n}>{n}</span>
+            ))}
           </div>
         )}
         <dl className={styles.detailList}>

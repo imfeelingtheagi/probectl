@@ -12,57 +12,113 @@ function endpointFixtures(): EndpointView[] {
   const at = '2026-06-04T12:00:00Z'
   return [
     {
-      agent_id: 'laptop-anna', last_seen_at: at, cause: 'wifi', slow: true, confidence: 0.8,
+      agent_id: 'laptop-anna',
+      last_seen_at: at,
+      cause: 'wifi',
+      slow: true,
+      confidence: 0.8,
       summary: 'weak RSSI (-82 dBm) on the local wireless link',
       attribution: {
-        type: 'endpoint.attribution', target: 'app.acme.example', success: false, observed_at: at,
-        metrics: { confidence: 0.8, slow: 1, wifi_score: 0.9, local_score: 0, isp_score: 0.1, network_score: 0 },
-        attributes: { 'endpoint.cause': 'wifi', 'endpoint.summary': 'weak RSSI (-82 dBm) on the local wireless link' },
+        type: 'endpoint.attribution',
+        target: 'app.acme.example',
+        success: false,
+        observed_at: at,
+        metrics: {
+          confidence: 0.8,
+          slow: 1,
+          wifi_score: 0.9,
+          local_score: 0,
+          isp_score: 0.1,
+          network_score: 0,
+        },
+        attributes: {
+          'endpoint.cause': 'wifi',
+          'endpoint.summary': 'weak RSSI (-82 dBm) on the local wireless link',
+        },
       },
       wifi: {
-        type: 'endpoint.wifi', target: 'HomeNet', success: true, observed_at: at,
+        type: 'endpoint.wifi',
+        target: 'HomeNet',
+        success: true,
+        observed_at: at,
         metrics: { rssi_dbm: -82, signal_pct: 31, link_rate_mbps: 43, channel: 11, associated: 1 },
         attributes: { 'wifi.ssid': 'HomeNet', 'wifi.band': '2.4GHz' },
       },
       gateway: {
-        type: 'endpoint.gateway', target: '192.168.1.1', success: true, observed_at: at,
+        type: 'endpoint.gateway',
+        target: '192.168.1.1',
+        success: true,
+        observed_at: at,
         metrics: { rtt_ms: 3.4, loss_pct: 0, reachable: 1 },
         attributes: { 'gateway.ip': '192.168.1.1' },
       },
       last_mile: {
-        type: 'endpoint.lastmile', target: 'app.acme.example', success: true, observed_at: at,
+        type: 'endpoint.lastmile',
+        target: 'app.acme.example',
+        success: true,
+        observed_at: at,
         metrics: { local_rtt_ms: 4, isp_rtt_ms: 18, isp_loss_pct: 0, beyond_rtt_ms: 35, hops: 9 },
       },
       sessions: [
         {
-          type: 'endpoint.session', target: 'app.acme.example', success: true, observed_at: at,
-          metrics: { dns_ms: 20, connect_ms: 30, tls_ms: 40, ttfb_ms: 350, total_ms: 900, status: 200 },
+          type: 'endpoint.session',
+          target: 'app.acme.example',
+          success: true,
+          observed_at: at,
+          metrics: {
+            dns_ms: 20,
+            connect_ms: 30,
+            tls_ms: 40,
+            ttfb_ms: 350,
+            total_ms: 900,
+            status: 200,
+          },
         },
       ],
     },
     {
       // Privacy-minimized: the agent withheld SSID + gateway IP entirely.
-      agent_id: 'kiosk-7', last_seen_at: at, cause: 'isp', slow: true, confidence: 0.6,
+      agent_id: 'kiosk-7',
+      last_seen_at: at,
+      cause: 'isp',
+      slow: true,
+      confidence: 0.6,
       summary: 'ISP edge loss 8%',
       attribution: {
-        type: 'endpoint.attribution', target: 'app.acme.example', success: false, observed_at: at,
+        type: 'endpoint.attribution',
+        target: 'app.acme.example',
+        success: false,
+        observed_at: at,
         metrics: { confidence: 0.6, slow: 1, isp_score: 0.7 },
         attributes: { 'endpoint.cause': 'isp', 'endpoint.summary': 'ISP edge loss 8%' },
       },
       wifi: {
-        type: 'endpoint.wifi', target: '', success: true, observed_at: at,
+        type: 'endpoint.wifi',
+        target: '',
+        success: true,
+        observed_at: at,
         metrics: { rssi_dbm: -55, associated: 1 },
         attributes: { 'wifi.band': '5GHz' }, // no wifi.ssid — withheld
       },
       gateway: {
-        type: 'endpoint.gateway', target: '', success: true, observed_at: at,
+        type: 'endpoint.gateway',
+        target: '',
+        success: true,
+        observed_at: at,
         metrics: { rtt_ms: 2.1, loss_pct: 0, reachable: 1 }, // no gateway.ip — withheld
       },
     },
     {
-      agent_id: 'desk-42', last_seen_at: at, cause: 'none', slow: false, confidence: 0.9,
+      agent_id: 'desk-42',
+      last_seen_at: at,
+      cause: 'none',
+      slow: false,
+      confidence: 0.9,
       attribution: {
-        type: 'endpoint.attribution', target: 'app.acme.example', success: true, observed_at: at,
+        type: 'endpoint.attribution',
+        target: 'app.acme.example',
+        success: true,
+        observed_at: at,
         metrics: { confidence: 0.9, slow: 0 },
         attributes: { 'endpoint.cause': 'none' },
       },
@@ -136,20 +192,33 @@ describe('endpoint / WiFi DEM surface (S-FE4)', () => {
     renderApp('/endpoints')
     await screen.findByRole('table', { name: 'Endpoint fleet' })
 
-    await userEvent.selectOptions(screen.getByLabelText('Attribution', { selector: 'select' }), 'impaired')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Attribution', { selector: 'select' }),
+      'impaired',
+    )
     await waitFor(() => {
-      expect(within(screen.getByRole('table', { name: 'Endpoint fleet' })).getAllByRole('row').length).toBe(1 + 2)
+      expect(
+        within(screen.getByRole('table', { name: 'Endpoint fleet' })).getAllByRole('row').length,
+      ).toBe(1 + 2)
     })
-    await userEvent.selectOptions(screen.getByLabelText('Attribution', { selector: 'select' }), 'isp')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Attribution', { selector: 'select' }),
+      'isp',
+    )
     await waitFor(() => {
       const rows = within(screen.getByRole('table', { name: 'Endpoint fleet' })).getAllByRole('row')
       expect(rows.length).toBe(2)
       expect(within(rows[1]).getByText('kiosk-7')).toBeDefined()
     })
-    await userEvent.selectOptions(screen.getByLabelText('Attribution', { selector: 'select' }), 'all')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Attribution', { selector: 'select' }),
+      'all',
+    )
     await userEvent.type(screen.getByLabelText('Find'), 'desk')
     await waitFor(() => {
-      expect(within(screen.getByRole('table', { name: 'Endpoint fleet' })).getAllByRole('row').length).toBe(2)
+      expect(
+        within(screen.getByRole('table', { name: 'Endpoint fleet' })).getAllByRole('row').length,
+      ).toBe(2)
     })
   })
 
@@ -167,7 +236,8 @@ describe('endpoint / WiFi DEM surface (S-FE4)', () => {
   test('collector-off is stated, not guessed', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.endsWith('/v1/endpoints')) return jsonResponse({ items: [], collector_running: false })
+      if (url.endsWith('/v1/endpoints'))
+        return jsonResponse({ items: [], collector_running: false })
       return jsonResponse({ items: [] })
     }) as unknown as typeof fetch
     vi.stubGlobal('fetch', fetcher)

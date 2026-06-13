@@ -115,11 +115,14 @@ function EndpointDetail({ view, onClose }: { view: EndpointView; onClose: () => 
             <dd>
               SSID {idOrWithheld(attr(view.wifi, 'wifi.ssid'))}
               {attr(view.wifi, 'wifi.band') ? ` · ${attr(view.wifi, 'wifi.band')}` : ''}
-              {metric(view.wifi, 'channel') !== undefined ? ` · ch ${num(metric(view.wifi, 'channel'), '', 0)}` : ''}
+              {metric(view.wifi, 'channel') !== undefined
+                ? ` · ch ${num(metric(view.wifi, 'channel'), '', 0)}`
+                : ''}
               <br />
               RSSI {num(metric(view.wifi, 'rssi_dbm'), ' dBm', 0)} · signal{' '}
-              {num(metric(view.wifi, 'signal_pct'), '%', 0)} · link {num(metric(view.wifi, 'link_rate_mbps'), ' Mbps', 0)}{' '}
-              · noise {num(metric(view.wifi, 'noise_dbm'), ' dBm', 0)}
+              {num(metric(view.wifi, 'signal_pct'), '%', 0)} · link{' '}
+              {num(metric(view.wifi, 'link_rate_mbps'), ' Mbps', 0)} · noise{' '}
+              {num(metric(view.wifi, 'noise_dbm'), ' dBm', 0)}
             </dd>
           </>
         ) : null}
@@ -130,7 +133,8 @@ function EndpointDetail({ view, onClose }: { view: EndpointView; onClose: () => 
             <dd>
               {idOrWithheld(attr(view.gateway, 'gateway.ip'))} ·{' '}
               {metric(view.gateway, 'reachable') === 1 ? 'reachable' : 'unreachable'} · RTT{' '}
-              {num(metric(view.gateway, 'rtt_ms'), ' ms')} · loss {num(metric(view.gateway, 'loss_pct'), '%', 0)}
+              {num(metric(view.gateway, 'rtt_ms'), ' ms')} · loss{' '}
+              {num(metric(view.gateway, 'loss_pct'), '%', 0)}
             </dd>
           </>
         ) : null}
@@ -140,8 +144,9 @@ function EndpointDetail({ view, onClose }: { view: EndpointView; onClose: () => 
             <dt>ISP / last mile</dt>
             <dd>
               local {num(metric(view.last_mile, 'local_rtt_ms'), ' ms')} → ISP edge{' '}
-              {num(metric(view.last_mile, 'isp_rtt_ms'), ' ms')} (loss {num(metric(view.last_mile, 'isp_loss_pct'), '%', 0)})
-              → beyond {num(metric(view.last_mile, 'beyond_rtt_ms'), ' ms')} ·{' '}
+              {num(metric(view.last_mile, 'isp_rtt_ms'), ' ms')} (loss{' '}
+              {num(metric(view.last_mile, 'isp_loss_pct'), '%', 0)}) → beyond{' '}
+              {num(metric(view.last_mile, 'beyond_rtt_ms'), ' ms')} ·{' '}
               {num(metric(view.last_mile, 'hops'), ' hops', 0)}
             </dd>
           </>
@@ -162,11 +167,35 @@ function EndpointDetail({ view, onClose }: { view: EndpointView; onClose: () => 
             caption={`Sessions for ${view.agent_id}`}
             columns={[
               { key: 'target', header: 'Target', render: (s: DEMResult) => s.target ?? '—' },
-              { key: 'ok', header: 'OK', render: (s: DEMResult) => (s.success ? '✓' : s.error || '✗') },
-              { key: 'dns', header: 'DNS', numeric: true, render: (s: DEMResult) => num(metric(s, 'dns_ms'), ' ms') },
-              { key: 'tls', header: 'TLS', numeric: true, render: (s: DEMResult) => num(metric(s, 'tls_ms'), ' ms') },
-              { key: 'ttfb', header: 'TTFB', numeric: true, render: (s: DEMResult) => num(metric(s, 'ttfb_ms'), ' ms') },
-              { key: 'total', header: 'Total', numeric: true, render: (s: DEMResult) => num(metric(s, 'total_ms'), ' ms') },
+              {
+                key: 'ok',
+                header: 'OK',
+                render: (s: DEMResult) => (s.success ? '✓' : s.error || '✗'),
+              },
+              {
+                key: 'dns',
+                header: 'DNS',
+                numeric: true,
+                render: (s: DEMResult) => num(metric(s, 'dns_ms'), ' ms'),
+              },
+              {
+                key: 'tls',
+                header: 'TLS',
+                numeric: true,
+                render: (s: DEMResult) => num(metric(s, 'tls_ms'), ' ms'),
+              },
+              {
+                key: 'ttfb',
+                header: 'TTFB',
+                numeric: true,
+                render: (s: DEMResult) => num(metric(s, 'ttfb_ms'), ' ms'),
+              },
+              {
+                key: 'total',
+                header: 'Total',
+                numeric: true,
+                render: (s: DEMResult) => num(metric(s, 'total_ms'), ' ms'),
+              },
             ]}
             rows={sessions}
             rowKey={(s) => `${view.agent_id}-${s.target}`}
@@ -240,7 +269,12 @@ export function EndpointsPage() {
           title={`Fleet (${items.length})`}
           actions={
             <div className={styles.filters}>
-              <Field label="Find" value={needle} onChange={(e) => setNeedle(e.target.value)} placeholder="endpoint…" />
+              <Field
+                label="Find"
+                value={needle}
+                onChange={(e) => setNeedle(e.target.value)}
+                placeholder="endpoint…"
+              />
               <Select
                 label="Attribution"
                 value={cause}
@@ -267,8 +301,8 @@ export function EndpointsPage() {
             <>
               {endpoints.data && !endpoints.data.collector_running ? (
                 <p role="status" className={styles.notice}>
-                  <Badge tone="warning">collector off</Badge> The endpoint-view consumer is not wired — deploy
-                  endpoint agents (S37) to populate the fleet.
+                  <Badge tone="warning">collector off</Badge> The endpoint-view consumer is not
+                  wired — deploy endpoint agents (S37) to populate the fleet.
                 </p>
               ) : null}
               <Table
@@ -385,8 +419,8 @@ function RUMCard() {
         ) : (
           <>
             <p role="note" aria-label="rum privacy posture" className={styles.notice}>
-              <Badge tone="info">privacy</Badge> consent required · URLs redacted · IP never stored ·{' '}
-              {rum.data.privacy?.rejected_no_consent ?? 0} beacons rejected without consent.{' '}
+              <Badge tone="info">privacy</Badge> consent required · URLs redacted · IP never stored
+              · {rum.data.privacy?.rejected_no_consent ?? 0} beacons rejected without consent.{' '}
               {rum.data.coverage_notes?.[0] ?? ''}
             </p>
             <Table

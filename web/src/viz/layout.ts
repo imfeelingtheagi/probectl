@@ -48,8 +48,15 @@ export function layoutPath(path: Path): VizLayout {
   const columns: VizNode[][] = []
 
   const source: VizNode = {
-    id: 'source', ttl: 0, ip: 'source', label: 'You', x: 0, y: 0,
-    lossRatio: 0, isSource: true, isDestination: false,
+    id: 'source',
+    ttl: 0,
+    ip: 'source',
+    label: 'You',
+    x: 0,
+    y: 0,
+    lossRatio: 0,
+    isSource: true,
+    isDestination: false,
   }
   columns.push([source])
 
@@ -109,7 +116,12 @@ function nodeId(ttl: number, ip: string) {
   return `${ttl}:${ip}`
 }
 
-function makeEdge(fromId: string, toId: string, byId: Map<string, VizNode>, lossRatio: number): VizEdge {
+function makeEdge(
+  fromId: string,
+  toId: string,
+  byId: Map<string, VizNode>,
+  lossRatio: number,
+): VizEdge {
   const a = byId.get(fromId)!
   const b = byId.get(toId)!
   return {

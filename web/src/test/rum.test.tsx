@@ -13,33 +13,55 @@ function fixture(): RUMResponse {
     rum_running: true,
     apps: [
       {
-        app: 'storefront', host: 'web.acme.example',
-        window_views: 120, error_rate: 0.12, p75_lcp_ms: 4200, p75_ttfb_ms: 300,
-        rum_degraded: true, synthetic_observed: true, synthetic_degraded: true,
+        app: 'storefront',
+        host: 'web.acme.example',
+        window_views: 120,
+        error_rate: 0.12,
+        p75_lcp_ms: 4200,
+        p75_ttfb_ms: 300,
+        rum_degraded: true,
+        synthetic_observed: true,
+        synthetic_degraded: true,
         verdict: 'user_impact_confirmed',
         pages: [{ page: '/checkout/:id', views: 80, error_rate: 0.15, p75_lcp_ms: 4600 }],
       },
       {
-        app: 'admin', host: 'admin.acme.example',
-        window_views: 40, error_rate: 0, p75_lcp_ms: 1200,
-        rum_degraded: false, synthetic_observed: true, synthetic_degraded: true,
+        app: 'admin',
+        host: 'admin.acme.example',
+        window_views: 40,
+        error_rate: 0,
+        p75_lcp_ms: 1200,
+        rum_degraded: false,
+        synthetic_observed: true,
+        synthetic_degraded: true,
         verdict: 'synthetic_only_no_user_impact',
         pages: [{ page: '/', views: 40, error_rate: 0 }],
       },
       {
-        app: 'docs', host: 'docs.acme.example',
-        window_views: 60, error_rate: 0.2, p75_lcp_ms: 5100,
-        rum_degraded: true, synthetic_observed: false, synthetic_degraded: false,
+        app: 'docs',
+        host: 'docs.acme.example',
+        window_views: 60,
+        error_rate: 0.2,
+        p75_lcp_ms: 5100,
+        rum_degraded: true,
+        synthetic_observed: false,
+        synthetic_degraded: false,
         verdict: 'user_only_synthetic_blind',
         pages: [{ page: '/guides', views: 60, error_rate: 0.2 }],
       },
     ],
     privacy: {
-      consent_required: true, url_redaction: true, ip_stored: false,
-      rejected_no_consent: 7, rejected_malformed: 1, rejected_invalid_field: 0,
+      consent_required: true,
+      url_redaction: true,
+      ip_stored: false,
+      rejected_no_consent: 7,
+      rejected_malformed: 1,
+      rejected_invalid_field: 0,
       accepted_page_views: 220,
     },
-    coverage_notes: ['RUM reflects pages instrumented with the probectl beacon and users who consented — uninstrumented apps and opted-out users are invisible, and absence of RUM data is not proof of health'],
+    coverage_notes: [
+      'RUM reflects pages instrumented with the probectl beacon and users who consented — uninstrumented apps and opted-out users are invisible, and absence of RUM data is not proof of health',
+    ],
   }
 }
 
@@ -57,7 +79,9 @@ describe('rum convergence on the DEM surface (S47b)', () => {
     vi.stubGlobal('fetch', stubWith(fixture()))
     renderApp('/endpoints')
 
-    const table = (await screen.findByRole('table', { name: /rum convergence by application/i })) as HTMLTableElement
+    const table = (await screen.findByRole('table', {
+      name: /rum convergence by application/i,
+    }))
     // The exit-criterion row: synthetic + RUM correlate for the same service.
     expect(within(table).getByText('storefront')).toBeInTheDocument()
     expect(within(table).getByText('user impact confirmed')).toBeInTheDocument()

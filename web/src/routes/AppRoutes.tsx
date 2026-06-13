@@ -40,7 +40,24 @@ export function AppRoutes() {
         <Route path="/compliance" element={<CompliancePage />} />
         <Route path="/outages" element={<OutagesPage />} />
         <Route path="/admin" element={<AdminPage />} />
-        {NAV.filter((n) => !['/targets', '/path', '/incidents', '/alerts', '/security', '/endpoints', '/ask', '/topology', '/cost', '/slos', '/compliance', '/outages', '/admin'].includes(n.to)).map((n) => (
+        {NAV.filter(
+          (n) =>
+            ![
+              '/targets',
+              '/path',
+              '/incidents',
+              '/alerts',
+              '/security',
+              '/endpoints',
+              '/ask',
+              '/topology',
+              '/cost',
+              '/slos',
+              '/compliance',
+              '/outages',
+              '/admin',
+            ].includes(n.to),
+        ).map((n) => (
           <Route key={n.to} path={n.to} element={<PlaceholderPage to={n.to} />} />
         ))}
         <Route path="/gallery" element={<Gallery />} />

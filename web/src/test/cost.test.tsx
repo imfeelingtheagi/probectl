@@ -30,12 +30,22 @@ function summaryFixture(): CostResponse {
       },
       chatty_pairs: [
         {
-          service: 'checkout', src_zone: 'us-east-1a', dst_zone: 'us-east-1b',
-          class: 'inter_az', bytes: 10 * 2 ** 30, usd: 0.1, chatty: true,
+          service: 'checkout',
+          src_zone: 'us-east-1a',
+          dst_zone: 'us-east-1b',
+          class: 'inter_az',
+          bytes: 10 * 2 ** 30,
+          usd: 0.1,
+          chatty: true,
         },
         {
-          service: 'inventory', src_zone: 'us-east-1b', dst_zone: 'us-east-1a',
-          class: 'inter_az', bytes: 2 ** 20, usd: 0, chatty: false,
+          service: 'inventory',
+          src_zone: 'us-east-1b',
+          dst_zone: 'us-east-1a',
+          class: 'inter_az',
+          bytes: 2 ** 20,
+          usd: 0,
+          chatty: false,
         },
       ],
       trend: [{ hour: '2026-06-04T12:00:00Z', bytes: 17 * 2 ** 30, usd: 0.38 }],
@@ -59,7 +69,9 @@ function stubWith(resp: CostResponse, carbon?: unknown) {
 const carbonFixture = {
   carbon_running: true,
   summary: {
-    total_bytes: 12 * 2 ** 30, total_kwh: 0.22, total_gco2e: 88,
+    total_bytes: 12 * 2 ** 30,
+    total_kwh: 0.22,
+    total_gco2e: 88,
     by_class: { inter_az: { bytes: 10 * 2 ** 30, kwh: 0.1, gco2e: 40 } },
     by_service: { checkout: { bytes: 10 * 2 ** 30, kwh: 0.1, gco2e: 40 } },
     by_team: {
@@ -68,8 +80,10 @@ const carbonFixture = {
     },
     trend: [],
     methodology: {
-      measured: false, grid_gco2e_per_kwh: 400,
-      source: 'fixed-network transmission coefficients (Aslan et al. 2017 band, scaled by locality); operator-set grid intensity',
+      measured: false,
+      grid_gco2e_per_kwh: 400,
+      source:
+        'fixed-network transmission coefficients (Aslan et al. 2017 band, scaled by locality); operator-set grid intensity',
       note: 'coefficient-based ESTIMATE of network transmission energy — not measured device power',
     },
   },

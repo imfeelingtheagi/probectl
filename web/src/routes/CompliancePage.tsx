@@ -90,7 +90,9 @@ export function CompliancePage() {
             <>
               {(data.coverage?.notes?.length ?? 0) > 0 && (
                 <div className={styles.coverage} role="note" aria-label="coverage caveats">
-                  {data.coverage?.notes?.map((n) => <span key={n}>{n}</span>)}
+                  {data.coverage?.notes?.map((n) => (
+                    <span key={n}>{n}</span>
+                  ))}
                 </div>
               )}
               <div className={styles.evidenceRow}>

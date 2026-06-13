@@ -44,7 +44,9 @@ export function useDiscover() {
   return useQuery({
     queryKey: ['ai', 'discover'],
     queryFn: () =>
-      apiFetch<{ proposals: DiscoverProposal[] }>('/ai/discover', { method: 'POST' }).then((r) => r.proposals),
+      apiFetch<{ proposals: DiscoverProposal[] }>('/ai/discover', { method: 'POST' }).then(
+        (r) => r.proposals,
+      ),
   })
 }
 

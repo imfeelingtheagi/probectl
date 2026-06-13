@@ -12,7 +12,9 @@ function brandStub(brand: unknown) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/branding')) return jsonResponse(brand)
-    return (defaultFetch() as unknown as (i: RequestInfo | URL, n?: RequestInit) => Promise<Response>)(input, init)
+    return (
+      defaultFetch()
+    )(input, init)
   }) as unknown as typeof fetch
 }
 
@@ -22,12 +24,15 @@ afterEach(() => {
 })
 
 describe('white-label branding (S-T4)', () => {
-  test('tenant A sees A\'s brand: tokens override on <html>, wordmark + title swap, logo renders', async () => {
-    vi.stubGlobal('fetch', brandStub({
-      product_name: 'AcmeWatch',
-      logo_data_uri: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
-      token_overrides: { '--color-accent': '#ff3300' },
-    }))
+  test("tenant A sees A's brand: tokens override on <html>, wordmark + title swap, logo renders", async () => {
+    vi.stubGlobal(
+      'fetch',
+      brandStub({
+        product_name: 'AcmeWatch',
+        logo_data_uri: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+        token_overrides: { '--color-accent': '#ff3300' },
+      }),
+    )
     renderApp('/targets')
     expect(await screen.findByText('AcmeWatch')).toBeInTheDocument()
     await waitFor(() => {
@@ -45,7 +50,10 @@ describe('white-label branding (S-T4)', () => {
   })
 
   test('no-bleed on the client: switching brands replaces overrides with NO residue', async () => {
-    applyBrand({ product_name: 'AcmeWatch', token_overrides: { '--color-accent': '#ff3300', '--color-bg': '#101418' } })
+    applyBrand({
+      product_name: 'AcmeWatch',
+      token_overrides: { '--color-accent': '#ff3300', '--color-bg': '#101418' },
+    })
     expect(document.documentElement.style.getPropertyValue('--color-bg')).toBe('#101418')
 
     // Brand B sets only the accent: A's bg override must VANISH.
@@ -59,9 +67,9 @@ describe('white-label branding (S-T4)', () => {
     applyBrand({
       product_name: 'X',
       token_overrides: {
-        '--space-4': '999px',                       // layout token: not brandable
+        '--space-4': '999px', // layout token: not brandable
         '--color-accent': 'url(https://evil.example)', // unsafe value
-        '--color-ok': '#00aa55',                    // fine
+        '--color-ok': '#00aa55', // fine
       },
     })
     expect(document.documentElement.style.getPropertyValue('--space-4')).toBe('')

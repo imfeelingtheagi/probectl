@@ -37,8 +37,9 @@ describe('design tokens', () => {
         })
       }
     }
-    expect(offenders, `hardcoded colors must move into tokens.css:\n${offenders.join('\n')}`).toEqual(
-      [],
-    )
+    expect(
+      offenders,
+      `hardcoded colors must move into tokens.css:\n${offenders.join('\n')}`,
+    ).toEqual([])
   })
 })

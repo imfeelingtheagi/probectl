@@ -118,7 +118,11 @@ function ActiveAlertDetail({ alert, onClose }: { alert: ActiveAlert; onClose: ()
           variant="secondary"
           disabled={silence.isPending}
           onClick={() =>
-            act(() => silence.mutateAsync({ fingerprint: alert.fingerprint, minutes: Number(minutes) }), 'Alert silenced')
+            act(
+              () =>
+                silence.mutateAsync({ fingerprint: alert.fingerprint, minutes: Number(minutes) }),
+              'Alert silenced',
+            )
           }
         >
           Silence
@@ -127,7 +131,12 @@ function ActiveAlertDetail({ alert, onClose }: { alert: ActiveAlert; onClose: ()
           <Button
             variant="ghost"
             disabled={silence.isPending}
-            onClick={() => act(() => silence.mutateAsync({ fingerprint: alert.fingerprint, minutes: 0 }), 'Silence cleared')}
+            onClick={() =>
+              act(
+                () => silence.mutateAsync({ fingerprint: alert.fingerprint, minutes: 0 }),
+                'Silence cleared',
+              )
+            }
           >
             Unsilence
           </Button>
@@ -135,7 +144,9 @@ function ActiveAlertDetail({ alert, onClose }: { alert: ActiveAlert; onClose: ()
         <Button
           variant="secondary"
           disabled={ack.isPending || !!alert.acked_by}
-          onClick={() => act(() => ack.mutateAsync({ fingerprint: alert.fingerprint }), 'Alert acknowledged')}
+          onClick={() =>
+            act(() => ack.mutateAsync({ fingerprint: alert.fingerprint }), 'Alert acknowledged')
+          }
         >
           {alert.acked_by ? 'Acknowledged' : 'Acknowledge'}
         </Button>
@@ -170,17 +181,22 @@ function RuleForm({ rule, onClose }: { rule?: AlertRule; onClose: () => void }) 
       severity,
       for_n: Number(forN) || 1,
       ...(type === 'threshold'
-        ? { comparison: comparison as AlertRuleInput['comparison'], threshold: Number(threshold) }
+        ? { comparison: comparison, threshold: Number(threshold) }
         : { window: Number(windowN) || 20, sensitivity: Number(sensitivity) || 3 }),
     }
     save.mutate(
       { id: rule?.id, input },
       {
         onSuccess: (saved) => {
-          push({ tone: 'success', title: rule ? 'Rule updated' : 'Rule created', message: saved.name })
+          push({
+            tone: 'success',
+            title: rule ? 'Rule updated' : 'Rule created',
+            message: saved.name,
+          })
           onClose()
         },
-        onError: (err) => push({ tone: 'danger', title: 'Save failed', message: (err as Error).message }),
+        onError: (err) =>
+          push({ tone: 'danger', title: 'Save failed', message: (err).message }),
       },
     )
   }
@@ -262,7 +278,8 @@ function RuleForm({ rule, onClose }: { rule?: AlertRule; onClose: () => void }) 
           hint="Consecutive breaches before firing (debounce)"
         />
         <label className={styles.check}>
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enabled
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />{' '}
+          Enabled
         </label>
         <div className={styles.actionsRow}>
           <Button type="submit" disabled={save.isPending}>
@@ -342,7 +359,9 @@ export function AlertsPage() {
       key: 'condition',
       header: 'Condition',
       render: (r) =>
-        r.type === 'threshold' ? `${r.comparison ?? 'gt'} ${r.threshold ?? 0}` : `baseline ±${r.sensitivity ?? 3}σ`,
+        r.type === 'threshold'
+          ? `${r.comparison ?? 'gt'} ${r.threshold ?? 0}`
+          : `baseline ±${r.sensitivity ?? 3}σ`,
     },
     {
       key: 'severity',
@@ -352,7 +371,9 @@ export function AlertsPage() {
     {
       key: 'enabled',
       header: 'Enabled',
-      render: (r) => <Badge tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'on' : 'off'}</Badge>,
+      render: (r) => (
+        <Badge tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'on' : 'off'}</Badge>
+      ),
     },
     {
       key: 'actions',
@@ -369,7 +390,8 @@ export function AlertsPage() {
             onClick={() =>
               del.mutate(r.id, {
                 onSuccess: () => push({ tone: 'success', title: 'Rule deleted', message: r.name }),
-                onError: (e) => push({ tone: 'danger', title: 'Delete failed', message: (e as Error).message }),
+                onError: (e) =>
+                  push({ tone: 'danger', title: 'Delete failed', message: (e).message }),
               })
             }
           >
@@ -383,90 +405,96 @@ export function AlertsPage() {
   return (
     <Page title="Alerts" subtitle="Firing alerts (engine truth) and the rules that drive them.">
       <div className={styles.stack}>
-      <Card>
-        <CardHeader
-          title="Active alerts"
-          actions={
-            <div className={styles.actionsRow}>
-              <Select
-                label="State"
-                value={stateFilter}
-                onChange={(e) => setStateFilter(e.target.value as StateFilter)}
-                options={[
-                  { value: 'all', label: 'All states' },
-                  { value: 'firing', label: 'Firing' },
-                  { value: 'silenced', label: 'Silenced' },
-                  { value: 'acked', label: 'Acknowledged' },
-                ]}
-              />
-              <Select
-                label="Severity"
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value as SeverityFilter)}
-                options={[
-                  { value: 'all', label: 'All severities' },
-                  { value: 'critical', label: 'Critical' },
-                  { value: 'warning', label: 'Warning' },
-                  { value: 'info', label: 'Info' },
-                ]}
-              />
-            </div>
-          }
-        />
-        <CardBody>
-          {active.isLoading ? (
-            <LoadingState label="Loading active alerts…" />
-          ) : active.isError ? (
-            <ErrorState description="Could not load active alerts." />
-          ) : (
-            <>
-              {active.data && !active.data.evaluator_running ? (
-                <p role="status" className={styles.notice}>
-                  <Badge tone="warning">evaluator off</Badge> The alert evaluator is not running for this tenant —
-                  firing state is unavailable (rules below remain editable).
-                </p>
-              ) : null}
-              <Table
-                caption="Active alerts"
-                columns={activeColumns}
-                rows={items}
-                rowKey={(a) => a.fingerprint}
-                empty={<EmptyState title="No active alerts" description="Nothing is firing for this tenant." />}
-              />
-            </>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Alert rules"
-          actions={<Button onClick={() => setCreating(true)}>Create rule</Button>}
-        />
-        <CardBody>
-          {rules.isLoading ? (
-            <LoadingState label="Loading rules…" />
-          ) : rules.isError ? (
-            <ErrorState description="Could not load alert rules." />
-          ) : (
-            <Table
-              caption="Alert rules"
-              columns={ruleColumns}
-              rows={rules.data ?? []}
-              rowKey={(r) => r.id}
-              empty={
-                <EmptyState
-                  title="No alert rules"
-                  description="Create a rule to start alerting on any probectl metric."
+        <Card>
+          <CardHeader
+            title="Active alerts"
+            actions={
+              <div className={styles.actionsRow}>
+                <Select
+                  label="State"
+                  value={stateFilter}
+                  onChange={(e) => setStateFilter(e.target.value as StateFilter)}
+                  options={[
+                    { value: 'all', label: 'All states' },
+                    { value: 'firing', label: 'Firing' },
+                    { value: 'silenced', label: 'Silenced' },
+                    { value: 'acked', label: 'Acknowledged' },
+                  ]}
                 />
-              }
-            />
-          )}
-        </CardBody>
-      </Card>
+                <Select
+                  label="Severity"
+                  value={severityFilter}
+                  onChange={(e) => setSeverityFilter(e.target.value as SeverityFilter)}
+                  options={[
+                    { value: 'all', label: 'All severities' },
+                    { value: 'critical', label: 'Critical' },
+                    { value: 'warning', label: 'Warning' },
+                    { value: 'info', label: 'Info' },
+                  ]}
+                />
+              </div>
+            }
+          />
+          <CardBody>
+            {active.isLoading ? (
+              <LoadingState label="Loading active alerts…" />
+            ) : active.isError ? (
+              <ErrorState description="Could not load active alerts." />
+            ) : (
+              <>
+                {active.data && !active.data.evaluator_running ? (
+                  <p role="status" className={styles.notice}>
+                    <Badge tone="warning">evaluator off</Badge> The alert evaluator is not running
+                    for this tenant — firing state is unavailable (rules below remain editable).
+                  </p>
+                ) : null}
+                <Table
+                  caption="Active alerts"
+                  columns={activeColumns}
+                  rows={items}
+                  rowKey={(a) => a.fingerprint}
+                  empty={
+                    <EmptyState
+                      title="No active alerts"
+                      description="Nothing is firing for this tenant."
+                    />
+                  }
+                />
+              </>
+            )}
+          </CardBody>
+        </Card>
 
+        <Card>
+          <CardHeader
+            title="Alert rules"
+            actions={<Button onClick={() => setCreating(true)}>Create rule</Button>}
+          />
+          <CardBody>
+            {rules.isLoading ? (
+              <LoadingState label="Loading rules…" />
+            ) : rules.isError ? (
+              <ErrorState description="Could not load alert rules." />
+            ) : (
+              <Table
+                caption="Alert rules"
+                columns={ruleColumns}
+                rows={rules.data ?? []}
+                rowKey={(r) => r.id}
+                empty={
+                  <EmptyState
+                    title="No alert rules"
+                    description="Create a rule to start alerting on any probectl metric."
+                  />
+                }
+              />
+            )}
+          </CardBody>
+        </Card>
       </div>
-      {detailAlert ? <ActiveAlertDetail alert={detailAlert} onClose={() => setDetail(null)} /> : null}
+      {detailAlert ? (
+        <ActiveAlertDetail alert={detailAlert} onClose={() => setDetail(null)} />
+      ) : null}
       {creating ? <RuleForm onClose={() => setCreating(false)} /> : null}
       {editing ? <RuleForm rule={editing} onClose={() => setEditing(null)} /> : null}
     </Page>

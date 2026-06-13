@@ -43,8 +43,13 @@ describe('path layout', () => {
     const hops = Array.from({ length: 30 }, (_, i) => ({
       ttl: i + 1,
       nodes: Array.from({ length: 4 }, (_, j) => ({
-        ip: `10.${i}.${j}.1`, sent: 3, received: 3, loss_ratio: 0,
-        rtt_min_ms: 1, rtt_avg_ms: 1, rtt_max_ms: 1,
+        ip: `10.${i}.${j}.1`,
+        sent: 3,
+        received: 3,
+        loss_ratio: 0,
+        rtt_min_ms: 1,
+        rtt_avg_ms: 1,
+        rtt_max_ms: 1,
       })),
     }))
     const dense: Path = { ...samplePath, hops, links: [] }

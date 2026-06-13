@@ -71,7 +71,10 @@ export function causeLabel(cause?: string): string {
 
 /** causeTone maps a cause to a badge tone: the user-side layers read as
  *  warnings ("it's your WiFi"), the network side as danger ("it's on us"). */
-export function causeTone(cause?: string, slow?: boolean): 'success' | 'warning' | 'danger' | 'neutral' {
+export function causeTone(
+  cause?: string,
+  slow?: boolean,
+): 'success' | 'warning' | 'danger' | 'neutral' {
   if (!slow || cause === 'none') return 'success'
   if (cause === 'wifi' || cause === 'local' || cause === 'isp') return 'warning'
   if (cause === 'network') return 'danger'

@@ -22,7 +22,14 @@ function fixture(): ComplianceResponse {
         violations: 2,
         observed_pairs: 2,
         samples: [
-          { src: '10.20.1.5', dst: '10.10.2.9', dst_port: 443, bytes: 4096, source: 'flow', at: '2026-06-04T12:00:00Z' },
+          {
+            src: '10.20.1.5',
+            dst: '10.10.2.9',
+            dst_port: 443,
+            bytes: 4096,
+            source: 'flow',
+            at: '2026-06-04T12:00:00Z',
+          },
         ],
         first_violated: '2026-06-04T12:00:00Z',
         last_violated: '2026-06-04T12:01:00Z',
@@ -76,7 +83,9 @@ describe('compliance / segmentation validation (S46)', () => {
     vi.stubGlobal('fetch', stubWith(fixture()))
     renderApp('/compliance')
 
-    const table = (await screen.findByRole('table', { name: /segmentation verdicts/i })) as HTMLTableElement
+    const table = (await screen.findByRole('table', {
+      name: /segmentation verdicts/i,
+    }))
     expect(within(table).getByText('violation')).toBeInTheDocument()
     expect(within(table).getByText('observed clean')).toBeInTheDocument()
     // The honest verdict: never "compliant" for unobserved pairs.

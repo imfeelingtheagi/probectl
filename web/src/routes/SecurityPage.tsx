@@ -19,12 +19,7 @@ import {
   type Column,
 } from '../components'
 import { severityTone } from '../api/incidents'
-import {
-  daysUntil,
-  findingLabel,
-  useTLSPosture,
-  type TLSPosture,
-} from '../api/tls'
+import { daysUntil, findingLabel, useTLSPosture, type TLSPosture } from '../api/tls'
 import { useDetections, type Detection } from '../api/threat'
 
 function when(iso?: string): string {
@@ -193,8 +188,8 @@ function DetectionDetail({ detection, onClose }: { detection: Detection; onClose
         <dd>{when(detection.observed_at)}</dd>
       </dl>
       <p className={styles.notice}>
-        A confidence-scored signal from {detection.source ?? 'a threat feed'} — feeds can list benign
-        infrastructure, and probectl never blocks traffic. Verify before acting.
+        A confidence-scored signal from {detection.source ?? 'a threat feed'} — feeds can list
+        benign infrastructure, and probectl never blocks traffic. Verify before acting.
       </p>
       <div className={styles.actionsRow}>
         {detection.incident_id ? (
@@ -220,7 +215,10 @@ function DetectionsCard() {
   const [detailID, setDetailID] = useState<string | null>(null)
 
   const items = useMemo(() => detections.data?.items ?? [], [detections.data])
-  const sources = useMemo(() => Array.from(new Set(items.map((d) => d.source ?? 'unknown'))).sort(), [items])
+  const sources = useMemo(
+    () => Array.from(new Set(items.map((d) => d.source ?? 'unknown'))).sort(),
+    [items],
+  )
 
   const filtered = useMemo(() => {
     const q = needle.trim().toLowerCase()
@@ -244,7 +242,8 @@ function DetectionsCard() {
       key: 'confidence',
       header: 'Confidence',
       numeric: true,
-      render: (d) => (typeof d.confidence === 'number' && d.confidence > 0 ? String(d.confidence) : '—'),
+      render: (d) =>
+        typeof d.confidence === 'number' && d.confidence > 0 ? String(d.confidence) : '—',
     },
     { key: 'entity', header: 'Entity', render: (d) => d.entity },
     { key: 'indicator', header: 'Indicator', render: (d) => d.indicator ?? '—' },
@@ -299,7 +298,10 @@ function DetectionsCard() {
               label="Source"
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
-              options={[{ value: 'all', label: 'All sources' }, ...sources.map((s) => ({ value: s, label: s }))]}
+              options={[
+                { value: 'all', label: 'All sources' },
+                ...sources.map((s) => ({ value: s, label: s })),
+              ]}
             />
           </div>
         }
@@ -313,8 +315,8 @@ function DetectionsCard() {
           <>
             {detections.data && !detections.data.detections_running ? (
               <p role="status" className={styles.notice}>
-                <Badge tone="warning">detections off</Badge> The threat consumers are not wired — enable
-                threat-intel feeds (S28) to populate triage.
+                <Badge tone="warning">detections off</Badge> The threat consumers are not wired —
+                enable threat-intel feeds (S28) to populate triage.
               </p>
             ) : null}
             <Table
@@ -337,7 +339,15 @@ function DetectionsCard() {
   )
 }
 
-type FlagFilter = 'all' | 'flagged' | 'expiring' | 'expired' | 'weak' | 'self_signed' | 'ct' | 'intel'
+type FlagFilter =
+  | 'all'
+  | 'flagged'
+  | 'expiring'
+  | 'expired'
+  | 'weak'
+  | 'self_signed'
+  | 'ct'
+  | 'intel'
 
 function matchesFlag(p: TLSPosture, f: FlagFilter): boolean {
   const kinds = (p.findings ?? []).map((x) => x.kind)
@@ -351,7 +361,9 @@ function matchesFlag(p: TLSPosture, f: FlagFilter): boolean {
     case 'expired':
       return kinds.includes('cert_expired')
     case 'weak':
-      return kinds.some((k) => k === 'weak_key' || k === 'weak_cipher' || k === 'deprecated_protocol')
+      return kinds.some(
+        (k) => k === 'weak_key' || k === 'weak_cipher' || k === 'deprecated_protocol',
+      )
     case 'self_signed':
       return kinds.includes('cert_self_signed')
     case 'ct':
@@ -420,7 +432,10 @@ export function SecurityPage() {
   ]
 
   return (
-    <Page title="Security" subtitle="Threat triage and certificate posture from observed traffic — signals, never blocks.">
+    <Page
+      title="Security"
+      subtitle="Threat triage and certificate posture from observed traffic — signals, never blocks."
+    >
       <div className={styles.stack}>
         <DetectionsCard />
         <Card>
@@ -434,7 +449,12 @@ export function SecurityPage() {
                 columns={columns}
                 rows={worklist}
                 rowKey={(p) => `wl-${p.target}`}
-                empty={<EmptyState title="Nothing expiring" description="No certificate expires within 30 days." />}
+                empty={
+                  <EmptyState
+                    title="Nothing expiring"
+                    description="No certificate expires within 30 days."
+                  />
+                }
               />
             )}
           </CardBody>
@@ -478,8 +498,8 @@ export function SecurityPage() {
               <>
                 {posture.data && !posture.data.collector_running ? (
                   <p role="status" className={styles.notice}>
-                    <Badge tone="warning">collector off</Badge> The TLS posture collector is not wired — run HTTPS
-                    synthetic tests to populate the inventory.
+                    <Badge tone="warning">collector off</Badge> The TLS posture collector is not
+                    wired — run HTTPS synthetic tests to populate the inventory.
                   </p>
                 ) : null}
                 <Table
@@ -500,7 +520,9 @@ export function SecurityPage() {
         </Card>
       </div>
 
-      {detailPosture ? <PostureDetail posture={detailPosture} onClose={() => setDetail(null)} /> : null}
+      {detailPosture ? (
+        <PostureDetail posture={detailPosture} onClose={() => setDetail(null)} />
+      ) : null}
     </Page>
   )
 }

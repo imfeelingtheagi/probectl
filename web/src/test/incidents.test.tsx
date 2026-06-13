@@ -43,7 +43,7 @@ function stubIncidents(items: unknown[] = [incident]) {
       if (url.endsWith('/v1/incidents')) return jsonResponse({ items })
       if (url.endsWith('/v1/incidents/inc-1')) return jsonResponse(incident)
       return jsonResponse({ error: { code: 'not_found', message: 'no route' } }, 404)
-    }) as unknown as typeof fetch,
+    }),
   )
 }
 

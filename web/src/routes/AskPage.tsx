@@ -1,7 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import styles from './ask.module.css'
 import { Page } from './pages'
-import { Badge, Button, Card, CardBody, CardHeader, EmptyState, ErrorState, LoadingState } from '../components'
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from '../components'
 import { confidenceTone, useAsk, useSubmitFeedback, type Answer, type Evidence } from '../api/ai'
 
 function when(iso?: string): string {
@@ -60,7 +69,12 @@ export function AskPage() {
             <div className={styles.formRow}>
               <div className={styles.examples}>
                 {EXAMPLES.map((ex) => (
-                  <button key={ex} type="button" className={styles.example} onClick={() => setQuestion(ex)}>
+                  <button
+                    key={ex}
+                    type="button"
+                    className={styles.example}
+                    onClick={() => setQuestion(ex)}
+                  >
                     {ex}
                   </button>
                 ))}
@@ -122,7 +136,9 @@ function AnswerView({ answer }: { answer: Answer }) {
     }
     groups[gi].items.push(e)
   })
-  groups.forEach((g) => g.items.sort((a, b) => (b.occurred_at ?? '').localeCompare(a.occurred_at ?? '')))
+  groups.forEach((g) =>
+    g.items.sort((a, b) => (b.occurred_at ?? '').localeCompare(a.occurred_at ?? '')),
+  )
   const planes = groups.map((g) => g.plane)
 
   function focusEvidence(id: string) {
@@ -135,12 +151,19 @@ function AnswerView({ answer }: { answer: Answer }) {
       <Card>
         <CardHeader
           title="Root cause"
-          actions={<Badge tone={confidenceTone(answer.confidence)}>{`${answer.confidence} confidence`}</Badge>}
+          actions={
+            <Badge
+              tone={confidenceTone(answer.confidence)}
+            >{`${answer.confidence} confidence`}</Badge>
+          }
         />
         <CardBody>
           <p className={styles.rootCause}>{answer.root_cause}</p>
           {answer.insufficient_evidence ? (
-            <p className={styles.note}>probectl did not find enough evidence to name a confident root cause — it will not guess.</p>
+            <p className={styles.note}>
+              probectl did not find enough evidence to name a confident root cause — it will not
+              guess.
+            </p>
           ) : null}
           <p className={styles.provenance}>
             {`Synthesized by ${answer.model} · grounded in ${answer.evidence.length} signal(s) across ${planes.length} plane(s)${
@@ -186,7 +209,11 @@ function AnswerView({ answer }: { answer: Answer }) {
           <CardHeader title="Evidence" />
           <CardBody>
             {groups.map((g) => (
-              <section key={g.plane} className={styles.planeGroup} aria-label={`${g.plane} signals`}>
+              <section
+                key={g.plane}
+                className={styles.planeGroup}
+                aria-label={`${g.plane} signals`}
+              >
                 <h3 className={styles.planeHeader}>{g.plane}</h3>
                 <ul className={styles.evidence}>
                   {g.items.map((e) => {
@@ -196,14 +223,22 @@ function AnswerView({ answer }: { answer: Answer }) {
                         key={e.id}
                         id={`ev-${e.id}`}
                         tabIndex={-1}
-                        className={[styles.evItem, highlighted === e.id ? styles.evHighlight : ''].filter(Boolean).join(' ')}
+                        className={[styles.evItem, highlighted === e.id ? styles.evHighlight : '']
+                          .filter(Boolean)
+                          .join(' ')}
                       >
                         <span className={styles.evId}>{e.id}</span>
                         <div className={styles.evBody}>
                           <div className={styles.evRow}>
                             {e.severity ? <Badge tone="neutral">{e.severity}</Badge> : null}
-                            {e.occurred_at ? <span className={styles.evTime}>{when(e.occurred_at)}</span> : null}
-                            {cites ? <span className={styles.citedBy}>{`Cited in finding ${cites.join(', ')}`}</span> : null}
+                            {e.occurred_at ? (
+                              <span className={styles.evTime}>{when(e.occurred_at)}</span>
+                            ) : null}
+                            {cites ? (
+                              <span
+                                className={styles.citedBy}
+                              >{`Cited in finding ${cites.join(', ')}`}</span>
+                            ) : null}
                           </div>
                           <p className={styles.evTitle}>{e.title || e.ref || e.id}</p>
                           {e.summary ? <p className={styles.evSummary}>{e.summary}</p> : null}
@@ -255,7 +290,12 @@ function AnswerView({ answer }: { answer: Answer }) {
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    feedback.mutate({ answer_id: answer.id, rating: 'up', comment: comment || undefined, question: answer.question })
+                    feedback.mutate({
+                      answer_id: answer.id,
+                      rating: 'up',
+                      comment: comment || undefined,
+                      question: answer.question,
+                    })
                   }
                   disabled={feedback.isPending}
                 >
@@ -264,7 +304,12 @@ function AnswerView({ answer }: { answer: Answer }) {
                 <Button
                   variant="secondary"
                   onClick={() =>
-                    feedback.mutate({ answer_id: answer.id, rating: 'down', comment: comment || undefined, question: answer.question })
+                    feedback.mutate({
+                      answer_id: answer.id,
+                      rating: 'down',
+                      comment: comment || undefined,
+                      question: answer.question,
+                    })
                   }
                   disabled={feedback.isPending}
                 >

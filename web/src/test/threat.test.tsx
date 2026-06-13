@@ -11,16 +11,32 @@ import type { Detection } from '../api/threat'
 function detectionFixtures(): Detection[] {
   return [
     {
-      id: 'det-2', kind: 'ioc.botnet', plane: 'threat', severity: 'critical', confidence: 90,
-      source: 'feodo', category: 'botnet', license: 'non-commercial', indicator: '203.0.113.66',
+      id: 'det-2',
+      kind: 'ioc.botnet',
+      plane: 'threat',
+      severity: 'critical',
+      confidence: 90,
+      source: 'feodo',
+      category: 'botnet',
+      license: 'non-commercial',
+      indicator: '203.0.113.66',
       entity: '203.0.113.66',
       title: '203.0.113.66 matches threat-intel indicator (botnet, source feodo)',
-      summary: '203.0.113.66 matched threat-intel indicator 203.0.113.66 from feodo (confidence 90)',
-      incident_id: 'inc-42', observed_at: '2026-06-04T12:05:00Z',
+      summary:
+        '203.0.113.66 matched threat-intel indicator 203.0.113.66 from feodo (confidence 90)',
+      incident_id: 'inc-42',
+      observed_at: '2026-06-04T12:05:00Z',
     },
     {
-      id: 'det-1', kind: 'ioc.tor', plane: 'threat', severity: 'info', confidence: 40,
-      source: 'tor-exits', category: 'tor', indicator: '198.51.100.9', entity: '198.51.100.9',
+      id: 'det-1',
+      kind: 'ioc.tor',
+      plane: 'threat',
+      severity: 'info',
+      confidence: 40,
+      source: 'tor-exits',
+      category: 'tor',
+      indicator: '198.51.100.9',
+      entity: '198.51.100.9',
       title: '198.51.100.9 matches threat-intel indicator (tor, source tor-exits)',
       observed_at: '2026-06-04T12:00:00Z',
     },
@@ -32,12 +48,19 @@ function threatBackend(items: Detection[]) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     state.requests.push(`${init?.method ?? 'GET'} ${url}`)
-    if (url.endsWith('/v1/threat/detections')) return jsonResponse({ items, detections_running: true })
+    if (url.endsWith('/v1/threat/detections'))
+      return jsonResponse({ items, detections_running: true })
     if (url.endsWith('/v1/tls/posture')) return jsonResponse({ items: [], collector_running: true })
     const inc42 = {
-      id: 'inc-42', tenant_id: 't', status: 'open', severity: 'critical',
-      title: 'Threat-intel match on 203.0.113.66', target: '203.0.113.66',
-      started_at: '2026-06-04T12:05:00Z', last_seen_at: '2026-06-04T12:05:00Z', signal_count: 1,
+      id: 'inc-42',
+      tenant_id: 't',
+      status: 'open',
+      severity: 'critical',
+      title: 'Threat-intel match on 203.0.113.66',
+      target: '203.0.113.66',
+      started_at: '2026-06-04T12:05:00Z',
+      last_seen_at: '2026-06-04T12:05:00Z',
+      signal_count: 1,
       signals: [],
     }
     if (url.endsWith('/v1/incidents')) return jsonResponse({ items: [inc42] })
@@ -76,16 +99,18 @@ describe('threat/IOC triage surface (S-FE3)', () => {
     renderApp('/security')
 
     const tbl = within(await screen.findByRole('table', { name: 'Threat detections' }))
-    await userEvent.click(within(tbl.getAllByRole('row')[1]).getByRole('button', { name: 'Details' }))
+    await userEvent.click(
+      within(tbl.getAllByRole('row')[1]).getByRole('button', { name: 'Details' }),
+    )
     const dialog = await screen.findByRole('dialog')
 
     expect(within(dialog).getByText('confidence 90')).toBeDefined()
     expect(within(dialog).getByText(/feodo · botnet · license: non-commercial/)).toBeDefined()
     expect(within(dialog).getByText(/feeds can list benign infrastructure/)).toBeDefined()
     expect(within(dialog).getByText(/never blocks/)).toBeDefined()
-    expect(within(dialog).getByRole('link', { name: 'Open incident timeline' }).getAttribute('href')).toBe(
-      '/incidents?incident=inc-42',
-    )
+    expect(
+      within(dialog).getByRole('link', { name: 'Open incident timeline' }).getAttribute('href'),
+    ).toBe('/incidents?incident=inc-42')
   })
 
   test('pivoting to the incident opens its timeline (deep link honored)', async () => {
@@ -94,11 +119,15 @@ describe('threat/IOC triage surface (S-FE3)', () => {
     renderApp('/security')
 
     const tbl = within(await screen.findByRole('table', { name: 'Threat detections' }))
-    await userEvent.click(within(tbl.getAllByRole('row')[1]).getByRole('link', { name: 'timeline' }))
+    await userEvent.click(
+      within(tbl.getAllByRole('row')[1]).getByRole('link', { name: 'timeline' }),
+    )
     // The incidents page mounts...
     await screen.findByRole('heading', { name: /^incidents$/i })
     // ...and selects inc-42 from the query param, loading its timeline.
-    expect((await screen.findAllByText('Threat-intel match on 203.0.113.66')).length).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText('Threat-intel match on 203.0.113.66')).length,
+    ).toBeGreaterThan(0)
   })
 
   test('filters by severity and source', async () => {
@@ -107,14 +136,27 @@ describe('threat/IOC triage surface (S-FE3)', () => {
     renderApp('/security')
     await screen.findByRole('table', { name: 'Threat detections' })
 
-    await userEvent.selectOptions(screen.getByLabelText('Min severity', { selector: 'select' }), 'critical')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Min severity', { selector: 'select' }),
+      'critical',
+    )
     await waitFor(() => {
-      expect(within(screen.getByRole('table', { name: 'Threat detections' })).getAllByRole('row').length).toBe(2)
+      expect(
+        within(screen.getByRole('table', { name: 'Threat detections' })).getAllByRole('row').length,
+      ).toBe(2)
     })
-    await userEvent.selectOptions(screen.getByLabelText('Min severity', { selector: 'select' }), 'all')
-    await userEvent.selectOptions(screen.getByLabelText('Source', { selector: 'select' }), 'tor-exits')
+    await userEvent.selectOptions(
+      screen.getByLabelText('Min severity', { selector: 'select' }),
+      'all',
+    )
+    await userEvent.selectOptions(
+      screen.getByLabelText('Source', { selector: 'select' }),
+      'tor-exits',
+    )
     await waitFor(() => {
-      const rows = within(screen.getByRole('table', { name: 'Threat detections' })).getAllByRole('row')
+      const rows = within(screen.getByRole('table', { name: 'Threat detections' })).getAllByRole(
+        'row',
+      )
       expect(rows.length).toBe(2)
       expect(within(rows[1]).getAllByText('198.51.100.9').length).toBeGreaterThan(0)
     })
@@ -134,8 +176,10 @@ describe('threat/IOC triage surface (S-FE3)', () => {
   test('detections-off is stated, not guessed', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.endsWith('/v1/threat/detections')) return jsonResponse({ items: [], detections_running: false })
-      if (url.endsWith('/v1/tls/posture')) return jsonResponse({ items: [], collector_running: true })
+      if (url.endsWith('/v1/threat/detections'))
+        return jsonResponse({ items: [], detections_running: false })
+      if (url.endsWith('/v1/tls/posture'))
+        return jsonResponse({ items: [], collector_running: true })
       return jsonResponse({ items: [] })
     }) as unknown as typeof fetch
     vi.stubGlobal('fetch', fetcher)

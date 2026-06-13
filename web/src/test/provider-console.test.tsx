@@ -9,18 +9,76 @@ import { jsonResponse, defaultFetch } from './fetchStub'
  *  separate privilege domain (no tenant shell, no tenant indicator), hidden
  *  behind a 404 when the deployment is unlicensed. */
 
-const operator = { id: 'op_1', email: 'root@msp.example', name: 'Root', role: 'admin', status: 'active', enrolled: true }
+const operator = {
+  id: 'op_1',
+  email: 'root@msp.example',
+  name: 'Root',
+  role: 'admin',
+  status: 'active',
+  enrolled: true,
+}
 const tenants = [
-  { id: 'tn_1', slug: 'acme', name: 'Acme Industries', status: 'active', isolation_model: 'pooled', created_at: '2026-06-01T00:00:00Z' },
-  { id: 'tn_2', slug: 'globex', name: 'Globex', status: 'suspended', isolation_model: 'siloed', residency: 'eu', created_at: '2026-06-02T00:00:00Z' },
+  {
+    id: 'tn_1',
+    slug: 'acme',
+    name: 'Acme Industries',
+    status: 'active',
+    isolation_model: 'pooled',
+    created_at: '2026-06-01T00:00:00Z',
+  },
+  {
+    id: 'tn_2',
+    slug: 'globex',
+    name: 'Globex',
+    status: 'suspended',
+    isolation_model: 'siloed',
+    residency: 'eu',
+    created_at: '2026-06-02T00:00:00Z',
+  },
 ]
 const fleet = [
-  { tenant_id: 'tn_1', tenant_slug: 'acme', tenant_name: 'Acme Industries', tenant_status: 'active', agents_total: 3, agents_online: 2, agents_stale: 1, versions: { '0.3.0': 3 } },
-  { tenant_id: 'tn_2', tenant_slug: 'globex', tenant_name: 'Globex', tenant_status: 'suspended', agents_total: 1, agents_online: 1, agents_stale: 0, versions: { '0.2.9': 1 } },
+  {
+    tenant_id: 'tn_1',
+    tenant_slug: 'acme',
+    tenant_name: 'Acme Industries',
+    tenant_status: 'active',
+    agents_total: 3,
+    agents_online: 2,
+    agents_stale: 1,
+    versions: { '0.3.0': 3 },
+  },
+  {
+    tenant_id: 'tn_2',
+    tenant_slug: 'globex',
+    tenant_name: 'Globex',
+    tenant_status: 'suspended',
+    agents_total: 1,
+    agents_online: 1,
+    agents_stale: 0,
+    versions: { '0.2.9': 1 },
+  },
 ]
 const grants = [
-  { id: 'bg_1', operator_email: 'root@msp.example', tenant_id: 'tn_1', reason: 'incident #42', scope: 'read', expires_at: '2026-06-05T12:00:00Z', use_count: 2, state: 'active' },
-  { id: 'bg_2', operator_email: 'root@msp.example', tenant_id: 'tn_2', reason: 'migration check', scope: 'read', expires_at: '2026-06-05T12:00:00Z', use_count: 0, state: 'pending' },
+  {
+    id: 'bg_1',
+    operator_email: 'root@msp.example',
+    tenant_id: 'tn_1',
+    reason: 'incident #42',
+    scope: 'read',
+    expires_at: '2026-06-05T12:00:00Z',
+    use_count: 2,
+    state: 'active',
+  },
+  {
+    id: 'bg_2',
+    operator_email: 'root@msp.example',
+    tenant_id: 'tn_2',
+    reason: 'migration check',
+    scope: 'read',
+    expires_at: '2026-06-05T12:00:00Z',
+    use_count: 0,
+    state: 'pending',
+  },
 ]
 
 function providerStub(opts?: { loggedIn?: boolean; readOnly?: boolean }) {
@@ -29,23 +87,70 @@ function providerStub(opts?: { loggedIn?: boolean; readOnly?: boolean }) {
     const url = String(input)
     const method = init?.method ?? 'GET'
     if (url.endsWith('/provider/v1/me'))
-      return loggedIn ? jsonResponse({ operator }) : jsonResponse({ error: { code: 'unauthorized', message: 'no session' } }, 401)
+      return loggedIn
+        ? jsonResponse({ operator })
+        : jsonResponse({ error: { code: 'unauthorized', message: 'no session' } }, 401)
     if (url.endsWith('/provider/v1/auth/login') && method === 'POST')
       return jsonResponse({ operator, token: 't' })
     if (url.endsWith('/provider/v1/license'))
-      return jsonResponse({ tier: 'provider', state: opts?.readOnly ? 'read_only' : 'active', customer: 'MSP Test GmbH', tenant_band: 25 })
-    if (url.endsWith('/provider/v1/tenants') && method === 'GET') return jsonResponse({ items: tenants })
+      return jsonResponse({
+        tier: 'provider',
+        state: opts?.readOnly ? 'read_only' : 'active',
+        customer: 'MSP Test GmbH',
+        tenant_band: 25,
+      })
+    if (url.endsWith('/provider/v1/tenants') && method === 'GET')
+      return jsonResponse({ items: tenants })
     if (url.endsWith('/provider/v1/tenants') && method === 'POST')
-      return jsonResponse({ id: 'tn_new', slug: 'silo-co', name: 'Silo Co', status: 'active', isolation_model: 'siloed', residency: 'eu' }, 201)
+      return jsonResponse(
+        {
+          id: 'tn_new',
+          slug: 'silo-co',
+          name: 'Silo Co',
+          status: 'active',
+          isolation_model: 'siloed',
+          residency: 'eu',
+        },
+        201,
+      )
     if (url.endsWith('/provider/v1/fleet')) return jsonResponse({ items: fleet })
-    if (url.endsWith('/provider/v1/breakglass') && method === 'GET') return jsonResponse({ items: grants })
-    if (url.endsWith('/provider/v1/operators') && method === 'GET') return jsonResponse({ items: [operator] })
+    if (url.endsWith('/provider/v1/breakglass') && method === 'GET')
+      return jsonResponse({ items: grants })
+    if (url.endsWith('/provider/v1/operators') && method === 'GET')
+      return jsonResponse({ items: [operator] })
     if (url.includes('/provider/v1/usage') && method === 'GET')
       return jsonResponse({
         items: [
-          { tenant_id: 'tn_1', tenant_slug: 'acme', meter: 'results_ingested', kind: 'counter', period_start: '2026-06-05T00:00:00Z', period_end: '2026-06-06T00:00:00Z', value: 1042, unit: 'count' },
-          { tenant_id: 'tn_1', tenant_slug: 'acme', meter: 'agents', kind: 'gauge', period_start: '2026-06-05T00:00:00Z', period_end: '2026-06-06T00:00:00Z', value: 3, unit: 'count' },
-          { tenant_id: 'tn_2', tenant_slug: 'globex', meter: 'ai_calls', kind: 'counter', period_start: '2026-06-05T00:00:00Z', period_end: '2026-06-06T00:00:00Z', value: 7, unit: 'count' },
+          {
+            tenant_id: 'tn_1',
+            tenant_slug: 'acme',
+            meter: 'results_ingested',
+            kind: 'counter',
+            period_start: '2026-06-05T00:00:00Z',
+            period_end: '2026-06-06T00:00:00Z',
+            value: 1042,
+            unit: 'count',
+          },
+          {
+            tenant_id: 'tn_1',
+            tenant_slug: 'acme',
+            meter: 'agents',
+            kind: 'gauge',
+            period_start: '2026-06-05T00:00:00Z',
+            period_end: '2026-06-06T00:00:00Z',
+            value: 3,
+            unit: 'count',
+          },
+          {
+            tenant_id: 'tn_2',
+            tenant_slug: 'globex',
+            meter: 'ai_calls',
+            kind: 'counter',
+            period_start: '2026-06-05T00:00:00Z',
+            period_end: '2026-06-06T00:00:00Z',
+            value: 7,
+            unit: 'count',
+          },
         ],
         meters: ['agents', 'tests', 'results_ingested', 'ingest_bytes', 'flow_events', 'ai_calls'],
       })
@@ -57,7 +162,14 @@ function providerStub(opts?: { loggedIn?: boolean; readOnly?: boolean }) {
           {
             tenant_id: 'tn_1',
             policy: { results_per_sec: 100, queries_per_min: 60, burst_seconds: 10 },
-            ingest: { results_ingested: { admitted_calls: 900, admitted_units: 900, shed_calls: 40, shed_units: 40 } },
+            ingest: {
+              results_ingested: {
+                admitted_calls: 900,
+                admitted_units: 900,
+                shed_calls: 40,
+                shed_units: 40,
+              },
+            },
             queries: { allowed: 50, rejected_concurrency: 0, rejected_budget: 13, in_flight: 1 },
           },
           {
@@ -70,15 +182,32 @@ function providerStub(opts?: { loggedIn?: boolean; readOnly?: boolean }) {
         overrides: {},
       })
     if (url.includes('/provider/v1/tenants/tn_1/fairness') && method === 'PUT')
-      return jsonResponse({ results_per_sec: 250, flow_events_per_sec: 0, queries_per_min: 0, query_concurrency: 4 })
+      return jsonResponse({
+        results_per_sec: 250,
+        flow_events_per_sec: 0,
+        queries_per_min: 0,
+        query_concurrency: 4,
+      })
     if (url.includes('/provider/v1/tenants/tn_1/governance') && method === 'GET')
       return jsonResponse({
-        classifications: { ip_address: 'pii', hostname: 'internal', credential: 'restricted', email: 'pii', asn: 'public' },
-        redact_from: 'pii', redact_export: false, residency: 'eu', isolation_model: 'siloed', retention_days: 30, byok: 'byok',
+        classifications: {
+          ip_address: 'pii',
+          hostname: 'internal',
+          credential: 'restricted',
+          email: 'pii',
+          asn: 'public',
+        },
+        redact_from: 'pii',
+        redact_export: false,
+        residency: 'eu',
+        isolation_model: 'siloed',
+        retention_days: 30,
+        byok: 'byok',
       })
     if (url.includes('/provider/v1/tenants/tn_1/governance') && method === 'PUT')
       return jsonResponse({ ok: true })
-    if (url.endsWith('/provider/v1/branding') && method === 'GET') return jsonResponse({ product_name: '' })
+    if (url.endsWith('/provider/v1/branding') && method === 'GET')
+      return jsonResponse({ product_name: '' })
     if (url.includes('/provider/v1/tenants/tn_1/branding') && method === 'PUT')
       return jsonResponse({ tenant_id: 'tn_1', product_name: 'AcmeWatch' })
     if (url.includes('/provider/v1/tenants/tn_1/suspend') && method === 'POST')
@@ -113,7 +242,9 @@ describe('provider console (S-T1)', () => {
     renderApp('/provider')
 
     // Tenant inventory with lifecycle states.
-    const tenantsTable = (await screen.findByRole('table', { name: /tenant inventory/i })) as HTMLTableElement
+    const tenantsTable = (await screen.findByRole('table', {
+      name: /tenant inventory/i,
+    }))
     const acmeRow = within(tenantsTable).getByText('acme').closest('tr')!
     expect(within(acmeRow).getByText('Active')).toBeInTheDocument()
     expect(within(acmeRow).getByRole('button', { name: /suspend/i })).toBeInTheDocument()
@@ -122,13 +253,17 @@ describe('provider console (S-T1)', () => {
     expect(within(globexRow).getByRole('button', { name: /resume/i })).toBeInTheDocument()
 
     // Fleet: per-tenant counts + versions, metadata only.
-    const fleetTable = (await screen.findByRole('table', { name: /fleet across tenants/i })) as HTMLTableElement
+    const fleetTable = (await screen.findByRole('table', {
+      name: /fleet across tenants/i,
+    }))
     const fleetAcme = within(fleetTable).getByText('acme').closest('tr')!
     expect(within(fleetAcme).getByText('2/3')).toBeInTheDocument()
     expect(within(fleetAcme).getByText('0.3.0×3')).toBeInTheDocument()
 
     // Break-glass: states + audited use count.
-    const bgTable = (await screen.findByRole('table', { name: /break-glass grants/i })) as HTMLTableElement
+    const bgTable = (await screen.findByRole('table', {
+      name: /break-glass grants/i,
+    }))
     const active = within(bgTable).getByText('incident #42').closest('tr')!
     expect(within(active).getByText('active')).toBeInTheDocument()
     expect(within(active).getByText('2')).toBeInTheDocument() // audited uses
@@ -161,10 +296,15 @@ describe('provider console (S-T1)', () => {
     await userEvent.click(screen.getByRole('button', { name: /save governance/i }))
     expect(await screen.findByText(/governance policy saved/i)).toBeInTheDocument()
     const put = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c) => String(c[0]).includes('/tenants/tn_1/governance') && (c[1] as RequestInit)?.method === 'PUT',
+      (c) =>
+        String(c[0]).includes('/tenants/tn_1/governance') &&
+        (c[1] as RequestInit)?.method === 'PUT',
     )
     expect(put).toBeTruthy()
-    expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({ redact_from: 'pii', redact_export: true })
+    expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({
+      redact_from: 'pii',
+      redact_export: true,
+    })
   })
 
   test('S-T7 fairness: accounting renders (shed + rejections flagged) and the policy PUT sends the right payload', async () => {
@@ -184,7 +324,8 @@ describe('provider console (S-T1)', () => {
     await userEvent.click(screen.getByRole('button', { name: /save policy/i }))
     expect(await screen.findByText(/fairness policy saved/i)).toBeInTheDocument()
     const put = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c) => String(c[0]).includes('/tenants/tn_1/fairness') && (c[1] as RequestInit)?.method === 'PUT',
+      (c) =>
+        String(c[0]).includes('/tenants/tn_1/fairness') && (c[1] as RequestInit)?.method === 'PUT',
     )
     expect(put).toBeTruthy()
     expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({
@@ -210,20 +351,33 @@ describe('provider console (S-T1)', () => {
     await userEvent.click(screen.getByRole('button', { name: /provision/i }))
 
     const calls = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls
-    const post = calls.find((c) => String(c[0]).endsWith('/provider/v1/tenants') && (c[1] as RequestInit | undefined)?.method === 'POST')
+    const post = calls.find(
+      (c) =>
+        String(c[0]).endsWith('/provider/v1/tenants') &&
+        (c[1] as RequestInit | undefined)?.method === 'POST',
+    )
     expect(post).toBeTruthy()
     const body = JSON.parse(String((post![1] as RequestInit).body))
-    expect(body).toEqual({ slug: 'silo-co', name: 'Silo Co', isolation_model: 'siloed', residency: 'eu' })
+    expect(body).toEqual({
+      slug: 'silo-co',
+      name: 'Silo Co',
+      isolation_model: 'siloed',
+      residency: 'eu',
+    })
   })
 
   test('lifecycle action fires the right call', async () => {
     const stub = providerStub()
     vi.stubGlobal('fetch', stub)
     renderApp('/provider')
-    const tenantsTable = (await screen.findByRole('table', { name: /tenant inventory/i })) as HTMLTableElement
+    const tenantsTable = (await screen.findByRole('table', {
+      name: /tenant inventory/i,
+    }))
     const acmeRow = within(tenantsTable).getByText('acme').closest('tr')!
     await userEvent.click(within(acmeRow).getByRole('button', { name: /suspend/i }))
-    const calls = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => `${(c[1] as RequestInit | undefined)?.method ?? 'GET'} ${String(c[0])}`)
+    const calls = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls.map(
+      (c) => `${(c[1] as RequestInit | undefined)?.method ?? 'GET'} ${String(c[0])}`,
+    )
     expect(calls.some((c) => c === 'POST /provider/v1/tenants/tn_1/suspend')).toBe(true)
   })
 
@@ -238,15 +392,23 @@ describe('provider console (S-T1)', () => {
   test('S-T3 showback: month-to-date usage per tenant + the export feed links', async () => {
     vi.stubGlobal('fetch', providerStub())
     renderApp('/provider')
-    const usageTable = (await screen.findByRole('table', { name: /usage and showback/i })) as HTMLTableElement
+    const usageTable = (await screen.findByRole('table', {
+      name: /usage and showback/i,
+    }))
     const acme = within(usageTable).getByText('acme').closest('tr')!
     expect(within(acme).getByText('1,042')).toBeInTheDocument()
     expect(within(acme).getByText('3')).toBeInTheDocument()
     const globex = within(usageTable).getByText('globex').closest('tr')!
     expect(within(globex).getByText('7')).toBeInTheDocument()
     // The export feed (the generic CSV/JSONL contract) is one click away.
-    expect(screen.getByRole('link', { name: /export csv/i })).toHaveAttribute('href', '/provider/v1/usage/export?format=csv&rollup=day')
-    expect(screen.getByRole('link', { name: /export jsonl/i })).toHaveAttribute('href', '/provider/v1/usage/export?format=jsonl&rollup=day')
+    expect(screen.getByRole('link', { name: /export csv/i })).toHaveAttribute(
+      'href',
+      '/provider/v1/usage/export?format=csv&rollup=day',
+    )
+    expect(screen.getByRole('link', { name: /export jsonl/i })).toHaveAttribute(
+      'href',
+      '/provider/v1/usage/export?format=jsonl&rollup=day',
+    )
   })
 
   test('S-T3 quotas: the admin editor PUTs the right payload (blank = unlimited)', async () => {
@@ -259,9 +421,16 @@ describe('provider console (S-T1)', () => {
     await userEvent.click(screen.getByRole('button', { name: /save quotas/i }))
     expect(await screen.findByText(/quotas saved/i)).toBeInTheDocument()
     const calls = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls
-    const put = calls.find((c) => String(c[0]).endsWith('/provider/v1/tenants/tn_1/quotas') && (c[1] as RequestInit | undefined)?.method === 'PUT')
+    const put = calls.find(
+      (c) =>
+        String(c[0]).endsWith('/provider/v1/tenants/tn_1/quotas') &&
+        (c[1] as RequestInit | undefined)?.method === 'PUT',
+    )
     expect(put).toBeTruthy()
-    expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({ max_agents: 5, max_tests: null })
+    expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({
+      max_agents: 5,
+      max_tests: null,
+    })
   })
 
   test('S-T3 hidden-unlicensed: a 404 usage API renders no usage card at all', async () => {
@@ -269,7 +438,10 @@ describe('provider console (S-T1)', () => {
     const wrapped = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes('/provider/v1/usage'))
         return jsonResponse({ error: { code: 'not_found', message: 'not found' } }, 404)
-      return (stub as unknown as (i: RequestInfo | URL, n?: RequestInit) => Promise<Response>)(input, init)
+      return (stub)(
+        input,
+        init,
+      )
     }) as unknown as typeof fetch
     vi.stubGlobal('fetch', wrapped)
     renderApp('/provider')
@@ -289,7 +461,11 @@ describe('provider console (S-T1)', () => {
     await userEvent.click(screen.getByRole('button', { name: /save brand/i }))
     expect(await screen.findByText(/brand saved/i)).toBeInTheDocument()
     const calls = (stub as unknown as ReturnType<typeof vi.fn>).mock.calls
-    const put = calls.find((c) => String(c[0]).endsWith('/provider/v1/tenants/tn_1/branding') && (c[1] as RequestInit | undefined)?.method === 'PUT')
+    const put = calls.find(
+      (c) =>
+        String(c[0]).endsWith('/provider/v1/tenants/tn_1/branding') &&
+        (c[1] as RequestInit | undefined)?.method === 'PUT',
+    )
     expect(put).toBeTruthy()
     const body = JSON.parse(String((put![1] as RequestInit).body))
     expect(body.product_name).toBe('AcmeWatch')

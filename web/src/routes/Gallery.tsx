@@ -75,7 +75,11 @@ export function Gallery() {
 
       <Section title="Overlays & feedback">
         <Button onClick={() => setModalOpen(true)}>Open modal</Button>
-        <Button onClick={() => push({ tone: 'success', title: 'Saved', message: 'Your test was created.' })}>
+        <Button
+          onClick={() =>
+            push({ tone: 'success', title: 'Saved', message: 'Your test was created.' })
+          }
+        >
           Show toast
         </Button>
         <Modal
