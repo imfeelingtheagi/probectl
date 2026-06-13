@@ -32,6 +32,7 @@ type Kafka struct {
 	produced    atomic.Uint64 // broker-acked records
 	failed      atomic.Uint64 // accepted but failed after retries (async)
 	shed        atomic.Uint64 // rejected at the full buffer (backpressure drop)
+	handlerErr  atomic.Uint64 // consumed records whose handler returned an error (NOT committed → redelivered)
 	maxBuffered int64
 
 	// workers parallelizes EACH subscription's consume path (SCALE-001): a
@@ -55,12 +56,13 @@ const DefaultMaxBuffered = 65536
 // counted, and the caller did not block.
 var ErrPublishShed = errors.New("bus: in-flight buffer full — record shed (broker degraded; see Stats)")
 
-// PublishStats are the producer's cumulative counters.
+// PublishStats are the bus's cumulative counters (producer + consumer).
 type PublishStats struct {
-	Produced uint64 // broker-acked
-	Failed   uint64 // accepted, failed asynchronously after retries
-	Shed     uint64 // dropped at the full buffer
-	Buffered int64  // currently in flight
+	Produced      uint64 // broker-acked
+	Failed        uint64 // accepted, failed asynchronously after retries
+	Shed          uint64 // dropped at the full buffer
+	Buffered      int64  // currently in flight
+	HandlerErrors uint64 // consumed records whose handler errored (offset NOT committed → redelivered)
 }
 
 // NewKafka creates a Kafka bus seeded with brokers. The async producer is
@@ -111,20 +113,44 @@ func (k *Kafka) Publish(ctx context.Context, topic string, key, value []byte) er
 // Stats reports the cumulative async-producer counters.
 func (k *Kafka) Stats() PublishStats {
 	return PublishStats{
-		Produced: k.produced.Load(),
-		Failed:   k.failed.Load(),
-		Shed:     k.shed.Load(),
-		Buffered: k.producer.BufferedProduceRecords(),
+		Produced:      k.produced.Load(),
+		Failed:        k.failed.Load(),
+		Shed:          k.shed.Load(),
+		Buffered:      k.producer.BufferedProduceRecords(),
+		HandlerErrors: k.handlerErr.Load(),
 	}
 }
 
-// Subscribe consumes topic in a consumer group until ctx is canceled. franz-go
-// auto-commits offsets, so delivery is at-least-once.
+// Flush blocks until every record buffered by Publish has been acknowledged by
+// the broker (or the context expires), returning ctx.Err() on timeout. It is
+// how a caller converts the async, fire-and-forget Publish into a durability
+// barrier: the agent transport flushes a result batch here BEFORE it acks the
+// agent, so a result is only acked once it is broker-durable (CORRECT-004) —
+// never acked-then-lost in the in-flight buffer if the process dies.
+func (k *Kafka) Flush(ctx context.Context) error {
+	return k.producer.Flush(ctx)
+}
+
+// Subscribe consumes topic in a consumer group until ctx is canceled.
+//
+// Delivery is TRUE at-least-once (SCALE-007): the previous code relied on
+// franz-go's periodic auto-commit, which advances offsets on a TIMER regardless
+// of whether the handler ran — a crash between an auto-commit and the handler
+// silently lost those records, so the "at-least-once" claim was false. We now
+// use AutoCommitMarks: nothing commits until it is MARKED, and a record is
+// marked ONLY after its handler returns nil. A handler that returns an error
+// leaves the record UNMARKED (logged + counted via HandlerErrors), so the next
+// poll/rebalance redelivers it instead of skipping it (CODE-007: the handler's
+// error return is no longer silently discarded — it gates the commit).
 func (k *Kafka) Subscribe(ctx context.Context, topic, group string, handler Handler) error {
 	opts := append([]kgo.Opt{
 		kgo.SeedBrokers(k.brokers...),
 		kgo.ConsumerGroup(group),
 		kgo.ConsumeTopics(topic),
+		// Commit only what the handler has MARKED (commit-after-process), never
+		// on a blind timer. The periodic flusher still runs, but it can only
+		// flush marked offsets — so it can never outrun the handler.
+		kgo.AutoCommitMarks(),
 		// A brand-new group reads from the start so no buffered results are lost;
 		// an established group resumes from its committed offset.
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
@@ -135,23 +161,35 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, handler Hand
 	}
 	defer cl.Close()
 
+	// process runs the handler and, on success, marks the record for commit.
+	// On error it counts + logs and leaves the offset uncommitted (redelivery).
+	process := func(r *kgo.Record) {
+		if herr := handler(ctx, Message{Topic: r.Topic, Key: r.Key, Value: r.Value}); herr != nil {
+			k.handlerErr.Add(1)
+			// No mark: the offset stays uncommitted so this record is redelivered.
+			// Handlers that have already accounted for a message (DLQ etc.) return
+			// nil; a non-nil error here means "not safely handled — keep it".
+			return
+		}
+		cl.MarkCommitRecords(r)
+	}
+
 	for ctx.Err() == nil {
 		fetches := cl.PollFetches(ctx)
 		if fetches.IsClientClosed() {
 			return nil
 		}
 		if k.workers <= 1 {
-			fetches.EachRecord(func(r *kgo.Record) {
-				_ = handler(ctx, Message{Topic: r.Topic, Key: r.Key, Value: r.Value})
-			})
+			fetches.EachRecord(process)
 			continue
 		}
 		// SCALE-001: shard the poll batch by key across bounded workers; wait
-		// for the batch so offsets never run ahead of processing.
-		shards := make([][]Message, k.workers)
+		// for the batch so offsets never run ahead of processing. Records are
+		// marked per-record inside process; MarkCommitRecords is concurrency-safe.
+		shards := make([][]*kgo.Record, k.workers)
 		fetches.EachRecord(func(r *kgo.Record) {
 			i := int(shardKey(r.Key)) % k.workers
-			shards[i] = append(shards[i], Message{Topic: r.Topic, Key: r.Key, Value: r.Value})
+			shards[i] = append(shards[i], r)
 		})
 		var wg sync.WaitGroup
 		for _, shard := range shards {
@@ -159,10 +197,10 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, handler Hand
 				continue
 			}
 			wg.Add(1)
-			go func(ms []Message) {
+			go func(rs []*kgo.Record) {
 				defer wg.Done()
-				for _, m := range ms {
-					_ = handler(ctx, m)
+				for _, r := range rs {
+					process(r)
 				}
 			}(shard)
 		}

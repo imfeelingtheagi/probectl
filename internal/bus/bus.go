@@ -57,6 +57,13 @@ const EndpointResultsTopic = "probectl.endpoint.results"
 // replayable, same contract as the results DLQ.
 const DeadLetterDeviceTopic = "probectl.deadletter.device"
 
+// DeadLetterFlowTopic receives flow-event batches whose store insert exhausted
+// retries (CORRECT-010 / SCALE-005) — the ORIGINAL flowv1.FlowBatch bytes,
+// tenant-keyed, replayable. Same contract as the device + results DLQs: the
+// flow plane is now at real parity with the result pipeline, not merely
+// claiming to be.
+const DeadLetterFlowTopic = "probectl.deadletter.flow"
+
 // DeadLetterResultsTopic receives result messages whose store write failed
 // after bounded retries (U-019): the ORIGINAL serialized record, tenant-keyed,
 // replayable. Telemetry loss is never silent — dead-lettering is counted and
@@ -101,6 +108,16 @@ type Bus interface {
 	Subscribe(ctx context.Context, topic, group string, handler Handler) error
 	// Close releases resources.
 	Close() error
+}
+
+// Flusher is an optional Bus capability: block until everything published so
+// far is durable on the broker (or ctx expires). The async Kafka bus implements
+// it; the in-memory bus publishes synchronously and so is durable on return,
+// implementing Flush as a no-op. Callers that need a durability barrier before
+// acking upstream (CORRECT-004) type-assert for it and treat a missing
+// implementation as "already durable".
+type Flusher interface {
+	Flush(ctx context.Context) error
 }
 
 // namespaceRe is the shape a per-tenant topic namespace must have (S-T2,

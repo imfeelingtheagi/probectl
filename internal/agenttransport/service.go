@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
@@ -176,6 +177,22 @@ func (svc *service) StreamResults(stream grpc.ClientStreamingServer[agentv1.Stre
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
+			// CORRECT-004: ack only AFTER the batch is broker-durable. ingest()
+			// publishes asynchronously (the bounded in-flight buffer), so a bare
+			// SendAndClose here would ack records that are still in memory and
+			// would vanish if the process died before the broker acked them. Flush
+			// is the durability barrier; if it fails we do NOT ack, and the agent
+			// retries the still-buffered batch (at-least-once, never ack-then-lose).
+			if f, ok := svc.bus.(bus.Flusher); ok && accepted > 0 {
+				fctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				err := f.Flush(fctx)
+				cancel()
+				if err != nil {
+					svc.log.Error("REFUSING to ack result batch: broker flush failed (CORRECT-004, fail closed)",
+						"tenant", id.TenantID, "agent", id.AgentID, "accepted", accepted, "error", err.Error())
+					return status.Error(codes.Unavailable, "publish not durable")
+				}
+			}
 			svc.accepted.Add(accepted)
 			return stream.SendAndClose(&agentv1.StreamResultsResponse{Accepted: accepted})
 		}

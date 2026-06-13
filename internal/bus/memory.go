@@ -125,6 +125,12 @@ func (m *Memory) Subscribe(ctx context.Context, topic, _ string, handler Handler
 	}
 }
 
+// Flush is a no-op: Publish delivers synchronously to each subscriber's buffer
+// before returning, so there is nothing in flight to drain. Implementing the
+// Flusher interface lets durability-barrier callers (CORRECT-004) treat the
+// in-memory bus uniformly with Kafka.
+func (m *Memory) Flush(_ context.Context) error { return nil }
+
 // Close marks the bus closed.
 func (m *Memory) Close() error {
 	m.mu.Lock()
