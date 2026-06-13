@@ -29,10 +29,30 @@
     name: "probectl-{{ probectl_agent_type }}-{{ probectl_version }}"
     state: present
 
+# OPS-011: nfpm names the deb/rpm with Debian/RPM arch (amd64|arm64), but
+# ansible_architecture reports the kernel arch (x86_64|aarch64). Map it before
+# composing the filename, and fail closed on an arch we don't ship a package
+# for rather than constructing a path that will never exist.
+- name: Resolve the package arch from ansible_architecture
+  when: probectl_install_method == 'airgap'
+  ansible.builtin.set_fact:
+    probectl_pkg_arch: >-
+      {{ {'x86_64': 'amd64', 'amd64': 'amd64',
+          'aarch64': 'arm64', 'arm64': 'arm64'}[ansible_architecture] | default('') }}
+
+- name: Assert the host arch maps to a shipped package arch
+  when: probectl_install_method == 'airgap'
+  ansible.builtin.assert:
+    that:
+      - probectl_pkg_arch | length > 0
+    fail_msg: >-
+      No probectl package is shipped for ansible_architecture={{ ansible_architecture }}
+      (shipped: x86_64->amd64, aarch64->arm64).
+
 - name: Install from the air-gap bundle
   when: probectl_install_method == 'airgap'
   ansible.builtin.package:
-    name: "{{ probectl_airgap_dir }}/probectl-{{ probectl_agent_type }}_{{ probectl_version }}_{{ ansible_architecture }}.deb"
+    name: "{{ probectl_airgap_dir }}/probectl-{{ probectl_agent_type }}_{{ probectl_version }}_{{ probectl_pkg_arch }}.deb"
     state: present
 
 # SUPPLY-002: the package_url method downloads a release package directly and,

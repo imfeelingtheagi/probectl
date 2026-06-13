@@ -48,11 +48,26 @@ networkPolicy:
 
 # OPS-005: scrape /metrics via the Prometheus Operator (the monitoring
 # namespace is the second ingress selector above).
+# OPS-012: the strict/regulated profile must not scrape over plaintext — guardrail
+# §7.12 puts TLS on every listener. Scrape over HTTPS (terminate TLS at the
+# metrics sidecar, same pattern as the API listener) and verify the server cert
+# against the in-cluster CA. scheme/tlsConfig render into the ServiceMonitor
+# endpoint (see templates/servicemonitor.yaml).
 metrics:
   serviceMonitor:
     enabled: true
     interval: 30s
-    scheme: http
+    scheme: https
+    tlsConfig:
+      # The CA the metrics TLS sidecar's serving cert chains to. Provide this
+      # secret out-of-band in the monitoring namespace; insecureSkipVerify MUST
+      # stay false (fail closed on an unverifiable cert).
+      ca:
+        secret:
+          name: probectl-metrics-ca
+          key: ca.crt
+      serverName: probectl-metrics
+      insecureSkipVerify: false
 
 # OPS-009: backups ON in the regulated profile. Supply the credentials
 # secret out-of-band; let the chart create the backups PVC.
