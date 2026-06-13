@@ -1,23 +1,31 @@
-# MEDIUM reference values — production HA, fixed scale.
+# MEDIUM reference values — production, fixed scale.
 #
 #   helm install probectl deploy/helm/probectl -f deploy/helm/probectl/values-medium.yaml ...
 #
-# Three replicas spread across nodes, a PodDisruptionBudget so the S34 rolling
-# upgrade / node drains keep a quorum, and NetworkPolicy ready to enable (set
-# networkPolicy.ingressFrom / egressTo for your cluster, then flip enabled).
+# A PodDisruptionBudget so node drains / the S34 rolling upgrade keep the control
+# plane available, and NetworkPolicy ready to enable (set networkPolicy.ingressFrom
+# / egressTo for your cluster, then flip enabled).
 #
-# ⚠️  INTERIM CONSTRAINT (ARCH-003): several read views are still served from
-# per-replica process memory — topology, /v1/results/latest, threat detections,
-# TLS posture, and endpoint views. Across replicas these are NOT yet coherent:
-# the same query can return different answers depending on which replica serves
-# it, because each replica only sees the bus traffic IT consumed. Durable,
-# replica-coherent view serving (leader-elected view consumers / shared derived
-# store) is landing in the durable-serving-layer work. UNTIL THEN, if you depend
-# on those views being consistent, run replicaCount: 1 (the result/flow/device
-# INGEST pipelines and all TSDB/ClickHouse-backed queries are already coherent
-# at any replica count — only the in-RAM views are affected). See docs/ha.md.
+# READ COHERENCE (ARCH-003 / OPS-010): this reference defaults to a SINGLE
+# control-plane replica so it never ships a known-incoherent topology. A few
+# read views are still served from per-replica process memory — /v1/results/latest,
+# threat detections, and TLS posture — and those are NOT yet coherent across
+# replicas (the same query could return different answers depending on which
+# replica served it).
+#
+# What IS already coherent at ANY replica count: every ingest pipeline, every
+# TSDB/ClickHouse-backed query, AND the topology graph + endpoint view (they
+# adopted per-replica fan-in). The throughput lives in the data tier (Kafka,
+# ClickHouse, the TSDB), which you scale INDEPENDENTLY of the control-plane
+# replica count — so a single stateless control-plane replica is not the
+# bottleneck. It still survives node drains/upgrades via a fast reschedule.
+#
+# SCALING PATH (docs/ha.md): if your workload does not touch the
+# latest-result/threat/TLS views, raise replicaCount now and bump the PDB.
+# Otherwise wait for those views to adopt per-replica fan-in (tracked under
+# ARCH-003), after which this reference will raise its default.
 
-replicaCount: 3
+replicaCount: 1
 
 resources:
   requests:
@@ -27,12 +35,14 @@ resources:
     cpu: "2"
     memory: 1Gi
 
-# Keep 2 of 3 up during voluntary disruptions (zero-downtime upgrades, S34).
+# Keep the control plane available during voluntary disruptions (zero-downtime
+# upgrades, S34). At replicaCount 1 this still ensures the new pod is Ready
+# before the old one is evicted on a rolling upgrade.
 podDisruptionBudget:
   enabled: true
-  minAvailable: 2
+  minAvailable: 1
 
-# Spread replicas across nodes for availability.
+# Spread replicas across nodes for availability (applies once you scale up).
 topologySpreadConstraints:
   - maxSkew: 1
     topologyKey: kubernetes.io/hostname

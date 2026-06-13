@@ -67,3 +67,10 @@ single leader to own the view consumers and have other replicas proxy to it, or
 move the derived views into a shared store that every replica reads. Once that
 ships, this constraint is lifted and the medium/large reference values run their
 documented replica counts with coherent views. Track it under ARCH-003.
+
+**Reference values (OPS-010):** until that lands, `values-medium.yaml` defaults
+to `replicaCount: 1` so the shipped reference never serves a known-incoherent
+topology out of the box. The control plane is stateless, so a single replica
+still survives node drains/upgrades (fast reschedule), and the throughput lives
+in the data tier, which scales independently. Raise `replicaCount` per the
+per-view table above once your workload's views are all coherent.
