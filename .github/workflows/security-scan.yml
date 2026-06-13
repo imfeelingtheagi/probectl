@@ -15,6 +15,14 @@ on:
 permissions:
   contents: read
 
+# Exact patch pin, in lockstep with go.work + go.mod (`go 1.26.4` /
+# `toolchain go1.26.4`, SUPPLY-007) and ci.yml's GO_VERSION. govulncheck's
+# stdlib attribution is only honest when it scans against the SAME patch the
+# release toolchain ships; a bare "1.26" could scan a different stdlib than we
+# build, reporting CVEs we don't ship or hiding ones we do.
+env:
+  GO_VERSION: "1.26.4"
+
 jobs:
   govulncheck:
     name: govulncheck (Go)
@@ -24,7 +32,7 @@ jobs:
       - name: govulncheck ./... (fails on findings)
         uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
         with:
-          go-version-input: "1.26"
+          go-version-input: ${{ env.GO_VERSION }}
           output-format: sarif
           output-file: govulncheck.sarif
       - name: Evidence artifact
@@ -38,7 +46,7 @@ jobs:
       - name: Gate on reachable vulnerabilities
         uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
         with:
-          go-version-input: "1.26"
+          go-version-input: ${{ env.GO_VERSION }}
 
   npm-audit:
     name: npm audit (web + browser-worker)
