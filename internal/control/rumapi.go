@@ -34,6 +34,12 @@ import (
 type RUMApp struct {
 	Tenant string
 	App    string
+	// AllowedOrigins, when non-empty, restricts the beacon CORS surface for this
+	// app key (SEC-005): only a request whose Origin is on the list gets it
+	// echoed back; an off-list Origin is NOT reflected (the browser blocks the
+	// cross-origin response). Empty ⇒ the default wildcard ("*"). Still no
+	// credentials on either path.
+	AllowedOrigins []string
 }
 
 // BuildRUM parses the app-key registry from config. Returns ok=false when
@@ -78,18 +84,44 @@ func (s *Server) WithRUM(e *rum.Engine, apps map[string]RUMApp, publish RUMPubli
 }
 
 // rumCORS sets the beacon CORS surface: browsers post cross-origin, the
-// endpoint is write-only and credential-less, so a wildcard origin is safe
-// and required (the page's origin is the customer's site, not probectl's).
-func rumCORS(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+// endpoint is write-only and credential-less, so a wildcard origin is safe and
+// the default. SEC-005: when allowed is non-empty (an app-key's operator-set
+// allow-list) the request Origin is echoed only if it is on the list — an
+// off-list Origin is NOT reflected, so the browser blocks the response. There
+// are never any credentials on either path.
+func rumCORS(w http.ResponseWriter, reqOrigin string, allowed []string) {
+	if len(allowed) == 0 {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else {
+		for _, o := range allowed {
+			if o == reqOrigin && reqOrigin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", reqOrigin)
+				w.Header().Add("Vary", "Origin")
+				break
+			}
+		}
+		// Off-list (or no Origin): no Allow-Origin header → the browser blocks it.
+	}
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Access-Control-Max-Age", "86400")
 }
 
-// handleRUMPreflight answers the CORS preflight for JSON beacons.
+// rumAllowedOriginsFor returns the allow-list for the app key carried in the
+// (already-read) request body, or nil when the key is unknown / has no list.
+func (s *Server) rumAllowedOriginsFor(key string) []string {
+	if app, ok := s.rumApps[key]; ok {
+		return app.AllowedOrigins
+	}
+	return nil
+}
+
+// handleRUMPreflight answers the CORS preflight for JSON beacons. The app key is
+// not available at preflight (it rides in the body), so preflight uses the
+// wildcard unless a single global default is configured; per-key allow-lists are
+// enforced on the actual beacon POST (SEC-005).
 func (s *Server) handleRUMPreflight(w http.ResponseWriter, _ *http.Request) error {
-	rumCORS(w)
+	rumCORS(w, "", nil)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -99,22 +131,26 @@ func (s *Server) handleRUMPreflight(w http.ResponseWriter, _ *http.Request) erro
 // then publish to the bus. Rejections are counted per tenant and served at
 // /v1/rum (privacy honesty), and the response never echoes payload content.
 func (s *Server) handleRUMBeacon(w http.ResponseWriter, r *http.Request) error {
-	rumCORS(w)
 	if s.rumEngine == nil || s.rumPublish == nil {
+		rumCORS(w, r.Header.Get("Origin"), nil)
 		return apierror.Unavailable("rum ingest is not enabled")
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, rum.MaxBeaconBytes+1))
 	if err != nil {
+		rumCORS(w, r.Header.Get("Origin"), nil)
 		return apierror.BadRequest("cannot read request body")
 	}
 	if len(body) > rum.MaxBeaconBytes {
+		rumCORS(w, r.Header.Get("Origin"), nil)
 		http.Error(w, `{"error":{"code":"too_large","message":"beacon exceeds size cap"}}`, http.StatusRequestEntityTooLarge)
 		return nil
 	}
 
 	// Resolve the app key FIRST (leniently — even a beacon that will fail the
-	// strict parse attributes its rejection to the right tenant).
+	// strict parse attributes its rejection to the right tenant). SEC-005: the
+	// CORS reflection is now scoped to this app key's allow-list (if any).
 	key := rum.PeekKey(body)
+	rumCORS(w, r.Header.Get("Origin"), s.rumAllowedOriginsFor(key))
 	app, ok := s.rumApps[key]
 	if !ok {
 		return apierror.Unauthorized("unknown app key")

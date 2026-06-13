@@ -181,6 +181,50 @@ func TestRUMBeaconRateLimitAndPreflight(t *testing.T) {
 	}
 }
 
+// SEC-005: when an app key has an operator-configured allowed-origins list, the
+// beacon reflects the request Origin only if it is on the list; an off-list
+// Origin is NOT reflected (no Access-Control-Allow-Origin), so the browser
+// blocks the cross-origin response. No allow-list ⇒ wildcard as before.
+func TestRUMBeaconCORSAllowList(t *testing.T) {
+	fb := &fakeRUMBus{}
+	eng, apps, _, err := BuildRUM(&config.Config{
+		RUMEnabled: true, RUMApps: map[string]string{"pk_abc": "t1/shop"}, RUMRatePerMin: 100,
+	}, intelTestLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Attach an operator allow-list to the app key.
+	app := apps["pk_abc"]
+	app.AllowedOrigins = []string{"https://shop.example"}
+	apps["pk_abc"] = app
+	srv := testServer(fakePinger{}).WithRUM(eng, apps, fb.publish, 100)
+
+	post := func(origin string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/ingest/rum", strings.NewReader(rumBeaconBody("pk_abc")))
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+
+	// On-list Origin is echoed exactly (not "*").
+	on := post("https://shop.example")
+	if got := on.Header().Get("Access-Control-Allow-Origin"); got != "https://shop.example" {
+		t.Errorf("on-list Allow-Origin = %q, want the exact origin", got)
+	}
+	// Off-list Origin is NOT reflected.
+	off := post("https://evil.example")
+	if got := off.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("off-list Allow-Origin = %q, want empty (not reflected)", got)
+	}
+	// Credentials are never allowed on either path.
+	if on.Header().Get("Access-Control-Allow-Credentials") != "" {
+		t.Error("RUM beacon must never set Access-Control-Allow-Credentials")
+	}
+}
+
 func TestRUMEndpointNotWiredAndUnavailableIngest(t *testing.T) {
 	srv := testServer(fakePinger{})
 	rec := do(srv, http.MethodGet, "/v1/rum")

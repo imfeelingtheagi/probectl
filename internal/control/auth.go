@@ -18,6 +18,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/auth"
 	"github.com/imfeelingtheagi/probectl/internal/branding"
 	"github.com/imfeelingtheagi/probectl/internal/config"
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/store"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
 )
@@ -324,7 +325,11 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 		return apierror.Unauthorized("sso error: " + errCode)
 	}
 	stateCookie, _ := r.Cookie(oauthStateCookie)
-	if stateCookie == nil || q.Get("state") == "" || stateCookie.Value != q.Get("state") {
+	// SEC-001: compare the single-use CSRF state in constant time (consistent
+	// with the rest of the auth code) so a timing side channel can't probe the
+	// expected value byte-by-byte.
+	if stateCookie == nil || q.Get("state") == "" ||
+		!crypto.ConstantTimeEqual([]byte(stateCookie.Value), []byte(q.Get("state"))) {
 		return apierror.BadRequest("invalid oauth state")
 	}
 	tid := tenancy.DefaultTenantID
@@ -351,7 +356,9 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) error {
 	// login (stored in the transient cookie). A missing cookie or a mismatch
 	// REFUSES the login — replayed/substituted ID tokens fail closed.
 	nonceCookie, _ := r.Cookie(oauthNonceCookie)
-	if nonceCookie == nil || nonceCookie.Value == "" || ident.Nonce != nonceCookie.Value {
+	// SEC-001: constant-time compare of the single-use replay nonce.
+	if nonceCookie == nil || nonceCookie.Value == "" ||
+		!crypto.ConstantTimeEqual([]byte(ident.Nonce), []byte(nonceCookie.Value)) {
 		s.log.Warn("sso nonce mismatch", "have_cookie", nonceCookie != nil)
 		return apierror.Unauthorized("oidc nonce mismatch")
 	}

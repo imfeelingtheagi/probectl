@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -60,6 +61,26 @@ func (*AWSSource) Scheme() string { return "aws" }
 func hmacSHA256(key, data []byte) []byte { return crypto.Default.Sign(key, data) }
 func sha256hex(data []byte) string       { return hex.EncodeToString(crypto.Default.Hash(data)) }
 
+// canonicalHeaders builds the SigV4 SignedHeaders list and the canonical-headers
+// block from one sorted map (SEC-002). Keys must already be lowercase; values
+// are emitted verbatim (callers pass single-valued headers). Returns the
+// semicolon-joined signed-header list and the newline-terminated canonical block.
+func canonicalHeaders(h map[string]string) (signedHeaders, canonical string) {
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte(':')
+		b.WriteString(h[k])
+		b.WriteByte('\n')
+	}
+	return strings.Join(keys, ";"), b.String()
+}
+
 // Fetch implements Source.
 func (s *AWSSource) Fetch(ctx context.Context, ref Ref) (string, error) {
 	host := fmt.Sprintf("secretsmanager.%s.amazonaws.com", s.region)
@@ -89,22 +110,20 @@ func (s *AWSSource) Fetch(ctx context.Context, ref Ref) (string, error) {
 		req.Header.Set("X-Amz-Security-Token", s.session)
 	}
 
-	// SigV4 canonical request (sorted, lowercase headers).
-	signed := []string{"content-type", "host", "x-amz-date", "x-amz-target"}
-	canonHeaders := "content-type:" + req.Header.Get("Content-Type") + "\n" +
-		"host:" + host + "\n" +
-		"x-amz-date:" + amzDate + "\n" +
-		"x-amz-target:" + req.Header.Get("X-Amz-Target") + "\n"
-	if s.session != "" {
-		// alphabetical order: content-type, host, x-amz-date, x-amz-security-token, x-amz-target
-		signed = []string{"content-type", "host", "x-amz-date", "x-amz-security-token", "x-amz-target"}
-		canonHeaders = "content-type:" + req.Header.Get("Content-Type") + "\n" +
-			"host:" + host + "\n" +
-			"x-amz-date:" + amzDate + "\n" +
-			"x-amz-security-token:" + s.session + "\n" +
-			"x-amz-target:" + req.Header.Get("X-Amz-Target") + "\n"
+	// SigV4 canonical request (sorted, lowercase headers). SEC-002: build the
+	// canonical-headers block from ONE sorted map so the session-token and
+	// no-token paths can't drift apart — x-amz-security-token simply joins the
+	// map when present and is sorted into place.
+	headers := map[string]string{
+		"content-type": req.Header.Get("Content-Type"),
+		"host":         host,
+		"x-amz-date":   amzDate,
+		"x-amz-target": req.Header.Get("X-Amz-Target"),
 	}
-	signedHeaders := strings.Join(signed, ";")
+	if s.session != "" {
+		headers["x-amz-security-token"] = s.session
+	}
+	signedHeaders, canonHeaders := canonicalHeaders(headers)
 	canonical := strings.Join([]string{
 		http.MethodPost, "/", "", canonHeaders, signedHeaders, payloadHash,
 	}, "\n")

@@ -349,6 +349,53 @@ func TestAWSSecretsManagerSigV4(t *testing.T) {
 	}
 }
 
+// SEC-002: the no-session-token path and a GovCloud (non-us-*) region must
+// produce a well-formed SigV4 envelope from the SAME canonical-headers builder
+// — x-amz-security-token must be ABSENT from SignedHeaders and the host must be
+// the regional endpoint. A recorded-fixture style check (deterministic clock).
+func TestAWSSecretsManagerSigV4NoSessionGovCloud(t *testing.T) {
+	var gotAuth, gotHost, gotToken string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotHost = r.Host
+		gotToken = r.Header.Get("X-Amz-Security-Token")
+		fmt.Fprint(w, `{"SecretString":"govcloud-s3cret"}`)
+	}))
+	defer ts.Close()
+
+	// No AWS_SESSION_TOKEN, GovCloud region.
+	env := map[string]string{
+		"AWS_REGION": "us-gov-west-1", "AWS_ACCESS_KEY_ID": "AKIAGOV",
+		"AWS_SECRET_ACCESS_KEY": "sk",
+	}
+	a := NewAWSSource(func(k string) string { return env[k] })
+	if a == nil {
+		t.Fatal("aws source not built")
+	}
+	a.endpoint = ts.URL
+	a.now = func() time.Time { return time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC) }
+
+	got, err := a.Fetch(ctxT(t), Ref{Scheme: "aws", Path: "gov/cmdb"})
+	if err != nil || got != "govcloud-s3cret" {
+		t.Fatalf("fetch = %q err=%v", got, err)
+	}
+	// No session token sent, and it must NOT be in the signed-header list.
+	if gotToken != "" {
+		t.Errorf("unexpected session token header: %q", gotToken)
+	}
+	if !strings.Contains(gotAuth, "SignedHeaders=content-type;host;x-amz-date;x-amz-target, ") {
+		t.Fatalf("no-token signed headers wrong: %q", gotAuth)
+	}
+	if strings.Contains(gotAuth, "x-amz-security-token") {
+		t.Errorf("security-token leaked into the no-token signed headers: %q", gotAuth)
+	}
+	// GovCloud region is reflected in the scope.
+	if !strings.Contains(gotAuth, "/us-gov-west-1/secretsmanager/aws4_request, ") {
+		t.Fatalf("region scope wrong: %q", gotAuth)
+	}
+	_ = gotHost
+}
+
 func TestAzureKeyVault(t *testing.T) {
 	var tokenCalls int
 	mux := http.NewServeMux()
