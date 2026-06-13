@@ -256,15 +256,14 @@ func run(cmd string) error {
 		return fmt.Errorf("tsdb: %w", err)
 	}
 	defer tsdbWriter.Close()
-	// SCALE-001: the INGEST write path may coalesce concurrent remote-writes
-	// into one POST (per window/size), preserving per-message DLQ attribution.
-	// Only the write path is wrapped — read/query paths keep the concrete
-	// writer so their type assertions (alerting, snapshot, breaker gauges) hold.
-	ingestWriter := tsdb.Writer(tsdbWriter)
-	if cfg.RemoteWriteBatchEnabled {
-		bw := tsdb.NewBatchingWriter(tsdbWriter, cfg.RemoteWriteBatchSeries, cfg.RemoteWriteBatchWait)
-		defer bw.Close()
-		ingestWriter = bw
+	// SCALE-001: the INGEST write path coalesces concurrent remote-writes into
+	// one POST (per window/size), preserving per-message DLQ attribution.
+	// Batching is ON by default in prometheus mode (see config). Only the write
+	// path is wrapped — read/query paths keep the concrete writer so their type
+	// assertions (alerting, snapshot, breaker gauges) hold.
+	ingestWriter, ingestWriterClose := buildIngestWriter(cfg, tsdbWriter)
+	if ingestWriterClose != nil {
+		defer ingestWriterClose()
 		log.Info("remote-write batching enabled (ingest path)", "max_series", cfg.RemoteWriteBatchSeries, "max_wait", cfg.RemoteWriteBatchWait.String())
 	}
 

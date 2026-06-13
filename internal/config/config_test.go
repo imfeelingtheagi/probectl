@@ -243,6 +243,45 @@ func TestOTLPExportRequiresEncryptedRemote(t *testing.T) {
 	}
 }
 
+// SCALE-001: remote-write batching defaults ON in prometheus mode (the
+// default production ingest path must coalesce, not POST per result); stays
+// OFF for memory mode; an explicit env always wins either way.
+func TestRemoteWriteBatchDefaultsOnForPrometheus(t *testing.T) {
+	// prometheus mode, no explicit flag => batching ON by default.
+	cfg, err := Load(envFunc(map[string]string{
+		"PROBECTL_TSDB_MODE": "prometheus",
+		"PROBECTL_TSDB_URL":  "http://prom:9090",
+	}))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !cfg.RemoteWriteBatchEnabled {
+		t.Error("prometheus mode must default RemoteWriteBatchEnabled=true (SCALE-001)")
+	}
+
+	// memory mode => batching stays OFF (no remote-write to coalesce).
+	cfg, err = Load(envFunc(nil))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.RemoteWriteBatchEnabled {
+		t.Error("memory mode should not enable remote-write batching")
+	}
+
+	// Explicit disable wins even in prometheus mode.
+	cfg, err = Load(envFunc(map[string]string{
+		"PROBECTL_TSDB_MODE":                  "prometheus",
+		"PROBECTL_TSDB_URL":                   "http://prom:9090",
+		"PROBECTL_REMOTE_WRITE_BATCH_ENABLED": "false",
+	}))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.RemoteWriteBatchEnabled {
+		t.Error("explicit PROBECTL_REMOTE_WRITE_BATCH_ENABLED=false must override the prometheus default")
+	}
+}
+
 func TestLogValueRedactsPassword(t *testing.T) {
 	cfg := &Config{DatabaseURL: "postgres://probectl:supersecret@db:5432/probectl"}
 	var buf bytes.Buffer

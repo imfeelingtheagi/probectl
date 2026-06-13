@@ -124,6 +124,9 @@ process serve HTTPS itself instead.
 | `PROBECTL_WORM_SIGNING_KEY` | (none) | base64-encoded Ed25519 private-key PEM (KMS/secret-manager injection) — wins over `PROBECTL_WORM_SIGNING_KEY_FILE`. Enabling audit export with neither set **fails closed** (no silent ephemeral key) |
 | `PROBECTL_TSDB_MODE`                | `memory`                                                         | time-series writer: `memory` (in-process) \| `prometheus`  |
 | `PROBECTL_TSDB_URL`                 | (none)                                                           | Prometheus/VictoriaMetrics base URL for remote-write (required for `prometheus`) |
+| `PROBECTL_REMOTE_WRITE_BATCH_ENABLED` | **`true` in `prometheus` mode** (else `false`)                | SCALE-001: coalesce concurrent results into one remote-write POST instead of one POST per result. Defaults ON for `prometheus` so the production ingest path is batched by default; set explicitly to override |
+| `PROBECTL_REMOTE_WRITE_BATCH_SERIES`  | `500`                                                          | flush when this many series have accumulated |
+| `PROBECTL_REMOTE_WRITE_BATCH_WAIT`    | `50ms`                                                         | max time a batch waits before flushing |
 | `PROBECTL_ALERT_EVAL_INTERVAL`      | `30s`                                                            | how often the alerting engine evaluates rules over the TSDB |
 | `PROBECTL_INCIDENT_WINDOW`          | `10m`                                                            | time window within which related signals correlate into one incident |
 | `PROBECTL_AUTH_MODE`                | `session`                                                          | identity mode: `session` (real OIDC SSO + session cookies) \| `dev` (LOCAL EVALUATION ONLY — exists only in `-tags devauth` builds; release binaries refuse it at boot) |

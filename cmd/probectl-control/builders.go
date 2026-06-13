@@ -65,6 +65,21 @@ func setupSecretsAndEnvelope(cfg *config.Config) (*secrets.Resolver, bool, error
 	return resolver, envelopeGenerated, nil
 }
 
+// buildIngestWriter selects the tsdb.Writer used by the INGEST consumers.
+// SCALE-001: when remote-write batching is enabled (default ON in prometheus
+// mode), it wraps the raw writer in a BatchingWriter so concurrent results
+// coalesce into one POST instead of one POST per result. Only the ingest path
+// is wrapped — read/query/gauge paths keep the concrete tsdbWriter so their
+// type assertions (e.g. *tsdb.Prometheus in registerLossGauges) still hold.
+// Returns the writer to feed consumers and an optional closer for the wrapper.
+func buildIngestWriter(cfg *config.Config, tsdbWriter tsdb.Writer) (tsdb.Writer, func() error) {
+	if !cfg.RemoteWriteBatchEnabled {
+		return tsdbWriter, nil
+	}
+	bw := tsdb.NewBatchingWriter(tsdbWriter, cfg.RemoteWriteBatchSeries, cfg.RemoteWriteBatchWait)
+	return bw, bw.Close
+}
+
 // registerLossGauges exposes the pipeline/bus/clock-skew loss counters that
 // already exist as sampled gauges on /metrics (CORRECT-009) — probectl observes
 // probectl (§8), so operators can alert on data loss instead of it being

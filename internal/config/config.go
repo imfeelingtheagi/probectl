@@ -627,19 +627,23 @@ func Load(getenv func(string) string) (*Config, error) {
 		TestSyncSigningKeyFile:   l.str("PROBECTL_TESTSYNC_SIGNING_KEY_FILE", ""),
 		TSDBMode:                 l.enum("PROBECTL_TSDB_MODE", "memory", "memory", "prometheus"),
 		TSDBURL:                  l.str("PROBECTL_TSDB_URL", ""),
-		RemoteWriteBatchEnabled:  l.boolean("PROBECTL_REMOTE_WRITE_BATCH_ENABLED", false),
-		RemoteWriteBatchSeries:   l.intRange("PROBECTL_REMOTE_WRITE_BATCH_SERIES", 500, 1, 100000),
-		RemoteWriteBatchWait:     l.dur("PROBECTL_REMOTE_WRITE_BATCH_WAIT", 50*time.Millisecond),
-		PathStoreMode:            l.enum("PROBECTL_PATHSTORE_MODE", "memory", "memory", "clickhouse"),
-		PathStoreURL:             l.str("PROBECTL_PATHSTORE_URL", ""),
-		FlowStoreMode:            l.enum("PROBECTL_FLOWSTORE_MODE", "memory", "memory", "clickhouse"),
-		FlowStoreURL:             l.str("PROBECTL_FLOWSTORE_URL", ""),
-		OTelStoreMode:            l.enum("PROBECTL_OTELSTORE_MODE", "memory", "memory", "clickhouse"),
-		OTelStoreURL:             l.str("PROBECTL_OTELSTORE_URL", ""),
-		OTelRetentionDays:        l.intRange("PROBECTL_OTEL_RETENTION_DAYS", 30, 0, 3650),
-		EBPFStoreMode:            l.enum("PROBECTL_EBPFSTORE_MODE", "memory", "memory", "clickhouse"),
-		EBPFStoreURL:             l.str("PROBECTL_EBPFSTORE_URL", ""),
-		EBPFRetentionDays:        l.intRange("PROBECTL_EBPF_RETENTION_DAYS", 30, 0, 3650),
+		// SCALE-001: batching defaults ON for prometheus remote-write so the
+		// default production ingest path coalesces results instead of doing one
+		// HTTP POST per probe result. The default is resolved below (it depends
+		// on TSDBMode, set on the line above); an explicit env still wins.
+		RemoteWriteBatchEnabled: l.boolean("PROBECTL_REMOTE_WRITE_BATCH_ENABLED", false),
+		RemoteWriteBatchSeries:  l.intRange("PROBECTL_REMOTE_WRITE_BATCH_SERIES", 500, 1, 100000),
+		RemoteWriteBatchWait:    l.dur("PROBECTL_REMOTE_WRITE_BATCH_WAIT", 50*time.Millisecond),
+		PathStoreMode:           l.enum("PROBECTL_PATHSTORE_MODE", "memory", "memory", "clickhouse"),
+		PathStoreURL:            l.str("PROBECTL_PATHSTORE_URL", ""),
+		FlowStoreMode:           l.enum("PROBECTL_FLOWSTORE_MODE", "memory", "memory", "clickhouse"),
+		FlowStoreURL:            l.str("PROBECTL_FLOWSTORE_URL", ""),
+		OTelStoreMode:           l.enum("PROBECTL_OTELSTORE_MODE", "memory", "memory", "clickhouse"),
+		OTelStoreURL:            l.str("PROBECTL_OTELSTORE_URL", ""),
+		OTelRetentionDays:       l.intRange("PROBECTL_OTEL_RETENTION_DAYS", 30, 0, 3650),
+		EBPFStoreMode:           l.enum("PROBECTL_EBPFSTORE_MODE", "memory", "memory", "clickhouse"),
+		EBPFStoreURL:            l.str("PROBECTL_EBPFSTORE_URL", ""),
+		EBPFRetentionDays:       l.intRange("PROBECTL_EBPF_RETENTION_DAYS", 30, 0, 3650),
 		// SCALE-016: default to a FINITE 90-day flow retention rather than the
 		// old keep-forever (0) default, which silently let the highest-volume
 		// table on the platform grow without bound. 0 still means keep-forever,
@@ -780,6 +784,15 @@ func Load(getenv func(string) string) (*Config, error) {
 
 		NotifyConnectors: l.notifyConnectors("PROBECTL_NOTIFY_CONNECTORS"),
 		NotifyInbound:    l.notifyInbound("PROBECTL_NOTIFY_INBOUND"),
+	}
+
+	// SCALE-001: when running the production prometheus ingest path, default
+	// remote-write batching ON (coalesce results into one POST instead of one
+	// POST per result). The boolean default above is false; flip it to true for
+	// prometheus mode unless the operator set the env explicitly (explicit
+	// always wins). Batching preserves per-message DLQ attribution.
+	if cfg.TSDBMode == "prometheus" && l.getenv("PROBECTL_REMOTE_WRITE_BATCH_ENABLED") == "" {
+		cfg.RemoteWriteBatchEnabled = true
 	}
 
 	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
