@@ -52,6 +52,57 @@ func TestCheckSQLRejectsDestructive(t *testing.T) {
 	}
 }
 
+// TestCheckSQLRejectsLockingDDL is the SCHEMA-003 acceptance test: the gate is
+// an online/non-locking gate, not merely a destructive one. A bare CREATE INDEX
+// on an existing table, and a validating ADD CONSTRAINT without NOT VALID, both
+// lock under live ingestion and must be flagged.
+func TestCheckSQLRejectsLockingDDL(t *testing.T) {
+	cases := map[string]string{
+		"bare create index":        `CREATE INDEX foo ON existing_table (col);`,
+		"bare create unique index": `CREATE UNIQUE INDEX foo ON existing_table (col);`,
+		"add check no notvalid":    `ALTER TABLE tenants ADD CONSTRAINT c CHECK (x IN ('a','b'));`,
+		"add fk no notvalid":       `ALTER TABLE t ADD CONSTRAINT c FOREIGN KEY (a) REFERENCES u(id);`,
+	}
+	for name, sql := range cases {
+		if v := CheckSQL("bad.sql", sql); len(v) == 0 {
+			t.Fatalf("%s: expected a locking violation for %q", name, sql)
+		}
+	}
+}
+
+// TestCheckSQLAllowsOnlineDDL: the online (non-locking) forms and inline
+// CREATE TABLE constraints must pass clean.
+func TestCheckSQLAllowsOnlineDDL(t *testing.T) {
+	ok := []string{
+		`CREATE INDEX CONCURRENTLY IF NOT EXISTS foo ON t (col);`,
+		`CREATE UNIQUE INDEX CONCURRENTLY foo ON t (col);`,
+		`ALTER TABLE t ADD CONSTRAINT c CHECK (x > 0) NOT VALID;`,
+		`ALTER TABLE t VALIDATE CONSTRAINT c;`,
+		`CREATE TABLE IF NOT EXISTS t (id int, status text CHECK (status IN ('a','b')));`,
+	}
+	for _, sql := range ok {
+		if v := CheckSQL("ok.sql", sql); len(v) != 0 {
+			t.Fatalf("online DDL should pass, got %v for %q", v, sql)
+		}
+	}
+}
+
+// TestCheckSQLLockOKAnnotation: a reviewed `-- lock-ok: <reason>` waives a
+// locking statement (a confirmed-tiny/new table); a bare `-- lock-ok` without a
+// reason does NOT waive it.
+func TestCheckSQLLockOKAnnotation(t *testing.T) {
+	waived := `-- lock-ok: tiny config table
+CREATE INDEX foo ON config (col);`
+	if v := CheckSQL("ann.sql", waived); len(v) != 0 {
+		t.Fatalf("annotated lock-ok should be waived, got %v", v)
+	}
+	bare := `-- lock-ok
+CREATE INDEX foo ON config (col);`
+	if v := CheckSQL("bare.sql", bare); len(v) == 0 {
+		t.Fatal("a reason-less -- lock-ok must NOT waive a locking statement")
+	}
+}
+
 func TestCheckSQLDollarQuoteNotSplit(t *testing.T) {
 	// A ';' inside a dollar-quoted body must not cause a false split that hides or
 	// invents a violation. This block is additive and must pass.

@@ -55,6 +55,16 @@ type Migration struct {
 	Version    int
 	Name       string
 	Statements []string
+	// Destructive marks a migration that DROPs or RENAMEs a telemetry table
+	// (SCHEMA-001). The ClickHouse migration-gate (CheckMigrations) FAILS on any
+	// DROP TABLE / RENAME TABLE statement unless this is set AND Justification is
+	// non-empty — so a destructive change to a customer-telemetry store can never
+	// merge ungated/unexplained, exactly like the Postgres expand/contract gate.
+	Destructive bool
+	// Justification documents WHY the destructive change is acceptable (e.g.
+	// "PARTITION BY is immutable; path snapshots are a re-discoverable cache").
+	// Required whenever Destructive is true; surfaced in the gate output.
+	Justification string
 }
 
 // Ledger is the migration ledger table, mirroring schema_migrations.

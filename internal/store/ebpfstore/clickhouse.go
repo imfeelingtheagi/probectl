@@ -150,6 +150,10 @@ func chMigrations() []chmigrate.Migration {
 	}
 }
 
+// CHMigrations exposes the ebpfstore's ClickHouse migration list to the
+// migration-gate (SCHEMA-001).
+func CHMigrations() []chmigrate.Migration { return chMigrations() }
+
 type chExec struct{ c *ClickHouse }
 
 func (e chExec) Exec(ctx context.Context, sql string, _ chmigrate.Params) error {

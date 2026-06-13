@@ -14,4 +14,6 @@ ALTER TABLE tests ADD COLUMN IF NOT EXISTS updated_at       timestamptz NOT NULL
 
 -- Test names are unique within a tenant (CLI/UI ergonomics; yields 409 on a
 -- duplicate). The index is per-tenant, so two tenants may reuse a name.
+-- lock-ok: tests is an operator-scale config table (bounded by test count),
+-- indexed at its first build — not a hot telemetry table.
 CREATE UNIQUE INDEX IF NOT EXISTS tests_tenant_name_idx ON tests (tenant_id, name);

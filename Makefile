@@ -159,8 +159,10 @@ openapi-gate: ## OpenAPI completeness gate (S19): valid 3.1 spec + no undocument
 	GO=$(GO) bash scripts/check_openapi.sh
 
 .PHONY: migration-gate
-migration-gate: ## Migration expand/contract gate (S34): reject destructive/blocking schema changes.
-	$(GO) test -run 'TestMigrationsExpandContractCompat|TestCheckSQL|TestCheckSQLDollarQuoteNotSplit' ./internal/store/migrate/...
+migration-gate: ## Migration gate (S34/SCHEMA-001/003): reject destructive + locking Postgres DDL AND destructive ClickHouse DDL.
+	$(GO) test -run 'TestMigrationsExpandContractCompat|TestCheckSQL' ./internal/store/migrate/...
+	$(GO) test -run 'TestCheckMigrations|TestCheckMigrationsAllowsAdditive' ./internal/store/chmigrate/...
+	$(GO) test -run 'TestClickHouseMigrationGate' ./internal/store/
 
 .PHONY: helm-gate
 helm-gate: ## Helm chart lint + secure-by-default hardening assertions (S35). Needs helm.

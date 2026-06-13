@@ -15,7 +15,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS external_id text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS user_name   text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS attributes  jsonb NOT NULL DEFAULT '{}';
 -- SCIM identifiers are unique within a tenant when present (partial unique).
+-- lock-ok: users is an operator-scale identity table (bounded by seat count),
+-- indexed when SCIM columns were added — not a hot telemetry table.
 CREATE UNIQUE INDEX IF NOT EXISTS users_tenant_external_idx ON users (tenant_id, external_id) WHERE external_id IS NOT NULL;
+-- lock-ok: see above — users is operator-scale.
 CREATE UNIQUE INDEX IF NOT EXISTS users_tenant_username_idx ON users (tenant_id, user_name) WHERE user_name IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS scim_tokens (

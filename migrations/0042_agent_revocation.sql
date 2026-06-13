@@ -8,5 +8,7 @@ ALTER TABLE agent_identities ADD COLUMN IF NOT EXISTS revoked_at timestamptz;
 ALTER TABLE agent_identities ADD COLUMN IF NOT EXISTS revoked_by text NOT NULL DEFAULT '';
 
 -- The boot/refresh reload reads only revoked rows; keep that scan cheap.
+-- lock-ok: agent_identities is operator-scale (bounded by agent count), not a
+-- hot telemetry table; the partial index is on the revoked-rows subset.
 CREATE INDEX IF NOT EXISTS agent_identities_revoked_idx
   ON agent_identities (revoked_at) WHERE revoked_at IS NOT NULL;

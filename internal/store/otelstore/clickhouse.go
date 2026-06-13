@@ -152,9 +152,19 @@ func chMigrations() []chmigrate.Migration {
 			"INSERT INTO " + logsTable + "_dedup SELECT *, '' AS dedup_id FROM " + logsTable,
 			"RENAME TABLE " + logsTable + " TO " + logsTable + "_pre_dedup, " +
 				logsTable + "_dedup TO " + logsTable,
-		}},
+		},
+			// SCHEMA-001: the RENAMEs are flagged by the ClickHouse migration-gate.
+			// Data-PRESERVING (INSERT...SELECT first, v1 tables kept as _pre_dedup),
+			// so this is an annotated exception.
+			Destructive:   true,
+			Justification: "atomic dedup rebuild of spans+logs: rows are INSERT...SELECT-copied before each RENAME and the v1 tables are kept as _pre_dedup — no data loss",
+		},
 	}
 }
+
+// CHMigrations exposes the otelstore's ClickHouse migration list to the
+// migration-gate (SCHEMA-001).
+func CHMigrations() []chmigrate.Migration { return chMigrations() }
 
 // ClickHouse is the production Store.
 type ClickHouse struct {

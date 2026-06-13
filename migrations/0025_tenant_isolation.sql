@@ -17,6 +17,8 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'tenants_isolation_model_check'
     ) THEN
+        -- lock-ok: validating CHECK on the tenants registry table — bounded by
+        -- the number of tenants (not a hot telemetry table), reviewed safe.
         ALTER TABLE tenants
             ADD CONSTRAINT tenants_isolation_model_check
             CHECK (isolation_model IN ('pooled', 'siloed', 'hybrid'));

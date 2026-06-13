@@ -158,9 +158,20 @@ func chMigrations() []chmigrate.Migration {
 			"INSERT INTO " + sharedFlowsTable + "_dedup SELECT *, '' AS row_id FROM " + sharedFlowsTable,
 			"RENAME TABLE " + sharedFlowsTable + " TO " + sharedFlowsTable + "_pre_dedup, " +
 				sharedFlowsTable + "_dedup TO " + sharedFlowsTable,
-		}},
+		},
+			// SCHEMA-001: the RENAME is flagged by the ClickHouse migration-gate.
+			// It is data-PRESERVING (INSERT...SELECT copies every row first and the
+			// v1 table is retained as _pre_dedup), so it is an annotated exception.
+			Destructive:   true,
+			Justification: "atomic dedup rebuild: rows are INSERT...SELECT-copied before the RENAME and the v1 table is kept as _pre_dedup — no data loss",
+		},
 	}
 }
+
+// CHMigrations exposes the flowstore's ClickHouse migration list to the
+// migration-gate (SCHEMA-001) so destructive DDL on this telemetry store is
+// linted in CI, not just at apply-time.
+func CHMigrations() []chmigrate.Migration { return chMigrations() }
 
 // chExec adapts the store's HTTP client (pooled base) to the chmigrate runner.
 type chExec struct{ c *ClickHouse }

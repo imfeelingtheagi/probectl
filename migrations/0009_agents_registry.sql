@@ -14,4 +14,6 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS spiffe_id     text NOT NULL DEFAULT 
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS registered_at timestamptz NOT NULL DEFAULT now();
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS last_seen_at  timestamptz;
 
+-- lock-ok: agents is an operator-scale registry (bounded by agent count, not a
+-- hot telemetry table); the index was added at the registry's first build.
 CREATE INDEX IF NOT EXISTS agents_status_idx ON agents (tenant_id, status);

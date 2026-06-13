@@ -60,12 +60,53 @@ var (
 	addColumn    = regexp.MustCompile(`\bADD\s+COLUMN\b`)
 	notNull      = regexp.MustCompile(`\bNOT\s+NULL\b`)
 	hasDefault   = regexp.MustCompile(`\bDEFAULT\b`)
+
+	// Locking-DDL detection (SCHEMA-003). The gate is not just a destructive
+	// gate — it also rejects DDL that takes a heavy lock under live ingestion
+	// unless written in the online (non-locking) form.
+	createIndex     = regexp.MustCompile(`\bCREATE\s+(UNIQUE\s+)?INDEX\b`)
+	concurrently    = regexp.MustCompile(`\bCONCURRENTLY\b`)
+	createTable     = regexp.MustCompile(`\bCREATE\s+TABLE\b`)
+	addConstraint   = regexp.MustCompile(`\bADD\s+CONSTRAINT\b`)
+	notValid        = regexp.MustCompile(`\bNOT\s+VALID\b`)
+	validatingCheck = regexp.MustCompile(`\b(CHECK|FOREIGN\s+KEY)\b`)
+	// createTableName captures the table a CREATE TABLE defines, and
+	// indexOnTable / alterTable the table a CREATE INDEX / ALTER TABLE targets —
+	// so the gate knows whether a locking statement hits a table created in the
+	// SAME migration (zero rows, no concurrent ingestion ⇒ non-locking) or a
+	// pre-existing one (the real hazard). Names are normalized upper-case.
+	createTableName = regexp.MustCompile(`\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Z0-9_."]+)`)
+	indexOnTable    = regexp.MustCompile(`\bON\s+([A-Z0-9_."]+)`)
+	alterTableName  = regexp.MustCompile(`\bALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?([A-Z0-9_."]+)`)
+	// lockOK matches a per-statement reviewed exception: a comment
+	// `-- lock-ok: <reason>` (or `lock-ok(<rule>): <reason>`) authorizes one
+	// locking statement that has been confirmed safe (e.g. a brand-new or tiny
+	// table). It must carry a reason; bare `-- lock-ok` is not honored.
+	lockOK = regexp.MustCompile(`(?i)--\s*lock-ok(?:\([^)]*\))?\s*:\s*\S`)
 )
 
-// CheckSQL returns the expand/contract violations in one migration's SQL.
+// CheckSQL returns the expand/contract + locking violations in one migration's
+// SQL. Locking checks read the RAW (comment-bearing) statement so a reviewed
+// `-- lock-ok: <reason>` annotation can authorize a confirmed-safe exception.
 func CheckSQL(file, sql string) []Violation {
 	var out []Violation
-	for _, stmt := range splitStatements(stripComments(sql)) {
+	// Split on the RAW SQL so each statement retains its leading/inline
+	// comments; strip comments only for the body match.
+	raws := splitStatements(sql)
+
+	// First pass: tables CREATEd in THIS migration. A locking index/constraint
+	// on a same-migration table is safe (no rows, no concurrent ingestion yet),
+	// so it must not be flagged.
+	fresh := map[string]bool{}
+	for _, raw := range raws {
+		norm := strings.ToUpper(wsRun.ReplaceAllString(strings.TrimSpace(stripComments(raw)), " "))
+		if m := createTableName.FindStringSubmatch(norm); m != nil {
+			fresh[normalizeTable(m[1])] = true
+		}
+	}
+
+	for _, raw := range raws {
+		stmt := stripComments(raw)
 		norm := strings.ToUpper(wsRun.ReplaceAllString(strings.TrimSpace(stmt), " "))
 		if norm == "" {
 			continue
@@ -83,6 +124,60 @@ func CheckSQL(file, sql string) []Violation {
 				Statement: trimStmt(stmt),
 			})
 		}
+		out = append(out, lockViolations(file, raw, norm, fresh)...)
+	}
+	return out
+}
+
+// normalizeTable strips a schema qualifier and quotes so "public.\"Foo\"" and
+// "foo" compare equal for the same-migration freshness check.
+func normalizeTable(t string) string {
+	t = strings.ReplaceAll(t, `"`, "")
+	if i := strings.LastIndex(t, "."); i >= 0 {
+		t = t[i+1:]
+	}
+	return t
+}
+
+// lockViolations reports locking-DDL violations for one statement. A statement
+// targeting a table CREATEd in the SAME migration (in fresh) is safe; a reviewed
+// `-- lock-ok: <reason>` annotation also waives it.
+func lockViolations(file, raw, norm string, fresh map[string]bool) []Violation {
+	var out []Violation
+	// A DO $$ ... $$ block is procedural idempotency/RLS plumbing — its dynamic
+	// EXECUTE'd SQL is reviewed and cannot run CONCURRENTLY inside the block
+	// anyway. Lock detection targets top-level DDL, so skip DO blocks.
+	if strings.HasPrefix(norm, "DO ") {
+		return out
+	}
+	add := func(rule, target string) {
+		if target != "" && fresh[normalizeTable(target)] {
+			return // index/constraint on a same-migration (empty) table — safe
+		}
+		if lockOK.MatchString(raw) {
+			return // explicit, reasoned exception (e.g. a confirmed-tiny table)
+		}
+		out = append(out, Violation{File: file, Rule: rule, Statement: trimStmt(raw)})
+	}
+	// A non-CONCURRENTLY CREATE INDEX takes a SHARE lock that stalls writes on a
+	// hot, pre-existing table for the whole build.
+	if createIndex.MatchString(norm) && !concurrently.MatchString(norm) {
+		target := ""
+		if m := indexOnTable.FindStringSubmatch(norm); m != nil {
+			target = m[1]
+		}
+		add("create index without CONCURRENTLY on a pre-existing table (locks it under ingestion — use CREATE INDEX CONCURRENTLY, or `-- lock-ok: <reason>` for a confirmed-tiny table)", target)
+	}
+	// A validating ADD CONSTRAINT (CHECK / FOREIGN KEY) without NOT VALID scans
+	// + locks the existing table. An inline constraint in CREATE TABLE is fine
+	// (nothing to scan), so only ADD CONSTRAINT outside a CREATE TABLE counts.
+	if addConstraint.MatchString(norm) && validatingCheck.MatchString(norm) &&
+		!notValid.MatchString(norm) && !createTable.MatchString(norm) {
+		target := ""
+		if m := alterTableName.FindStringSubmatch(norm); m != nil {
+			target = m[1]
+		}
+		add("add validating constraint without NOT VALID on a pre-existing table (scans+locks it — ADD CONSTRAINT ... NOT VALID then VALIDATE in a later release, or `-- lock-ok: <reason>`)", target)
 	}
 	return out
 }
@@ -131,6 +226,36 @@ func splitStatements(sql string) []string {
 	for i := 0; i < len(runes); i++ {
 		c := runes[i]
 		switch c {
+		case '-':
+			// a -- line comment runs to end-of-line; a ';' inside it must not
+			// split (and the comment text — e.g. a `-- lock-ok:` annotation —
+			// stays attached to its statement).
+			if i+1 < len(runes) && runes[i+1] == '-' {
+				for i < len(runes) && runes[i] != '\n' {
+					b.WriteRune(runes[i])
+					i++
+				}
+				if i < len(runes) {
+					b.WriteRune(runes[i]) // the newline
+				}
+				continue
+			}
+			b.WriteRune(c)
+		case '/':
+			// a /* ... */ block comment: skip to the closing */ verbatim.
+			if i+1 < len(runes) && runes[i+1] == '*' {
+				b.WriteRune(runes[i])
+				i++
+				for i < len(runes) {
+					b.WriteRune(runes[i])
+					if runes[i] == '/' && runes[i-1] == '*' {
+						break
+					}
+					i++
+				}
+				continue
+			}
+			b.WriteRune(c)
 		case '\'':
 			// consume to the closing quote (doubled '' is an escaped quote)
 			b.WriteRune(c)

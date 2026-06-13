@@ -31,6 +31,8 @@ BEGIN
         SELECT 1 FROM pg_constraint
         WHERE conname = 'provider_operators_role_check'
     ) THEN
+        -- lock-ok: validating CHECK on the provider_operators table — a small
+        -- operator roster (not a hot telemetry table), reviewed safe.
         ALTER TABLE provider_operators
             ADD CONSTRAINT provider_operators_role_check
             CHECK (role IN ('admin', 'operator'));

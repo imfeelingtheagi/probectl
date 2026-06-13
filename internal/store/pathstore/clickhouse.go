@@ -191,16 +191,28 @@ func chMigrations() []chmigrate.Migration {
 		{Version: 1, Name: "create_path_tables", Statements: []string{createHopsV1, createLinksV1}},
 		// v2 (Sprint 16, SCALE-006): (tenant_id, day) partitioning so the
 		// retention TTL drops whole parts. PARTITION BY is immutable in
-		// ClickHouse, so v2 creates NEW tables and DROPS the v1 ones —
-		// pre-GA, with path snapshots being re-discoverable caches, the
-		// discard is deliberate.
+		// ClickHouse, so v2 creates NEW tables (_hops2/_links2) and discards the
+		// v1 ones. Path snapshots are a RE-DISCOVERABLE cache (continuously
+		// re-probed), so the discard loses no durable customer telemetry — the
+		// reason this is allowed where a true telemetry store would not be.
+		// SCHEMA-002: this exception is now GATE-ENFORCED via the typed
+		// Destructive+Justification annotation below (CheckMigrations), not a
+		// prose-only README note — and the gate fails if any OTHER store copies
+		// this discard pattern without the same explicit, justified annotation.
 		{Version: 2, Name: "path_tables_day_partitioned", Statements: []string{
 			createHops, createLinks,
 			"DROP TABLE IF EXISTS probectl_path_hops",
 			"DROP TABLE IF EXISTS probectl_path_links",
-		}},
+		},
+			Destructive:   true,
+			Justification: "PARTITION BY is immutable in ClickHouse; path-discovery snapshots are a re-discoverable cache (continuously re-probed), not durable telemetry — the day-partition re-partition discards only cache that is rebuilt over time (SCHEMA-002)",
+		},
 	}
 }
+
+// CHMigrations exposes the pathstore's ClickHouse migration list to the
+// migration-gate (SCHEMA-001).
+func CHMigrations() []chmigrate.Migration { return chMigrations() }
 
 // v1 DDL stays VERBATIM (shipped versions are immutable — the ledger checksum
 // refuses drift); v2 supersedes it.
