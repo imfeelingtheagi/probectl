@@ -25,7 +25,10 @@ spec:
         # dump in-pipe — plaintext never lands on disk (OPS-002 symmetry).
         - name: stage-probectl
           image: {{ include "probectl.image" . }}
-          command: ["/bin/sh", "-c", "cp /usr/bin/probectl-control /shared/"]
+          # The control-plane image installs its single static binary at
+          # /usr/local/bin/app (deploy/docker/Dockerfile); stage it under a
+          # stable name the restore container invokes.
+          command: ["/bin/sh", "-c", "cp /usr/local/bin/app /shared/probectl-control"]
           volumeMounts:
             - { name: shared, mountPath: /shared }
       containers:
@@ -37,8 +40,10 @@ spec:
               echo "restore: verifying backup is readable…"
               test -s "/backups/{{ .Values.restore.backupFile }}"
               echo "restore: decrypting + restoring into {{ .Values.restore.database }}…"
+              # backup-open is a stdin→stdout decryption filter; it takes the KEK
+              # from PROBECTL_ENVELOPE_KEY (env, below) — it has NO --in/--out flags.
               /shared/probectl-control backup-open \
-                --in "/backups/{{ .Values.restore.backupFile }}" --out - \
+                < "/backups/{{ .Values.restore.backupFile }}" \
                 | pg_restore --clean --if-exists --no-owner \
                     -h "{{ .Values.restore.host }}" -U "$PGUSER" -d "{{ .Values.restore.database }}"
               echo "restore: applying migrations (idempotent)…"

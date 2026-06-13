@@ -178,14 +178,17 @@ archive_mode = on
 # Archive each completed WAL segment to durable, OFF-host storage. The archive
 # MUST be encrypted at rest (it contains tenant data) and MUST NOT live on the
 # same volume as the data directory — a disk loss would take both.
-archive_command = 'probectl-control backup-seal --in %p --out - | aws s3 cp - s3://YOUR-BUCKET/wal/%f'
+# backup-seal is a stdin→stdout encryption filter (it has NO --in/--out flags):
+# feed the WAL segment %p on stdin via shell redirection, pipe the sealed bytes
+# to durable storage. The KEK comes from PROBECTL_ENVELOPE_KEY (or --key-file).
+archive_command = 'probectl-control backup-seal < %p | aws s3 cp - s3://YOUR-BUCKET/wal/%f'
 archive_timeout = 60   # force a segment at least every 60s, bounding RPO
 ```
 
 Take a base backup (also sealed) on a schedule:
 
 ```
-pg_basebackup -D - -Ft -z -Xnone | probectl-control backup-seal --in - --out - \
+pg_basebackup -D - -Ft -z -Xnone | probectl-control backup-seal \
   | aws s3 cp - s3://YOUR-BUCKET/base/$(date -u +%Y%m%dT%H%M%SZ).tar.gz.sealed
 ```
 
@@ -196,7 +199,7 @@ Restore to a point in time:
    unpack it into the data directory.
 3. Create `recovery.signal` and set the recovery target:
    ```
-   restore_command = 'aws s3 cp s3://YOUR-BUCKET/wal/%f - | probectl-control backup-open --in - --out %p'
+   restore_command = 'aws s3 cp s3://YOUR-BUCKET/wal/%f - | probectl-control backup-open > %p'
    recovery_target_time = '2026-06-12 09:14:00+00'
    recovery_target_action = 'promote'
    ```

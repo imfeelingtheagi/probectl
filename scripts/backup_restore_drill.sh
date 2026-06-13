@@ -63,9 +63,32 @@ if ch "SELECT count() FROM probectl.probectl_drill_marker" >/dev/null 2>&1; then
 fi
 echo "wipe confirmed: both databases gone"
 
-step "restore from the off-box artifacts"
+# OPS-001/RESIL-001: the SHIPPED restore path (restore-job.yaml) does NOT restore
+# the bare pg_dump — it pipes the ENCRYPTED .pbk through `probectl-control
+# backup-open` (stdin→stdout, KEK from PROBECTL_ENVELOPE_KEY). Drill that exact
+# path so a backup-open flag/contract break (the original defect: --in/--out the
+# binary never had) fails the drill instead of hiding behind the plaintext dump.
+step "seal the dump (encrypted .pbk — the artifact the restore Job actually carries)"
+PCTL_BIN="$(command -v probectl-control || true)"
+if [ -z "${PCTL_BIN}" ]; then
+  PCTL_BIN="${OUT}/probectl-control"
+  ( cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" && go build -o "${PCTL_BIN}" ./cmd/probectl-control )
+fi
+# 32-byte KEK, base64 — the same env var the Helm restore Job feeds the binary.
+export PROBECTL_ENVELOPE_KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+PBK="${OUT}/postgres-probectl.pbk"
+# Seal exactly as the backup CronJob does: pg_dump | backup-seal > out.pbk.
+"${PCTL_BIN}" backup-seal < "${OUT}"/postgres-probectl-*.dump > "${PBK}"
+test -s "${PBK}" || { echo "drill: backup-seal produced an empty .pbk" >&2; exit 1; }
+
+step "restore from the ENCRYPTED .pbk via backup-open (the shipped Job's command)"
 t1=$(date +%s)
-./scripts/restore_postgres.sh "${OUT}"/postgres-probectl-*.dump
+# Mirror restore-job.yaml line-for-line: backup-open reads the .pbk on stdin
+# (NO --in/--out flags) and emits the plaintext dump on stdout for restore.
+DECRYPTED="${OUT}/postgres-probectl.decrypted.dump"
+"${PCTL_BIN}" backup-open < "${PBK}" > "${DECRYPTED}"
+test -s "${DECRYPTED}" || { echo "drill: backup-open produced an empty dump (flag/contract break?)" >&2; exit 1; }
+./scripts/restore_postgres.sh "${DECRYPTED}"
 ./scripts/restore_clickhouse.sh "${OUT}"/clickhouse-probectl-*.zip
 restore_secs=$(( $(date +%s) - t1 ))
 
