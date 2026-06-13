@@ -645,9 +645,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		// table on the platform grow without bound. 0 still means keep-forever,
 		// but it is now an EXPLICIT opt-out the operator chooses (and main.go
 		// logs loudly when set), not the silent default.
-		FlowRetentionDays:   l.intRange("PROBECTL_FLOW_RETENTION_DAYS", 90, 0, 3650),
-		PathRetentionDays:   l.intRange("PROBECTL_PATH_RETENTION_DAYS", 90, 0, 3650),
-		FlowEnrichASN:       l.boolean("PROBECTL_FLOW_ENRICH_ASN", false),
+		FlowRetentionDays: l.intRange("PROBECTL_FLOW_RETENTION_DAYS", 90, 0, 3650),
+		PathRetentionDays: l.intRange("PROBECTL_PATH_RETENTION_DAYS", 90, 0, 3650),
+		FlowEnrichASN:     l.boolean("PROBECTL_FLOW_ENRICH_ASN", false),
 		// TENANT-004: profile-defaulted (multi-tenant/regulated => ON) so the
 		// DB-level row policy is the boundary by default, not just app WHERE.
 		DeploymentProfile:   deploymentProfile,
@@ -828,6 +828,24 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	if (cfg.OTLPGRPCAddr != "" || cfg.OTLPHTTPAddr != "") && !cfg.OTLPEnabled() {
 		l.errf("the OTLP receiver is TLS-only and authenticated: set PROBECTL_OTLP_TLS_CERT_FILE, PROBECTL_OTLP_TLS_KEY_FILE, and PROBECTL_OTLP_TOKENS (token=tenant,...) alongside an address")
+	}
+	// WIRE-002: the OTLP export path egresses confidential customer telemetry
+	// (and a bearer token). It MUST be encrypted to a non-loopback collector
+	// (guardrail 12). For protocol=http an http:// endpoint is cleartext POST;
+	// for protocol=grpc the Insecure flag disables TLS. Fail closed unless the
+	// operator has explicitly opted into insecure transport AND the target is
+	// loopback (a co-located dev collector). Mirrors the CMDB https check.
+	if cfg.OTLPExportEnabled() && !isLoopbackOTLPEndpoint(cfg.OTLPExportEndpoint) {
+		switch cfg.OTLPExportProtocol {
+		case "http":
+			if !strings.HasPrefix(cfg.OTLPExportEndpoint, "https://") {
+				l.errf("PROBECTL_OTLP_EXPORT_ENDPOINT must be https:// for a remote OTLP/HTTP collector — plaintext http:// would egress tenant telemetry + the bearer token in the clear (guardrail 12). Plain http is allowed only for a loopback endpoint.")
+			}
+		default: // grpc
+			if cfg.OTLPExportInsecure {
+				l.errf("PROBECTL_OTLP_EXPORT_INSECURE is only allowed for a loopback OTLP/gRPC collector, not %q (guardrail 12)", cfg.OTLPExportEndpoint)
+			}
+		}
 	}
 	if cfg.AIModelEnabled() && cfg.AIModelEndpoint == "" {
 		l.errf("PROBECTL_AI_MODEL_PROVIDER=%s requires PROBECTL_AI_MODEL_ENDPOINT (a remote endpoint must be https; loopback may be http for a local model)", cfg.AIModelProvider)
@@ -1021,6 +1039,32 @@ func isLoopbackURL(u string) bool {
 		return false
 	}
 	host := parsed.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
+}
+
+// isLoopbackOTLPEndpoint reports whether an OTLP export endpoint targets a
+// loopback host. The endpoint may carry an https://, http://, or grpc://
+// scheme prefix, or none at all (gRPC dial targets are often host:port).
+func isLoopbackOTLPEndpoint(ep string) bool {
+	host := ep
+	for _, p := range []string{"https://", "http://", "grpc://"} {
+		host = strings.TrimPrefix(host, p)
+	}
+	if i := strings.IndexAny(host, "/"); i >= 0 {
+		host = host[:i]
+	}
+	// Strip the port if present (handle bare IPv6 in brackets too).
+	if strings.HasPrefix(host, "[") {
+		if i := strings.IndexByte(host, ']'); i >= 0 {
+			host = host[1:i]
+		}
+	} else if i := strings.LastIndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
 	if host == "localhost" {
 		return true
 	}

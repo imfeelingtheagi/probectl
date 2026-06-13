@@ -1015,6 +1015,22 @@ Setting an address without the TLS files **and** at least one token fails config
 validation — the receiver is never anonymous plaintext. Ingested metrics are
 tenant-tagged and published to the `probectl.otlp.metrics` bus topic.
 
+### OTLP export
+
+probectl can *export* its own metrics to an upstream OTLP collector. This egresses
+confidential customer telemetry (plus the bearer token), so a **remote** collector
+must be encrypted — guardrail 12. Config validation **fails closed** otherwise:
+for `http` a remote endpoint must be `https://`; for `grpc` the `INSECURE` flag is
+refused for a remote endpoint. A *loopback* collector (a co-located sidecar) may use
+plain `http://` / `INSECURE` for development.
+
+| Variable                        | Default | Description                                                  |
+| ------------------------------- | ------- | ------------------------------------------------------------ |
+| `PROBECTL_OTLP_EXPORT_ENDPOINT` | (none)  | upstream OTLP collector; enables export. Remote must be `https://` (HTTP) / TLS (gRPC) |
+| `PROBECTL_OTLP_EXPORT_PROTOCOL` | `grpc`  | `grpc` \| `http`                                             |
+| `PROBECTL_OTLP_EXPORT_TOKEN`    | (none)  | bearer token sent to the collector                           |
+| `PROBECTL_OTLP_EXPORT_INSECURE` | `false` | disable TLS — **loopback endpoints only** (refused for a remote target) |
+
 ### Ecosystem integrations
 
 The Grafana datasource API (`/v1/grafana/api/v1/*`), the federation endpoint

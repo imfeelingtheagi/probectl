@@ -75,7 +75,7 @@ func TestDeploymentProfileDefaultsCHScoping(t *testing.T) {
 	}
 	t.Run("explicit env overrides the profile default", func(t *testing.T) {
 		cfg, err := Load(envFunc(map[string]string{
-			"PROBECTL_DEPLOYMENT_PROFILE":      "regulated",
+			"PROBECTL_DEPLOYMENT_PROFILE":       "regulated",
 			"PROBECTL_OTELSTORE_TENANT_SCOPING": "false",
 		}))
 		if err != nil {
@@ -191,6 +191,55 @@ func TestLoadMinExceedsMax(t *testing.T) {
 	}))
 	if err == nil {
 		t.Fatal("expected min>max validation error")
+	}
+}
+
+// WIRE-002: a remote OTLP export target must be encrypted; a plaintext
+// http:// collector (or an Insecure gRPC remote) is refused by default, while
+// loopback stays usable for a co-located dev collector.
+func TestOTLPExportRequiresEncryptedRemote(t *testing.T) {
+	// HTTP protocol + remote http:// endpoint => refused.
+	_, err := Load(envFunc(map[string]string{
+		"PROBECTL_OTLP_EXPORT_PROTOCOL": "http",
+		"PROBECTL_OTLP_EXPORT_ENDPOINT": "http://collector.example.com:4318",
+	}))
+	if err == nil || !strings.Contains(err.Error(), "PROBECTL_OTLP_EXPORT_ENDPOINT must be https") {
+		t.Fatalf("remote http OTLP export must be refused; got: %v", err)
+	}
+
+	// HTTP protocol + remote https:// endpoint => allowed.
+	if _, err := Load(envFunc(map[string]string{
+		"PROBECTL_OTLP_EXPORT_PROTOCOL": "http",
+		"PROBECTL_OTLP_EXPORT_ENDPOINT": "https://collector.example.com:4318",
+	})); err != nil {
+		t.Fatalf("remote https OTLP export should load: %v", err)
+	}
+
+	// HTTP protocol + loopback http:// endpoint => allowed (co-located dev).
+	if _, err := Load(envFunc(map[string]string{
+		"PROBECTL_OTLP_EXPORT_PROTOCOL": "http",
+		"PROBECTL_OTLP_EXPORT_ENDPOINT": "http://127.0.0.1:4318",
+	})); err != nil {
+		t.Fatalf("loopback http OTLP export should load: %v", err)
+	}
+
+	// gRPC protocol + Insecure + remote => refused.
+	_, err = Load(envFunc(map[string]string{
+		"PROBECTL_OTLP_EXPORT_PROTOCOL": "grpc",
+		"PROBECTL_OTLP_EXPORT_ENDPOINT": "collector.example.com:4317",
+		"PROBECTL_OTLP_EXPORT_INSECURE": "true",
+	}))
+	if err == nil || !strings.Contains(err.Error(), "PROBECTL_OTLP_EXPORT_INSECURE is only allowed for a loopback") {
+		t.Fatalf("remote insecure gRPC OTLP export must be refused; got: %v", err)
+	}
+
+	// gRPC protocol + Insecure + loopback => allowed.
+	if _, err := Load(envFunc(map[string]string{
+		"PROBECTL_OTLP_EXPORT_PROTOCOL": "grpc",
+		"PROBECTL_OTLP_EXPORT_ENDPOINT": "localhost:4317",
+		"PROBECTL_OTLP_EXPORT_INSECURE": "true",
+	})); err != nil {
+		t.Fatalf("loopback insecure gRPC OTLP export should load: %v", err)
 	}
 }
 
