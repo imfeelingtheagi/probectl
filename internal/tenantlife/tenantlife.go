@@ -473,6 +473,13 @@ func (e *Engine) erasePostgres(ctx context.Context, tenantID string) (StoreResul
 	// Append-only tables: erased via the provider role (the explicit S-T5
 	// DELETE policy) — the app role stays append-only.
 	err = tenancy.InProvider(ctx, e.pool, func(ctx context.Context, q tenancy.Querier) error {
+		// TENANT-005: bind the provider verify SELECT policy to THIS tenant.
+		// The DELETE policy is USING(true) and is constrained by the explicit
+		// WHERE; the GUC scopes the count-verify SELECT below to one tenant so
+		// the provider cannot read another tenant's audit rows.
+		if _, err := q.Exec(ctx, `SELECT set_config('probectl.tenant_id', $1, true)`, tenantID); err != nil {
+			return fmt.Errorf("scope provider erase: %w", err)
+		}
 		for t := range appendOnlyTables {
 			tag, err := q.Exec(ctx, `DELETE FROM `+pgIdent(t)+` WHERE tenant_id = $1`, tenantID)
 			if err != nil {
@@ -506,6 +513,12 @@ func (e *Engine) erasePostgres(ctx context.Context, tenantID string) (StoreResul
 		return StoreResult{}, fmt.Errorf("tenantlife: postgres verify: %w", verr)
 	}
 	if perr := tenancy.InProvider(ctx, e.pool, func(ctx context.Context, q tenancy.Querier) error {
+		// TENANT-005: the provider verify SELECT policy is GUC-scoped — set the
+		// tenant so the count returns this tenant's append-only rows (and only
+		// this tenant's). Without it the scoped policy would read nothing.
+		if _, err := q.Exec(ctx, `SELECT set_config('probectl.tenant_id', $1, true)`, tenantID); err != nil {
+			return fmt.Errorf("scope provider verify: %w", err)
+		}
 		for t := range appendOnlyTables {
 			var n int64
 			if err := q.QueryRow(ctx, `SELECT count(*) FROM `+pgIdent(t)+` WHERE tenant_id = $1`, tenantID).Scan(&n); err != nil {
