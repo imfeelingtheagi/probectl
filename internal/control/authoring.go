@@ -87,7 +87,7 @@ func (s *Server) handleAIDiscover(w http.ResponseWriter, r *http.Request) error 
 	var existing []string
 	if s.pool != nil {
 		if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-			tests, e := store.Tests{}.List(ctx, sc)
+			tests, e := store.Tests{}.ListAll(ctx, sc, 0)
 			if e != nil {
 				return e
 			}

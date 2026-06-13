@@ -97,7 +97,17 @@ func (Tests) Get(ctx context.Context, s tenancy.Scope, id string) (*Test, error)
 	return &t, nil
 }
 
-// List returns the tenant's tests, newest first.
+// DefaultTestPageSize bounds an unspecified tests page (SCALE-002). Mirrors
+// Agents.DefaultAgentPageSize — the tests table had no LIMIT while agents did.
+const DefaultTestPageSize = 200
+
+// maxTestPageSize is the hard cap on a single tests page (SCALE-002).
+const maxTestPageSize = 1000
+
+// List returns the tenant's tests, newest first. DEPRECATED for unbounded use:
+// callers that materialize the whole set must page via ListPage/ListAll
+// (SCALE-002) so a tenant with 50k tests cannot load the entire table in one
+// query. Retained for small internal call sites that page through it.
 func (Tests) List(ctx context.Context, s tenancy.Scope) ([]Test, error) {
 	rows, err := s.Q.Query(ctx, `SELECT `+testCols+` FROM tests ORDER BY created_at DESC`)
 	if err != nil {
@@ -113,6 +123,58 @@ func (Tests) List(ctx context.Context, s tenancy.Scope) ([]Test, error) {
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// ListPage returns one cursor page of tests ordered by id, starting AFTER the
+// given cursor id (empty = first page), capped at limit (SCALE-002). Mirrors
+// Agents.ListPage: id ordering is stable (UUID PK), so the next cursor is the
+// last returned id. This is what /v1/tests and the bounded internal full-set
+// scans use so an unbounded SELECT * never lands on the hot path.
+func (Tests) ListPage(ctx context.Context, s tenancy.Scope, afterID string, limit int) ([]Test, error) {
+	if limit <= 0 || limit > maxTestPageSize {
+		limit = DefaultTestPageSize
+	}
+	rows, err := s.Q.Query(ctx,
+		`SELECT `+testCols+` FROM tests WHERE id > $1 ORDER BY id LIMIT $2`, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Test{}
+	for rows.Next() {
+		var t Test
+		if err := scanTest(rows, &t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ListAll materializes every test for the tenant by paging through ListPage in
+// bounded chunks (SCALE-002). Internal call sites that genuinely need the whole
+// set (the signed test-sync bundle, AI authoring's existing-target dedup, the
+// MCP test list) use this instead of an unbounded SELECT *: the wire query stays
+// LIMIT-bounded even though the result is the full set. maxRows is a safety
+// ceiling (0 = no extra ceiling beyond paging).
+func (t Tests) ListAll(ctx context.Context, s tenancy.Scope, maxRows int) ([]Test, error) {
+	var out []Test
+	cursor := ""
+	for {
+		page, err := t.ListPage(ctx, s, cursor, maxTestPageSize)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page...)
+		if len(page) < maxTestPageSize {
+			break // last (partial) page
+		}
+		cursor = page[len(page)-1].ID
+		if maxRows > 0 && len(out) >= maxRows {
+			break
+		}
+	}
+	return out, nil
 }
 
 // Update replaces a test's mutable fields.

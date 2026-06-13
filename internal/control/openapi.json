@@ -134,6 +134,27 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/TenantHeader"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Cursor: return tests with id greater than this value (the previous page's next_cursor). SCALE-002 pagination.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum tests to return in one page (SCALE-002).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 200
+            }
           }
         ],
         "responses": {
@@ -4703,6 +4724,10 @@
             "items": {
               "$ref": "#/components/schemas/Test"
             }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Cursor for the next page; absent when the last page was returned (SCALE-002)."
           }
         },
         "required": [

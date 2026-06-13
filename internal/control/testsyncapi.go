@@ -37,7 +37,7 @@ func (s *Server) handleTestBundle(w http.ResponseWriter, r *http.Request) error 
 	}
 	var tests []store.Test
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-		t, e := store.Tests{}.List(ctx, sc)
+		t, e := store.Tests{}.ListAll(ctx, sc, 0)
 		tests = t
 		return e
 	}); err != nil {

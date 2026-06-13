@@ -188,15 +188,24 @@ func (req testRequest) toInput() (store.TestInput, error) {
 }
 
 func (s *Server) handleListTests(w http.ResponseWriter, r *http.Request) error {
+	// SCALE-002: cursor pagination (?after=<id>&limit=<n>) keeps the response
+	// bounded instead of loading the entire tests table (mirrors /v1/agents).
+	after := r.URL.Query().Get("after")
+	limit := intQuery(r, "limit", store.DefaultTestPageSize)
 	var tests []store.Test
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-		t, e := store.Tests{}.List(ctx, sc)
+		t, e := store.Tests{}.ListPage(ctx, sc, after, limit)
 		tests = t
 		return e
 	}); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": tests})
+	resp := map[string]any{"items": tests}
+	// next_cursor is the last id; absent when the page wasn't full (end of set).
+	if len(tests) == limit && limit > 0 {
+		resp["next_cursor"] = tests[len(tests)-1].ID
+	}
+	writeJSON(w, http.StatusOK, resp)
 	return nil
 }
 

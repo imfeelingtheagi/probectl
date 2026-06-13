@@ -96,7 +96,7 @@ func (b mcpBackend) scope(ctx context.Context, p *auth.Principal, fn func(contex
 func (b mcpBackend) ListTests(ctx context.Context, p *auth.Principal) (any, error) {
 	var tests []store.Test
 	if err := b.scope(ctx, p, func(ctx context.Context, sc tenancy.Scope) error {
-		t, e := store.Tests{}.List(ctx, sc)
+		t, e := store.Tests{}.ListAll(ctx, sc, 0)
 		tests = t
 		return e
 	}); err != nil {
