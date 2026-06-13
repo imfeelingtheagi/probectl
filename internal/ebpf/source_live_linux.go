@@ -101,19 +101,39 @@ func (s *liveSource) Flows(ctx context.Context) (<-chan Flow, error) {
 			if err != nil {
 				return // reader closed (ctx canceled) or fatal
 			}
-			var e l4eventC
-			if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
-				s.drops.Add(1)
+			// FUZZ-006: a corrupt/short ring sample must never panic the decode
+			// loop (which would silently stop flow capture). Recover per-record,
+			// count a drop, and keep reading.
+			flow, ok := s.decodeFlowSafely(rec.RawSample)
+			if !ok {
 				continue
 			}
 			select {
 			case <-ctx.Done():
 				return
-			case ch <- e.toFlow(s.cfg):
+			case ch <- flow:
 			}
 		}
 	}()
 	return ch, nil
+}
+
+// decodeFlowSafely decodes one ring-buffer sample into a Flow, recovering from
+// any panic (FUZZ-006). On a decode error or panic it counts a drop and returns
+// ok=false so the read loop simply continues.
+func (s *liveSource) decodeFlowSafely(sample []byte) (flow Flow, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.drops.Add(1)
+			flow, ok = Flow{}, false
+		}
+	}()
+	var e l4eventC
+	if err := binary.Read(bytes.NewReader(sample), binary.LittleEndian, &e); err != nil {
+		s.drops.Add(1)
+		return Flow{}, false
+	}
+	return e.toFlow(s.cfg), true
 }
 
 func (e l4eventC) toFlow(cfg *Config) Flow {

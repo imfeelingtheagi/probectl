@@ -66,6 +66,11 @@ type Collector struct {
 	emitRetryBase  time.Duration
 	sleep          func(context.Context, time.Duration) // injectable for tests
 
+	// decodeFn is the decode hook decodeSafely guards (FUZZ-006). It defaults to
+	// c.dec.Decode; tests inject a panicking decoder to prove the read loop
+	// survives a hostile/corrupt datagram.
+	decodeFn func(pkt []byte, exporter string, now time.Time) ([]Record, int, error)
+
 	mu    sync.Mutex
 	conns map[string]net.PacketConn // protocol name -> bound socket
 	done  chan struct{}
@@ -216,7 +221,11 @@ func (c *Collector) readLoop(ctx context.Context, name string, conn net.PacketCo
 		}
 		c.stats.Packets.Add(1)
 		exporter := exporterHost(addr)
-		recs, misses, derr := c.dec.Decode(buf[:n], exporter, time.Now())
+		// FUZZ-006: a malformed/hostile datagram must never panic the read loop
+		// (which would silently stop flow ingestion). decodeSafely recovers
+		// per-packet, counts it as a decode error, drops the packet, and the
+		// loop keeps reading.
+		recs, misses, derr := c.decodeSafely(buf[:n], exporter, name)
 		if misses > 0 {
 			c.stats.TemplateMisses.Add(uint64(misses))
 		}
@@ -234,6 +243,27 @@ func (c *Collector) readLoop(ctx context.Context, name string, conn net.PacketCo
 			}
 		}
 	}
+}
+
+// decodeSafely wraps the decoder in a panic-recover (FUZZ-006). A panic on a
+// crafted/corrupt datagram is converted into a decode error (counted by the
+// caller) and the packet is dropped, so a single bad packet can never take down
+// the UDP read loop.
+func (c *Collector) decodeSafely(pkt []byte, exporter, listener string) (recs []Record, misses int, derr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			recs, misses = nil, 0
+			derr = fmt.Errorf("flow: decoder panicked: %v", r)
+			c.stats.DecodeErrors.Add(1)
+			c.log.Error("flow: recovered from decoder panic (packet dropped)",
+				"listener", listener, "exporter", exporter, "panic", r)
+		}
+	}()
+	decode := c.decodeFn
+	if decode == nil {
+		decode = c.dec.Decode
+	}
+	return decode(pkt, exporter, time.Now())
 }
 
 // flushLoop drains the queue into size/time-bounded batches for the emitter,

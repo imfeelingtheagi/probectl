@@ -21,6 +21,11 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/version"
 )
 
+// maxRecvBytes bounds each inbound gRPC message (FUZZ-005). 4 MiB matches the
+// OTLP receiver; agent result frames are far smaller, so this is purely a
+// safety ceiling against an oversized/hostile message (returns ResourceExhausted).
+const maxRecvBytes = 4 << 20 // 4 MiB
+
 // Server is the control-plane's agent-transport gRPC server. All connections are
 // mTLS; non-mTLS clients are rejected at the TLS layer.
 type Server struct {
@@ -60,7 +65,15 @@ func New(certFile, keyFile, caFile string, pool *pgxpool.Pool, b bus.Bus, broker
 		svc.hb = newHeartbeatBatcher(pool, log, defaultHeartbeatWindow)
 		go svc.hb.run(srvCtx)
 	}
-	gs := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	// FUZZ-005: bound the per-message receive size EXPLICITLY (matching the OTLP
+	// receiver's 4 MiB) rather than relying on the implicit gRPC default. Agent
+	// result frames are small protobufs; an over-limit message returns
+	// ResourceExhausted before it is decoded — defense against a hostile or
+	// buggy client flooding the decoder.
+	gs := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.MaxRecvMsgSize(maxRecvBytes),
+	)
 	agentv1.RegisterAgentServiceServer(gs, svc)
 	return &Server{grpc: gs, log: log, cancel: cancel, svc: svc, revocations: revocations}, nil
 }

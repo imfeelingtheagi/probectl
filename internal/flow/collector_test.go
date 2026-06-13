@@ -4,6 +4,7 @@ package flow
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net"
 	"sync"
@@ -40,6 +41,39 @@ func testConfig() *Config {
 	cfg.FlushInterval = 30 * time.Millisecond
 	cfg.BatchSize = 8
 	return cfg
+}
+
+// TestDecodeSafelyRecoversFromPanic: FUZZ-006. A decoder that panics on a
+// sentinel input must not crash the read loop — decodeSafely recovers, counts a
+// decode error, returns no records, and a subsequent good decode still works.
+func TestDecodeSafelyRecoversFromPanic(t *testing.T) {
+	c, err := New(testConfig(), &captureEmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.decodeFn = func(pkt []byte, _ string, _ time.Time) ([]Record, int, error) {
+		if len(pkt) == 1 && pkt[0] == 0xFF {
+			panic("hostile datagram")
+		}
+		return []Record{{}}, 0, nil
+	}
+
+	// The panicking packet must be survived and counted, not propagated.
+	recs, _, derr := c.decodeSafely([]byte{0xFF}, "10.0.0.1", "netflow")
+	if recs != nil {
+		t.Errorf("panic path returned %d records, want 0", len(recs))
+	}
+	if derr == nil {
+		t.Error("panic must surface as a decode error, not be swallowed silently")
+	}
+	if got := c.StatsSnapshot().DecodeErrors; got != 1 {
+		t.Errorf("DecodeErrors = %d, want 1 after a recovered panic", got)
+	}
+	// The loop keeps working: a non-sentinel packet decodes normally.
+	recs, _, derr = c.decodeSafely([]byte{0x01}, "10.0.0.1", "netflow")
+	if derr != nil || len(recs) != 1 {
+		t.Errorf("post-panic decode = (%d recs, %v), want (1, nil) — loop did not recover", len(recs), derr)
+	}
 }
 
 // TestCollectorEndToEnd sends real datagrams (v5 + v9 template/data + sFlow)

@@ -240,9 +240,10 @@ func (s *liveL7Source) L7Events(ctx context.Context) (<-chan L7Event, error) {
 			// can retain it. rec.RawSample is kernel-owned and reused on
 			// the next ring read; no other reference survives. The kernel
 			// already withheld everything past the capture window.
-			ev, err := decodeChunk(rec.RawSample, s.cfg.TenantID, s.cfg.L7CaptureRedaction)
-			if err != nil {
-				s.drops.Add(1)
+			// FUZZ-006: recover per-record so a corrupt sample can never panic
+			// the L7 decode loop and silently stop capture.
+			ev, ok := s.decodeChunkSafely(rec.RawSample)
+			if !ok {
 				continue
 			}
 			select {
@@ -253,6 +254,25 @@ func (s *liveL7Source) L7Events(ctx context.Context) (<-chan L7Event, error) {
 		}
 	}()
 	return ch, nil
+}
+
+// decodeChunkSafely decodes one ring-buffer L7 sample, recovering from any
+// panic (FUZZ-006). On a decode error or panic it counts a drop and returns
+// ok=false so the read loop continues. The redaction boundary is unchanged:
+// decodeChunk still redacts the only plaintext copy before this returns.
+func (s *liveL7Source) decodeChunkSafely(sample []byte) (ev L7Event, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.drops.Add(1)
+			ev, ok = L7Event{}, false
+		}
+	}()
+	e, err := decodeChunk(sample, s.cfg.TenantID, s.cfg.L7CaptureRedaction)
+	if err != nil {
+		s.drops.Add(1)
+		return L7Event{}, false
+	}
+	return e, true
 }
 
 func (s *liveL7Source) Drops() uint64 { return s.drops.Load() }
