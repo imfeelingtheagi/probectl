@@ -54,22 +54,48 @@ jobs:
           echo "::error::timed out waiting for ci to complete on ${GITHUB_SHA}."
           exit 1
 
+  # TEST-011: the docs-vs-CI contradiction (docs/releasing.md says "all seven"
+  # while release.yml shipped five) recurs the moment the Makefile grows a
+  # binary that nobody adds here. This gate makes the published set and the
+  # Makefile's BINARIES list prove each other equal — drift fails the release
+  # instead of silently shipping an incomplete set.
+  components-match-makefile:
+    name: published components == Makefile BINARIES
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Assert every Makefile binary is a published component
+        run: |
+          set -euo pipefail
+          expected="$(grep -E '^BINARIES[[:space:]]*:=' Makefile | cut -d= -f2- | tr ' ' '\n' | grep . | sort -u)"
+          # The full set this workflow publishes: the images matrix plus the
+          # ebpf-agent include (its own live-build Dockerfile). Keep in lockstep
+          # with the matrix above — this list is the single assertion point.
+          published="$(printf '%s\n' \
+            probectl-control probectl-agent probectl-endpoint \
+            probectl-flow-agent probectl-device-agent probectl \
+            probectl-ebpf-agent | sort -u)"
+          if ! diff <(echo "$expected") <(echo "$published"); then
+            echo "::error::release.yml published components drift from Makefile BINARIES (TEST-011): the < line is in the Makefile but unpublished, the > line is published but not a Makefile binary. Update the images matrix."
+            exit 1
+          fi
+          echo "all $(echo "$expected" | wc -l | tr -d ' ') Makefile binaries are published"
+
   images:
     name: images (${{ matrix.component }})
-    needs: require-green-ci
+    needs: [require-green-ci, components-match-makefile]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # DELIBERATELY 5 of the Makefile's 7 BINARIES: probectl-flow-agent and
-        # probectl-device-agent build from source (`make build`) and are fully
-        # documented (docs/deploying-agents.md) but are NOT published as release
-        # artifacts/images yet — unpublished on purpose until those planes get
-        # packaged install paths. Revisit at GA. Adding a component here is the
-        # whole change when that day comes.
+        # ALL 7 of the Makefile's BINARIES ship as images + signed downloads —
+        # every documented producer is installable without a Go toolchain.
+        # (probectl-ebpf-agent rides its special live-build Dockerfile below.)
         component:
           - probectl-control
           - probectl-agent
           - probectl-endpoint
+          - probectl-flow-agent
+          - probectl-device-agent
           - probectl
         dockerfile: [deploy/docker/Dockerfile]
         include:
@@ -127,7 +153,7 @@ jobs:
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           mkdir -p dist
           for arch in amd64 arm64; do
-            for b in probectl-control probectl-agent probectl-ebpf-agent probectl-endpoint probectl; do
+            for b in probectl-control probectl-agent probectl-ebpf-agent probectl-endpoint probectl-flow-agent probectl-device-agent probectl; do
               out="dist/${b}_${VERSION}_linux_${arch}"
               GOOS=linux GOARCH="${arch}" CGO_ENABLED=0 go build -trimpath \
                 -ldflags "-s -w \
