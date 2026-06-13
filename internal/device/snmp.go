@@ -241,7 +241,10 @@ func pollSNMP(conn snmpConn, dev Target, tenant, agent string, now time.Time) ([
 		}
 		mk(MetricIfOperStatus, boolFloat(e.OperUp), "")
 		if e.SpeedMbps > 0 {
-			mk(MetricIfSpeedMbps, float64(e.SpeedMbps), "bps")
+			// ifHighSpeed is natively Mbps; the metric name says mbps and so
+			// must the unit label (was "bps" — a label-only bug; the VALUE
+			// was always Mbps, so no series ever needs rescaling).
+			mk(MetricIfSpeedMbps, float64(e.SpeedMbps), "Mbps")
 		}
 		for name, v := range counters[idx] {
 			unit := "octets"
