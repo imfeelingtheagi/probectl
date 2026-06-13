@@ -95,7 +95,9 @@ func TestMemoryRedeliversOnHandlerError(t *testing.T) {
 
 func awaitSub(t *testing.T, m *Memory, topic string) {
 	t.Helper()
-	for i := 0; i < 200 && m.subscriberCount(topic) == 0; i++ {
+	// Subscribe runs in a goroutine; ~5s budget (not 200ms) so a slow -race
+	// scheduler on a loaded CI runner can't flake this (cf. TestPolicyLifecycle).
+	for i := 0; i < 5000 && m.subscriberCount(topic) == 0; i++ {
 		time.Sleep(time.Millisecond)
 	}
 	if m.subscriberCount(topic) == 0 {

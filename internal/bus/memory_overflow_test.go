@@ -27,7 +27,7 @@ func TestMemoryDropOverflowDoesNotBlock(t *testing.T) {
 		})
 	}()
 	// Let the subscriber register.
-	for i := 0; i < 100 && m.subscriberCount("t") == 0; i++ {
+	for i := 0; i < 5000 && m.subscriberCount("t") == 0; i++ { // ~5s: -race-safe (cf. TestPolicyLifecycle)
 		time.Sleep(time.Millisecond)
 	}
 	close(subscribed)
@@ -77,7 +77,7 @@ func TestMemoryBlockPolicyLosesNothing(t *testing.T) {
 			return nil
 		})
 	}()
-	for i := 0; i < 100 && m.subscriberCount("t") == 0; i++ {
+	for i := 0; i < 5000 && m.subscriberCount("t") == 0; i++ { // ~5s: -race-safe (cf. TestPolicyLifecycle)
 		time.Sleep(time.Millisecond)
 	}
 	for i := 0; i < n; i++ {
@@ -126,7 +126,7 @@ func TestMemoryDefaultPolicyOneStuckSubDoesNotStarveOthers(t *testing.T) {
 			return nil
 		})
 	}()
-	for i := 0; i < 200 && m.subscriberCount("t") < 2; i++ {
+	for i := 0; i < 5000 && m.subscriberCount("t") < 2; i++ { // ~5s: -race-safe
 		time.Sleep(time.Millisecond)
 	}
 	if m.subscriberCount("t") < 2 {
