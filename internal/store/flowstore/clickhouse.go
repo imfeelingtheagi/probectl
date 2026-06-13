@@ -383,9 +383,13 @@ func topSQL(q TopQuery, table string) (string, chParams) {
 	if q.By == ByPair {
 		groupBy = "k, d"
 	}
+	// CORRECT-003: FINAL collapses the ReplacingMergeTree's redelivered-duplicate
+	// rows (same sort key incl. row_id) BEFORE the sum(), so a redelivered NetFlow
+	// batch is not double-counted — matching the eBPF store. Without FINAL the
+	// pre-merge duplicates would each be summed.
 	sql := fmt.Sprintf(
 		`SELECT %s AS k, %s AS d, sum(bytes_scaled) AS b, sum(packets_scaled) AS p, count() AS f `+
-			`FROM %s WHERE tenant_id={tenant:String} AND ts >= {since:DateTime64(3)} AND ts <= {until:DateTime64(3)}%s `+
+			`FROM %s FINAL WHERE tenant_id={tenant:String} AND ts >= {since:DateTime64(3)} AND ts <= {until:DateTime64(3)}%s `+
 			`GROUP BY %s ORDER BY b DESC, k ASC LIMIT %d`,
 		key, detail, table, extra, groupBy, q.Limit)
 	return sql, chParams{
@@ -447,10 +451,12 @@ func capacitySQL(q CapacityQuery, table string) (string, chParams) {
 		exporterFilter = " AND exporter={exporter:String}"
 		params["exporter"] = q.Exporter
 	}
+	// CORRECT-003: FINAL dedups redelivered rows before the throughput sum, so a
+	// redelivered batch doesn't inflate capacity (eBPF-store parity).
 	sql := fmt.Sprintf(
 		`SELECT exporter, %s AS iface, toStartOfInterval(ts, INTERVAL %d second) AS t, `+
 			`sum(bytes_scaled)*8/%d AS bps, sum(packets_scaled)/%d AS pps `+
-			`FROM %s WHERE tenant_id={tenant:String} AND ts >= {since:DateTime64(3)} AND ts <= {until:DateTime64(3)}%s `+
+			`FROM %s FINAL WHERE tenant_id={tenant:String} AND ts >= {since:DateTime64(3)} AND ts <= {until:DateTime64(3)}%s `+
 			`GROUP BY exporter, iface, t ORDER BY t, exporter, iface`,
 		iface, secs, secs, secs, table, exporterFilter)
 	return sql, params

@@ -47,6 +47,19 @@ Reference operators (manage the stores on Kubernetes):
   its own circuit breaker (SCALE-021) — a single silo outage degrades only that
   tenant; check `probectl_*` breaker metrics per target.
 
+## Read semantics: dedup-correct aggregations (FINAL)
+
+The flow and eBPF tables are `ReplacingMergeTree`s keyed so a redelivered
+identical row (at-least-once delivery can replay a batch) collapses at merge
+time. ClickHouse merges run in the background, so duplicates may still sit in
+distinct, unmerged parts when you query. All aggregation reads therefore use
+`FINAL` (CORRECT-003) — it collapses duplicates *at read time* before the
+`sum()`, so a redelivered NetFlow batch is never double-counted in top-talkers
+or capacity. `FINAL` adds read cost proportional to the parts scanned; the
+day-partitioned, tenant-led ORDER BY keeps that bounded for windowed queries.
+Do not remove `FINAL` from these reads to "speed up" a query — that silently
+reintroduces double-counting on redelivery.
+
 ## Connection security
 
 Every store connection supports TLS in transit and is default-on in the
