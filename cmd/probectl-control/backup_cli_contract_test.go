@@ -99,6 +99,33 @@ func TestPITRRecipesUseRealCLI(t *testing.T) {
 	assertNoBadBackupFlags(t, "docs/ops/backup-restore.md", body)
 }
 
+// OPS-005: the CI backup-drill must exercise the SEALED .pbk path end-to-end —
+// the path the shipped restore Job actually carries — not the plaintext pg_dump.
+// (The original "executed" claim drilled only the plaintext path.) This pins the
+// drill script to: set an envelope KEK, seal the dump with backup-seal into a
+// .pbk, then restore it with backup-open — so the encrypted round-trip can't
+// quietly regress to plaintext.
+func TestBackupDrillExercisesSealedPBKPath(t *testing.T) {
+	drill := readArtifact(t, "scripts/backup_restore_drill.sh")
+	assertNoBadBackupFlags(t, "scripts/backup_restore_drill.sh", drill)
+
+	stripped := stripComments(drill)
+	for _, want := range []struct{ substr, why string }{
+		{"PROBECTL_ENVELOPE_KEY", "the drill must set an envelope KEK so the sealed path is real"},
+		{"backup-seal", "the drill must SEAL the dump (produce the .pbk the restore Job carries)"},
+		{".pbk", "the drill must produce/round-trip a .pbk artifact, not just a plaintext .dump"},
+		{"backup-open", "the drill must restore by DECRYPTING the .pbk via backup-open"},
+	} {
+		if !strings.Contains(stripped, want.substr) {
+			t.Errorf("backup_restore_drill.sh: missing %q — %s (OPS-005)", want.substr, want.why)
+		}
+	}
+	// backup-open must read the .pbk on stdin (the real CLI contract).
+	if !strings.Contains(stripped, "backup-open") || !strings.Contains(stripped, "< \"${PBK}\"") {
+		t.Error("backup_restore_drill.sh: backup-open must read the sealed .pbk on stdin (OPS-005)")
+	}
+}
+
 // TestBackupFlagSetIsStdinStdoutOnly pins the CLI contract the recipes depend on:
 // backup-seal/open accept only -key-file/-key-id and otherwise read stdin/write
 // stdout. If someone ADDS --in/--out to backup.go in future, this stays green —
