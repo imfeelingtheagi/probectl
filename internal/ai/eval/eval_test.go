@@ -10,9 +10,11 @@ import (
 )
 
 // TestRCAEval runs the U-049 eval set through the real pipeline and reports
-// the scores. STRUCTURAL assertions only (the set is big enough, every
-// scenario executed, the report is well-formed) — quality scores are tracked
-// as a CI artifact, NOT gated (non-blocking initially, per the register).
+// the scores. Beyond the structural assertions (the set is big enough, every
+// scenario executed, the report is well-formed) the deterministic builtin path
+// is BLOCKING: answer accuracy and mean citation precision are gated at a
+// committed 0.85/0.85 floor (AIRCA-004) both here and in the rca-eval CI job,
+// which is part of verify-all — a regression below the floor fails the build.
 // Set PROBECTL_RCA_EVAL_REPORT=<path> to write the JSON report.
 func TestRCAEval(t *testing.T) {
 	scenarios := Scenarios()

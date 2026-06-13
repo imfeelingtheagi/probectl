@@ -8,13 +8,13 @@ package billing
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/imfeelingtheagi/probectl/internal/store/migrate"
+	"github.com/imfeelingtheagi/probectl/internal/testsupport"
 	"github.com/imfeelingtheagi/probectl/internal/usage"
 	"github.com/imfeelingtheagi/probectl/migrations"
 )
@@ -25,16 +25,13 @@ import (
 // INSIDE the tenant's own scope (reconciliation against the source of truth).
 func itPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dsn := os.Getenv("PROBECTL_TEST_POSTGRES")
-	if dsn == "" {
-		dsn = "postgres://probectl:probectl@localhost:5432/probectl"
-	}
+	dsn := testsupport.PostgresDSN()
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
-		t.Skipf("postgres unavailable: %v", err)
+		testsupport.SkipOrFatal(t, "postgres unavailable: %v", err)
 	}
 	if err := pool.Ping(context.Background()); err != nil {
-		t.Skipf("postgres unavailable: %v", err)
+		testsupport.SkipOrFatal(t, "postgres unavailable: %v", err)
 	}
 	if _, err := migrate.New(migrations.FS, nil).Apply(context.Background(), pool); err != nil {
 		t.Fatalf("migrate: %v", err)

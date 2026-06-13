@@ -29,3 +29,24 @@ func SkipOrFatal(t testing.TB, format string, args ...any) {
 	}
 	t.Skipf(format, args...)
 }
+
+// PostgresDSN resolves the test Postgres DSN from the environment, in
+// precedence order (TEST-003):
+//
+//	PROBECTL_DATABASE_URL   — what the CI integration job exports (ci_pg_tls.sh)
+//	PROBECTL_TEST_POSTGRES  — the legacy per-suite override (kept for back-compat)
+//	localhost fallback      — a plaintext dev DSN for a local docker-compose PG
+//
+// Suites previously each read PROBECTL_TEST_POSTGRES (which CI never set) and
+// fell back to localhost, so they silently skipped even in the require-services
+// job. Unifying on this resolver means the same DSN the integration job exports
+// is what every integration suite connects to.
+func PostgresDSN() string {
+	if v := os.Getenv("PROBECTL_DATABASE_URL"); v != "" {
+		return v
+	}
+	if v := os.Getenv("PROBECTL_TEST_POSTGRES"); v != "" {
+		return v
+	}
+	return "postgres://probectl:probectl@localhost:5432/probectl"
+}

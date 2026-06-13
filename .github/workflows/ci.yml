@@ -24,6 +24,7 @@ jobs:
   action-pins:
     name: action-pins
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Every workflow action is SHA-pinned (U-007)
@@ -40,6 +41,7 @@ jobs:
     # policy lives in .gitleaks.toml (deliberate redaction-test fixtures only).
     name: secret-scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -59,6 +61,7 @@ jobs:
     # symbols when they exist (no vacuous pass).
     name: no-devauth-in-release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -89,6 +92,7 @@ jobs:
   lint-go:
     name: lint-go
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -106,6 +110,7 @@ jobs:
   lint-python:
     name: lint-python
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -118,6 +123,7 @@ jobs:
   editions-gate:
     name: editions-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -133,6 +139,7 @@ jobs:
     # the whole deb/rpm channel was dead on release. Build one deb + one rpm on
     # every PR so the packaging path proves itself continuously.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -150,6 +157,7 @@ jobs:
   fips-gate:
     name: fips-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -161,6 +169,7 @@ jobs:
   test-go:
     name: test-go
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -180,10 +189,13 @@ jobs:
       - name: Backup-encryption + erasure-covers-backups gate (OPS-002, COMPLY-002)
         run: go test -count=1 -v -run "Backup|Restore|Erasure|Retention|Coverage|SealOpen|Tamper" ./internal/backup/ ./internal/tenantlife/
       - name: Fuzz smoke (untrusted-input parsers must not crash)
-        # TEST-013: retry once — fuzz-smoke is a short randomized run, so a
-        # transient flake shouldn't red the build, but a REPRODUCIBLE crash
-        # fails both attempts and the committed corpus seed catches it on replay.
-        run: make fuzz-smoke || make fuzz-smoke
+        # TEST-007: NO retry. The authoritative signal is corpus persistence —
+        # a reproducible crasher persists a failing input under testdata/fuzz/
+        # and fails the gate; the committed seed catches it on replay. A retry
+        # could mask a low-probability nondeterministic finding. The script
+        # tolerates a wind-down "context deadline" ONLY when the run actually
+        # executed inputs (a zero-exec deadline is a hang and fails).
+        run: make fuzz-smoke
       - name: Agent overhead bench smoke (U-051 — benches compile + run; the
           throughput tripwire already ran inside make test)
         run: go test -bench . -benchtime 1000x -run '^$' ./internal/ebpf/...
@@ -201,6 +213,7 @@ jobs:
   rca-eval:
     name: rca-eval (BLOCKING — floors 0.85/0.85)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -238,6 +251,7 @@ jobs:
     # are retained as workflow artifacts on every run (the diligence receipt),
     # and PRs get a best-effort summary comment. No bot ever pushes to main.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -271,6 +285,7 @@ jobs:
   test-python:
     name: test-python
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -300,6 +315,7 @@ jobs:
     # real scripted login against a local app — success timings/waterfall/DOM and a
     # failure screenshot. The Go side (internal/browser) is covered by the unit job.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container: mcr.microsoft.com/playwright:v1.55.1-noble
     defaults:
       run:
@@ -318,6 +334,7 @@ jobs:
     # S19, F23: no undocumented routes ship at a GA milestone. Validates the spec
     # is OpenAPI 3.1 and that the registered /v1 routes exactly match the spec.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -332,6 +349,7 @@ jobs:
     # — release N's schema must work with N-1's code (rollback) and N's code. Rejects
     # destructive/blocking changes (drop column, type change, rename, NOT NULL adds).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -346,6 +364,7 @@ jobs:
     # upholds the secure-by-default hardening invariants (non-root/read-only pod,
     # NetworkPolicy/PDB/HPA, /readyz drain probe, HSTS, no default credentials).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
@@ -390,6 +409,7 @@ jobs:
     # S35, F29: the probectl Terraform module is fmt-clean and validates (fmt +
     # `terraform validate` of the example root that consumes it).
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
@@ -412,6 +432,7 @@ jobs:
     # the same bpf2go path operators use (make ebpf-agent). The observe-only
     # static gate runs in test-go.
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -494,6 +515,7 @@ jobs:
     # -tags=ebpf. A fixture-only image cannot pass.
     name: ebpf-image-live (EBPF-004)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -521,6 +543,7 @@ jobs:
     # U-026 extends the SAME gate to real ClickHouse (flowstore + pathstore
     # cross-tenant reads, scoped erasure, and the row-policy DDL).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Postgres runs as a docker step (not a service) so it can serve TLS under
     # a per-run test CA — CI talks verify-full like production (OPS-010). The
     # TLS step exports PROBECTL_DATABASE_URL via GITHUB_ENV.
@@ -563,6 +586,7 @@ jobs:
     # idempotent and /readyz passes (S1 Done-when). Uses a service container
     # rather than the full compose stack — only Postgres is needed yet.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Postgres runs as a docker step so it serves TLS under a per-run test CA;
     # the client connects sslmode=verify-full like production (OPS-010).
     env:
@@ -615,6 +639,7 @@ jobs:
     # asserts tenant-scoped isolation + bounded query latency against Postgres —
     # the first place a pooled-cardinality or RLS-cost regression would surface.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -633,6 +658,7 @@ jobs:
     # the measured backup/restore times the runbook cites
     # (docs/ops/backup-restore.md).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: backup → wipe → restore drill
@@ -646,6 +672,7 @@ jobs:
     # acked rows lost. Numbers land in the job log; docs/ops/dr.md is the
     # runbook + sign-off table (representative-infra row is human-run).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: timed failover drill (kill primary → promote replica)
@@ -665,6 +692,7 @@ jobs:
     # harness on every pass; the L/XL run is `make load-test TIER=L|XL` on
     # reference hardware (human-scheduled), results in docs/scale-gate.md.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -678,6 +706,7 @@ jobs:
   proto:
     name: proto
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -724,6 +753,7 @@ jobs:
     # Frontend foundation (S8a): typecheck, lint, the a11y + theme-swap + token
     # guards, and a production build. The test step IS the CI a11y gate.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -761,6 +791,7 @@ jobs:
   dependency-scan:
     name: dependency-scan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -801,6 +832,7 @@ jobs:
   build-images:
     name: build-images
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -828,6 +860,7 @@ jobs:
   image-scan:
     name: image-scan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -857,6 +890,7 @@ jobs:
     name: commitlint
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -872,6 +906,7 @@ jobs:
     name: dco
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -889,6 +924,7 @@ jobs:
   sbom:
     name: sbom
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -911,6 +947,7 @@ jobs:
     # YAML/interpolation in a compose recipe is a getting-started footgun that
     # no Go test catches. `docker compose config` parses + resolves them.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Render every shipped compose file
@@ -932,6 +969,7 @@ jobs:
   verify-all:
     name: verify-all (executed-verification umbrella)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: always()
     needs:
       - action-pins
