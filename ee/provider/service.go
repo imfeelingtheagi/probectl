@@ -10,7 +10,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
@@ -67,6 +69,12 @@ type Service struct {
 
 	maxGrantTTL time.Duration
 
+	// log + lockoutAuditFailures make the best-effort lockout-audit append
+	// OBSERVABLE (CODE-008): a dropped append was previously discarded with
+	// `_ =`, so a silently failing provider audit stream looked healthy.
+	log                  *slog.Logger
+	lockoutAuditFailures atomic.Uint64
+
 	// S-T2: nil = pooled-only (the siloed_isolation feature is not licensed).
 	silo SiloOps
 	// routerInvalidate drops the isolation router's registry cache after a
@@ -86,7 +94,7 @@ func NewService(store Store, sink AuditSink, lic *license.Manager, telemetry Tel
 	}
 	return &Service{
 		store: store, audit: sink, lic: lic, telemetry: telemetry,
-		envelope: env, now: time.Now, maxGrantTTL: maxGrantTTL,
+		envelope: env, now: time.Now, maxGrantTTL: maxGrantTTL, log: slog.Default(),
 	}, nil
 }
 
@@ -295,10 +303,22 @@ func (s *Service) EnrollComplete(ctx context.Context, enrollToken, password, tot
 // tamper-evident provider audit stream (SEC-003 / guardrail 7). Best-effort:
 // an audit-sink failure must not mask the lockout itself (already enforced).
 func (s *Service) RecordLoginLockout(ctx context.Context, key string, failures int, lockout time.Duration) {
-	_ = s.audit.Append(ctx, "system", "provider.auth_lockout", "", map[string]any{
+	// Best-effort: the lockout is already enforced, so an audit-sink failure
+	// must not block it — but it must not be SILENT either (CODE-008). Log +
+	// count the failure so a broken provider audit stream is visible.
+	if err := s.audit.Append(ctx, "system", "provider.auth_lockout", "", map[string]any{
 		"key": key, "failures": failures, "lockout": lockout.String(),
-	})
+	}); err != nil {
+		s.lockoutAuditFailures.Add(1)
+		s.log.Error("provider audit append failed for auth lockout (lockout still enforced; audit trail incomplete)",
+			"key", key, "failures", failures, "error", err.Error(),
+			"audit_failures_total", s.lockoutAuditFailures.Load())
+	}
 }
+
+// LockoutAuditFailures reports how many provider-lockout audit appends have
+// failed (CODE-008 observability).
+func (s *Service) LockoutAuditFailures() uint64 { return s.lockoutAuditFailures.Load() }
 
 func (s *Service) Login(ctx context.Context, email, password, totpCode string) (Operator, error) {
 	op, cred, err := s.store.OperatorByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
