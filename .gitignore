@@ -58,3 +58,4 @@ web/.cache/
 .vscode/
 *.swp
 receipts/
+web/coverage/
