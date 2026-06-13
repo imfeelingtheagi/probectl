@@ -1,0 +1,37 @@
+[Unit]
+# OPS-004/OPS-002: systemd unit shipped inside the deb/rpm for the device
+# telemetry collector (SNMP poller + gNMI/OpenConfig streaming subscriber). It
+# is a bus-publishing collector under a registered identity, not an mTLS agent.
+# It reads /etc/probectl/device-agent.yaml; device credentials are referenced by
+# name and resolved from the environment, never stored in the unit/journal.
+Description=probectl device telemetry collector (SNMP/gNMI)
+Documentation=https://docs.probectl.example/deploying-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run unprivileged: SNMP (UDP 161 egress) and gNMI (TCP) need no host privilege.
+User=probectl
+Group=probectl
+ExecStart=/usr/bin/probectl-device-agent --config /etc/probectl/device-agent.yaml
+Restart=on-failure
+RestartSec=5s
+RestartSteps=3
+RestartMaxDelaySec=60s
+
+# Hardening: the collector needs no write access to the host beyond its state.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/probectl-device-agent
+StateDirectory=probectl-device-agent
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

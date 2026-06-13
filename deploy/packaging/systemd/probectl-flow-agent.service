@@ -1,0 +1,41 @@
+[Unit]
+# OPS-004/OPS-002: systemd unit shipped inside the deb/rpm for the flow
+# collector. Unlike the canary agent (mTLS to the control plane), the flow
+# collector is a bus-publishing collector: it listens for NetFlow/IPFIX/sFlow
+# exports and publishes normalized flow records to the bus under a registered
+# identity. It reads /etc/probectl/flow-agent.yaml; bus credentials come from
+# the environment (PROBECTL_FLOW_BUS_*), never the unit, so no secret lands in
+# `systemctl show` or the journal.
+Description=probectl flow collector (NetFlow/IPFIX/sFlow)
+Documentation=https://docs.probectl.example/deploying-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run unprivileged. Flow listeners bind UDP ports (2055/4739/6343); if those are
+# privileged on the host, grant CAP_NET_BIND_SERVICE rather than running as root.
+User=probectl
+Group=probectl
+ExecStart=/usr/bin/probectl-flow-agent --config /etc/probectl/flow-agent.yaml
+Restart=on-failure
+RestartSec=5s
+# Decorrelate fleet restarts (SCALE-008; systemd adds jitter too).
+RestartSteps=3
+RestartMaxDelaySec=60s
+
+# Hardening: the collector needs no write access to the host beyond its state.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/probectl-flow-agent
+StateDirectory=probectl-flow-agent
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,40 @@
+[Unit]
+# OPS-004/OPS-002: systemd unit shipped inside the deb/rpm for the endpoint
+# (digital-experience) agent: it runs network-path probes (traceroute, latency)
+# from the endpoint and publishes the results to the bus under a registered
+# identity. It reads /etc/probectl/endpoint.yaml.
+Description=probectl endpoint (DEM) agent
+Documentation=https://docs.probectl.example/deploying-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=probectl
+Group=probectl
+ExecStart=/usr/bin/probectl-endpoint --config /etc/probectl/endpoint.yaml
+Restart=on-failure
+RestartSec=5s
+RestartSteps=3
+RestartMaxDelaySec=60s
+
+# Path probing (traceroute/ICMP) needs raw sockets on most kernels — grant the
+# MINIMAL capability for it, not blanket root. Where the host enables
+# unprivileged ICMP (net.ipv4.ping_group_range) the agent works without even
+# this and degrades gracefully (internal/endpoint/netprobe_unix.go).
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/probectl-endpoint
+StateDirectory=probectl-endpoint
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

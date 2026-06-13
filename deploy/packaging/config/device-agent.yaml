@@ -1,0 +1,28 @@
+# probectl device telemetry collector configuration (shipped as a CONFFILE in
+# the deb/rpm so operator edits survive upgrades). It polls SNMP and/or
+# subscribes to gNMI/OpenConfig streams and publishes DeviceMetric records to the
+# bus. Full key reference: docs/configuration.md. Device credentials are NAMED
+# here and resolved from the credential source (Vault/env) — never the secret
+# itself (guardrail 6). Bus credentials come from PROBECTL_DEVICE_BUS_*.
+tenant_id: ""                 # REQUIRED: binds every metric to one tenant (F50)
+agent_id: ""                  # defaults to the OS hostname
+bus:
+  mode: kafka                 # memory | kafka
+  brokers: ["BROKER-HOST:9093"]
+  namespace: ""               # siloed bus lane for this tenant; empty = pooled
+# One entry per polled/subscribed device. Replace with your fleet.
+devices:
+  - address: "192.0.2.1"
+    port: 161
+    transport: "snmpv3"       # snmpv2c | snmpv3 | gnmi
+    credential: "device-snmp" # NAME of the secret, resolved at runtime
+    interval: 60s
+    sensors: true
+  # gNMI example (TLS verified against the device CA; never plaintext in prod):
+  # - address: "192.0.2.2"
+  #   port: 9339
+  #   transport: "gnmi"
+  #   credential: "device-gnmi"
+  #   gnmi:
+  #     sample_interval: 30s
+  #     ca_file: /etc/probectl/device-ca.crt
