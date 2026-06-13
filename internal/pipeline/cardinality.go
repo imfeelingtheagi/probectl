@@ -32,6 +32,16 @@ const (
 	// of adding a stateful dependency to the ingest hot path.
 	DefaultSeriesIdleTTL = time.Hour
 	sweepInterval        = time.Minute
+
+	// SCALE-007: per-series label caps. The series-count cap alone does not stop
+	// ONE admitted identity from carrying thousands of labels or megabyte label
+	// values (the identity key is built from agent-supplied labels). These caps
+	// match the OTLP plane's stance: a series with too many labels is dropped
+	// (counted), and an over-long label value is truncated before it becomes
+	// part of the identity. Native sources are already schema-bounded; this
+	// guards the agent-supplied Result.Metrics path.
+	maxLabelsPerSeries = 32
+	maxLabelValueLen   = 256
 )
 
 // CardinalityLimiter admits series identities under per-agent and per-tenant
@@ -150,6 +160,19 @@ func (l *CardinalityLimiter) Filter(tenant, agent string, series []tsdb.Series) 
 	admitted := series[:0]
 	droppedHere := 0
 	for _, s := range series {
+		// SCALE-007: a series with too many labels is rejected outright (a
+		// label explosion is as damaging as a series explosion); over-long
+		// label VALUES are truncated in place before they enter the identity
+		// key so they cannot bloat the limiter map or the downstream store.
+		if len(s.Labels) > maxLabelsPerSeries {
+			droppedHere++
+			continue
+		}
+		for k, v := range s.Labels {
+			if len(v) > maxLabelValueLen {
+				s.Labels[k] = v[:maxLabelValueLen]
+			}
+		}
 		id := seriesIdentity(s)
 		if _, known := ag[id]; known {
 			ag[id] = now // refresh last-seen: live series never evict

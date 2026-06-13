@@ -580,15 +580,20 @@ func Load(getenv func(string) string) (*Config, error) {
 	deploymentProfile := l.enum("PROBECTL_DEPLOYMENT_PROFILE", "single", "single", "multi-tenant", "regulated")
 	chScopeDefault := deploymentProfile == "multi-tenant" || deploymentProfile == "regulated"
 	cfg := &Config{
-		HTTPAddr:                 l.str("PROBECTL_HTTP_ADDR", ":8080"),
-		ReadTimeout:              l.dur("PROBECTL_HTTP_READ_TIMEOUT", 15*time.Second),
-		WriteTimeout:             l.dur("PROBECTL_HTTP_WRITE_TIMEOUT", 15*time.Second),
-		IdleTimeout:              l.dur("PROBECTL_HTTP_IDLE_TIMEOUT", 60*time.Second),
-		ShutdownTimeout:          l.dur("PROBECTL_SHUTDOWN_TIMEOUT", 15*time.Second),
-		DatabaseURL:              l.str("PROBECTL_DATABASE_URL", "postgres://probectl:probectl@localhost:5432/probectl?sslmode=require"),
-		DatabaseReadURL:          l.str("PROBECTL_DATABASE_READ_URL", ""),
-		DatabaseMaxConns:         int32(l.intRange("PROBECTL_DATABASE_MAX_CONNS", 10, 1, 1000)),
-		DatabaseMinConns:         int32(l.intRange("PROBECTL_DATABASE_MIN_CONNS", 0, 0, 1000)),
+		HTTPAddr:        l.str("PROBECTL_HTTP_ADDR", ":8080"),
+		ReadTimeout:     l.dur("PROBECTL_HTTP_READ_TIMEOUT", 15*time.Second),
+		WriteTimeout:    l.dur("PROBECTL_HTTP_WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:     l.dur("PROBECTL_HTTP_IDLE_TIMEOUT", 60*time.Second),
+		ShutdownTimeout: l.dur("PROBECTL_SHUTDOWN_TIMEOUT", 15*time.Second),
+		DatabaseURL:     l.str("PROBECTL_DATABASE_URL", "postgres://probectl:probectl@localhost:5432/probectl?sslmode=require"),
+		DatabaseReadURL: l.str("PROBECTL_DATABASE_READ_URL", ""),
+		// SCALE-009: a higher default pool ceiling and a warm floor. The old
+		// MaxConns=10 / MinConns=0 was tight for high fan-in (API + every
+		// consumer share the pool) and made the first request after idle pay a
+		// connect+TLS+SET-ROLE cold-start. 25/2 is a saner single-node default;
+		// docs/configuration.md gives per-tier sizing.
+		DatabaseMaxConns:         int32(l.intRange("PROBECTL_DATABASE_MAX_CONNS", 25, 1, 1000)),
+		DatabaseMinConns:         int32(l.intRange("PROBECTL_DATABASE_MIN_CONNS", 2, 0, 1000)),
 		Region:                   l.str("PROBECTL_REGION", ""),
 		Regions:                  l.list("PROBECTL_REGIONS"),
 		Residency:                l.str("PROBECTL_RESIDENCY", ""),

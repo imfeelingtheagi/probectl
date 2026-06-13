@@ -99,6 +99,48 @@ func TestInsertRoutesPerTarget(t *testing.T) {
 	}
 }
 
+// TestInsertChunksLargeBatch: SCALE-008. The FlowBatch size is agent-controlled,
+// so a large batch must be split into bounded sub-batch POSTs rather than one
+// giant request body. A batch of maxInsertChunk+1 rows must produce exactly 2
+// INSERTs.
+func TestInsertChunksLargeBatch(t *testing.T) {
+	var mu sync.Mutex
+	var insertPosts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("query")
+		// Count only the flow-DATA inserts (JSONEachRow), not migration-ledger
+		// or dedup-migration INSERTs that the first-use schema bootstrap emits.
+		if strings.HasPrefix(q, "INSERT INTO probectl_flows ") && strings.Contains(q, "FORMAT JSONEachRow") {
+			mu.Lock()
+			insertPosts++
+			mu.Unlock()
+		}
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	c, err := NewClickHouse(srv.URL, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	n := maxInsertChunk + 1
+	rows := make([]Row, n)
+	for i := range rows {
+		rows[i] = Row{TenantID: "pooled", TS: now, StartTS: now, Bytes: uint64(i)}
+	}
+	if err := c.Insert(context.Background(), rows); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	got := insertPosts
+	mu.Unlock()
+	if got != 2 {
+		t.Fatalf("%d rows produced %d INSERT POSTs, want 2 (chunked at %d, not one giant body)", n, got, maxInsertChunk)
+	}
+}
+
 // TestQueryRoutesToTenantStore proves reads route the same way: a siloed
 // tenant's TopTalkers hits its database; pooled hits the shared table.
 func TestQueryRoutesToTenantStore(t *testing.T) {

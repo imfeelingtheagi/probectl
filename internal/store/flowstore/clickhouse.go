@@ -81,6 +81,11 @@ func flowRowID(r Row) string {
 
 const sharedFlowsTable = "probectl_flows"
 
+// maxInsertChunk bounds the rows encoded into one INSERT request body
+// (SCALE-008). The FlowBatch is agent-controlled, so a 1M-row batch is chunked
+// into ~10k-row POSTs instead of one giant body.
+const maxInsertChunk = 10_000
+
 // Target is where one tenant's flows live (S-T2 siloed/hybrid isolation).
 // The zero value is the shared (pooled) deployment store. Database routes to
 // a per-tenant ClickHouse database; BaseURL pins a residency data plane.
@@ -283,26 +288,37 @@ func (c *ClickHouse) Insert(ctx context.Context, rows []Row) error {
 		if err != nil {
 			return err
 		}
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		for i := range group {
-			r := chRow{Row: group[i],
-				TSStr:    group[i].TS.UTC().Format("2006-01-02 15:04:05.000"),
-				StartStr: group[i].StartTS.UTC().Format("2006-01-02 15:04:05.000"),
-				RowID:    flowRowID(group[i])} // CORRECT-002 dedup key
-			if err := enc.Encode(r); err != nil {
-				return fmt.Errorf("flowstore: encode row: %w", err)
+		// SCALE-008: the FlowBatch size is agent-controlled, so a single Insert
+		// must not encode the whole batch into one unbounded request body — chunk
+		// it into bounded sub-batches (one POST each). Each chunk still benefits
+		// from SCALE-006 async_insert part-coalescing.
+		for start := 0; start < len(group); start += maxInsertChunk {
+			end := start + maxInsertChunk
+			if end > len(group) {
+				end = len(group)
 			}
-		}
-		// SCALE-006: async_insert batches small high-frequency inserts
-		// server-side into larger parts, so the flow plane's many small batches
-		// don't mint a part per insert (the part-explosion that wedges
-		// ClickHouse at NetFlow volumes). wait_for_async_insert keeps the call
-		// synchronous-to-durable so the retry+DLQ contract (CORRECT-010) still
-		// sees real failures.
-		insert := "INSERT INTO " + table + " SETTINGS async_insert=1, wait_for_async_insert=1 FORMAT JSONEachRow"
-		if err := c.exec(ctx, t.BaseURL, insert, nil, &buf); err != nil {
-			return err
+			chunk := group[start:end]
+			var buf bytes.Buffer
+			enc := json.NewEncoder(&buf)
+			for i := range chunk {
+				r := chRow{Row: chunk[i],
+					TSStr:    chunk[i].TS.UTC().Format("2006-01-02 15:04:05.000"),
+					StartStr: chunk[i].StartTS.UTC().Format("2006-01-02 15:04:05.000"),
+					RowID:    flowRowID(chunk[i])} // CORRECT-002 dedup key
+				if err := enc.Encode(r); err != nil {
+					return fmt.Errorf("flowstore: encode row: %w", err)
+				}
+			}
+			// SCALE-006: async_insert batches small high-frequency inserts
+			// server-side into larger parts, so the flow plane's many small batches
+			// don't mint a part per insert (the part-explosion that wedges
+			// ClickHouse at NetFlow volumes). wait_for_async_insert keeps the call
+			// synchronous-to-durable so the retry+DLQ contract (CORRECT-010) still
+			// sees real failures.
+			insert := "INSERT INTO " + table + " SETTINGS async_insert=1, wait_for_async_insert=1 FORMAT JSONEachRow"
+			if err := c.exec(ctx, t.BaseURL, insert, nil, &buf); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

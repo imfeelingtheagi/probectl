@@ -99,16 +99,26 @@ func (s *Server) handleCreateRollout(w http.ResponseWriter, r *http.Request) err
 	}
 	var fleet []agent.FleetAgent
 	if err := s.inTenant(r, func(ctx context.Context, sc tenancy.Scope) error {
-		agents, e := (store.Agents{}).List(ctx, sc)
-		if e != nil {
-			return e
-		}
-		for _, a := range agents {
-			fa := agent.FleetAgent{ID: a.ID, TenantID: a.TenantID, Version: a.AgentVersion}
-			if a.LastSeenAt != nil {
-				fa.LastSeen = *a.LastSeenAt
+		// SCALE-008: enumerate the fleet via the bounded cursor (ListPage)
+		// instead of one unbounded List — a tens-of-thousands-agent fleet would
+		// otherwise load every row into memory in a single query.
+		after := ""
+		for {
+			page, e := (store.Agents{}).ListPage(ctx, sc, after, store.DefaultAgentPageSize)
+			if e != nil {
+				return e
 			}
-			fleet = append(fleet, fa)
+			for _, a := range page {
+				fa := agent.FleetAgent{ID: a.ID, TenantID: a.TenantID, Version: a.AgentVersion}
+				if a.LastSeenAt != nil {
+					fa.LastSeen = *a.LastSeenAt
+				}
+				fleet = append(fleet, fa)
+			}
+			if len(page) < store.DefaultAgentPageSize {
+				break
+			}
+			after = page[len(page)-1].ID
 		}
 		return nil
 	}); err != nil {

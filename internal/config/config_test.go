@@ -30,8 +30,11 @@ func TestLoadDefaults(t *testing.T) {
 	if !cfg.HSTSEnabled {
 		t.Error("HSTSEnabled should default to true")
 	}
-	if cfg.DatabaseMaxConns != 10 {
-		t.Errorf("DatabaseMaxConns = %d, want 10", cfg.DatabaseMaxConns)
+	if cfg.DatabaseMaxConns != 25 { // SCALE-009: raised default
+		t.Errorf("DatabaseMaxConns = %d, want 25", cfg.DatabaseMaxConns)
+	}
+	if cfg.DatabaseMinConns != 2 { // SCALE-009: warm floor
+		t.Errorf("DatabaseMinConns = %d, want 2", cfg.DatabaseMinConns)
 	}
 }
 

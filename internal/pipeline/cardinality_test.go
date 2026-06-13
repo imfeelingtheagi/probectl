@@ -13,6 +13,37 @@ func seriesFor(metric string) []tsdb.Series {
 	return []tsdb.Series{{Metric: metric, Labels: map[string]string{"tenant_id": "x"}, Value: 1}}
 }
 
+// SCALE-007: a series with thousands of labels / megabyte label values must be
+// rejected or truncated + counted — the series-count cap alone doesn't stop a
+// single admitted identity from carrying an unbounded label set/value.
+func TestCardinalityLabelCaps(t *testing.T) {
+	l := NewCardinalityLimiter(1000, 50000)
+
+	// 10k labels on one series → dropped (counted), not admitted.
+	bigLabels := make(map[string]string, 10000)
+	for i := 0; i < 10000; i++ {
+		bigLabels[fmt.Sprintf("k%d", i)] = "v"
+	}
+	adm, dropped := l.Filter("t", "a", []tsdb.Series{{Metric: "m", Labels: bigLabels, Value: 1}})
+	if len(adm) != 0 || dropped != 1 {
+		t.Fatalf("over-label series: admitted=%d dropped=%d, want 0/1", len(adm), dropped)
+	}
+
+	// A 1 MiB label value is truncated to maxLabelValueLen, then admitted.
+	huge := make([]byte, 1<<20)
+	for i := range huge {
+		huge[i] = 'a'
+	}
+	s := []tsdb.Series{{Metric: "m2", Labels: map[string]string{"tenant_id": "x", "big": string(huge)}, Value: 1}}
+	adm, dropped = l.Filter("t", "a", s)
+	if len(adm) != 1 || dropped != 0 {
+		t.Fatalf("over-value series: admitted=%d dropped=%d, want 1/0", len(adm), dropped)
+	}
+	if got := len(adm[0].Labels["big"]); got != maxLabelValueLen {
+		t.Errorf("label value truncated to %d, want %d", got, maxLabelValueLen)
+	}
+}
+
 // U-017: one agent flooding unique series hits its cap (rejected + counted);
 // a DIFFERENT tenant is completely unaffected.
 func TestCardinalityCapFloodIsolatesTenants(t *testing.T) {
