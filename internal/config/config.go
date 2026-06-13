@@ -172,6 +172,12 @@ type Config struct {
 	TestSyncSigningKeyFile string
 	TSDBMode               string
 	TSDBURL                string
+	// RemoteWriteBatch* (SCALE-001): coalesce concurrent remote-writes into one
+	// POST per <=Series (default 500) / <=Wait (default 50ms) window, preserving
+	// per-message DLQ attribution. Enabled gates it; off = one POST per result.
+	RemoteWriteBatchEnabled bool
+	RemoteWriteBatchSeries  int
+	RemoteWriteBatchWait    time.Duration
 
 	// Alerting (S16): how often the engine evaluates enabled rules over the TSDB.
 	AlertEvalInterval time.Duration
@@ -589,6 +595,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		TestSyncSigningKeyFile:   l.str("PROBECTL_TESTSYNC_SIGNING_KEY_FILE", ""),
 		TSDBMode:                 l.enum("PROBECTL_TSDB_MODE", "memory", "memory", "prometheus"),
 		TSDBURL:                  l.str("PROBECTL_TSDB_URL", ""),
+		RemoteWriteBatchEnabled:  l.boolean("PROBECTL_REMOTE_WRITE_BATCH_ENABLED", false),
+		RemoteWriteBatchSeries:   l.intRange("PROBECTL_REMOTE_WRITE_BATCH_SERIES", 500, 1, 100000),
+		RemoteWriteBatchWait:     l.dur("PROBECTL_REMOTE_WRITE_BATCH_WAIT", 50*time.Millisecond),
 		PathStoreMode:            l.enum("PROBECTL_PATHSTORE_MODE", "memory", "memory", "clickhouse"),
 		PathStoreURL:             l.str("PROBECTL_PATHSTORE_URL", ""),
 		FlowStoreMode:            l.enum("PROBECTL_FLOWSTORE_MODE", "memory", "memory", "clickhouse"),

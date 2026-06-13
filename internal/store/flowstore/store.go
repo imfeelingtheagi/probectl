@@ -14,9 +14,11 @@ package flowstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 )
 
@@ -85,6 +87,26 @@ type TopRow struct {
 	Bytes   uint64 `json:"bytes"`
 	Packets uint64 `json:"packets"`
 	Flows   uint64 `json:"flows"`
+}
+
+// MarshalJSON additionally emits the counters as STRINGS (bytes_str, ...)
+// alongside the numbers (CORRECT-016): a flow byte total can exceed 2^53, where
+// a JSON-number client (JavaScript's JSON.parse → float64) silently loses
+// precision. The numeric fields stay for existing consumers; precision-sensitive
+// clients read the string fields. Additive, so it never breaks the wire.
+func (r TopRow) MarshalJSON() ([]byte, error) {
+	type alias TopRow // avoid recursion
+	return json.Marshal(struct {
+		alias
+		BytesStr   string `json:"bytes_str"`
+		PacketsStr string `json:"packets_str"`
+		FlowsStr   string `json:"flows_str"`
+	}{
+		alias:      alias(r),
+		BytesStr:   strconv.FormatUint(r.Bytes, 10),
+		PacketsStr: strconv.FormatUint(r.Packets, 10),
+		FlowsStr:   strconv.FormatUint(r.Flows, 10),
+	})
 }
 
 // CapacityQuery selects per-exporter/interface throughput over time buckets.

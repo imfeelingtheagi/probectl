@@ -119,11 +119,19 @@ func (c *OTLPConsumer) convert(req *colmetricspb.ExportMetricsServiceRequest, te
 		for _, sm := range rm.GetScopeMetrics() {
 			for _, m := range sm.GetMetrics() {
 				var points []*metricspb.NumberDataPoint
+				delta := false // CORRECT-011: track DELTA-temporality sums
 				switch d := m.GetData().(type) {
 				case *metricspb.Metric_Gauge:
 					points = d.Gauge.GetDataPoints()
 				case *metricspb.Metric_Sum:
 					points = d.Sum.GetDataPoints()
+					// CORRECT-011: a DELTA sum reports the change since the last
+					// export, NOT a running total — emitting it as a plain
+					// Prometheus value (which readers treat as cumulative) would
+					// be wrong. Tag delta series with otel_temporality="delta" so
+					// a query can distinguish them and not sum deltas as if
+					// cumulative; cumulative sums are unmarked (the common case).
+					delta = d.Sum.GetAggregationTemporality() == metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA
 				case *metricspb.Metric_Histogram:
 					// ARCH-006: convert OTLP explicit-bucket histograms to the
 					// Prometheus _bucket/_sum/_count series triple instead of
@@ -138,6 +146,9 @@ func (c *OTLPConsumer) convert(req *colmetricspb.ExportMetricsServiceRequest, te
 				name := "probectl_otlp_" + sanitize(m.GetName())
 				for _, p := range points {
 					labels := map[string]string{"tenant_id": tenant}
+					if delta {
+						labels["otel_temporality"] = "delta" // CORRECT-011
+					}
 					addBounded(labels, resAttrs)
 					pointAttrs := map[string]string{}
 					for _, kv := range p.GetAttributes() {

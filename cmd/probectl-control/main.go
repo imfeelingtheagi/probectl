@@ -256,6 +256,17 @@ func run(cmd string) error {
 		return fmt.Errorf("tsdb: %w", err)
 	}
 	defer tsdbWriter.Close()
+	// SCALE-001: the INGEST write path may coalesce concurrent remote-writes
+	// into one POST (per window/size), preserving per-message DLQ attribution.
+	// Only the write path is wrapped — read/query paths keep the concrete
+	// writer so their type assertions (alerting, snapshot, breaker gauges) hold.
+	ingestWriter := tsdb.Writer(tsdbWriter)
+	if cfg.RemoteWriteBatchEnabled {
+		bw := tsdb.NewBatchingWriter(tsdbWriter, cfg.RemoteWriteBatchSeries, cfg.RemoteWriteBatchWait)
+		defer bw.Close()
+		ingestWriter = bw
+		log.Info("remote-write batching enabled (ingest path)", "max_series", cfg.RemoteWriteBatchSeries, "max_wait", cfg.RemoteWriteBatchWait.String())
+	}
 
 	pathStore, err := pathstore.NewRetained(cfg.PathStoreMode, cfg.PathStoreURL, cfg.PathRetentionDays)
 	if err != nil {
@@ -741,7 +752,7 @@ func run(cmd string) error {
 		log.Warn("isolation: namespace-tenant map unavailable", "error", ntErr.Error())
 	}
 	g.Go(func() error {
-		return pipeline.NewConsumer(resultBus, tsdbWriter, pipeline.DefaultGroup, log).
+		return pipeline.NewConsumer(resultBus, ingestWriter, pipeline.DefaultGroup, log).
 			WithNamespaces(busNamespaces).
 			WithNamespaceTenants(nsTenants).
 			WithTenantBinding(tenantBinding). // TENANT-101: endpoint lane verified
@@ -758,7 +769,7 @@ func run(cmd string) error {
 	})
 	// Device pipeline (S39): probectl.device.metrics -> verify tenant -> TSDB.
 	g.Go(func() error {
-		return pipeline.NewDeviceConsumer(resultBus, tsdbWriter, log).
+		return pipeline.NewDeviceConsumer(resultBus, ingestWriter, log).
 			WithFairness(fairGate). // SCALE-005: device plane bounded like every plane
 			WithTenantBinding(tenantBinding).
 			WithNamespaceTenants(nsTenants).
@@ -933,7 +944,7 @@ func run(cmd string) error {
 		// SCALE-003/ARCH-002: each consumer retries + dead-letters store-write
 		// failures; .WithMetrics surfaces the DLQ/drop counters at /metrics.
 		g.Go(func() error {
-			return pipeline.NewOTLPConsumer(resultBus, tsdbWriter, log).WithMetrics(srv.Metrics()).Run(gctx)
+			return pipeline.NewOTLPConsumer(resultBus, ingestWriter, log).WithMetrics(srv.Metrics()).Run(gctx)
 		})
 		// ARCH-007: config-driven OTLP export — forward ingested metrics on to an
 		// external collector when an endpoint is configured (the dormant exporter
