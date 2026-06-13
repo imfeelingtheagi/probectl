@@ -9,8 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
+	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,10 +29,13 @@ type ExporterConfig struct {
 	Insecure bool        // dev/test only: plaintext transport (never in production)
 }
 
-// GRPCExporter exports OTLP metrics over OTLP/gRPC.
+// GRPCExporter exports OTLP metrics, traces, and logs over OTLP/gRPC
+// (ARCH-003: traces+logs are first-class export, no longer ingest-only).
 type GRPCExporter struct {
 	conn   *grpc.ClientConn
 	client colmetricspb.MetricsServiceClient
+	traces coltracepb.TraceServiceClient
+	logs   collogspb.LogsServiceClient
 	token  string
 }
 
@@ -49,15 +55,37 @@ func NewGRPCExporter(cfg ExporterConfig, dialOpts ...grpc.DialOption) (*GRPCExpo
 	if err != nil {
 		return nil, fmt.Errorf("otlp: dial %q: %w", cfg.Endpoint, err)
 	}
-	return &GRPCExporter{conn: conn, client: colmetricspb.NewMetricsServiceClient(conn), token: cfg.Token}, nil
+	return &GRPCExporter{
+		conn:   conn,
+		client: colmetricspb.NewMetricsServiceClient(conn),
+		traces: coltracepb.NewTraceServiceClient(conn),
+		logs:   collogspb.NewLogsServiceClient(conn),
+		token:  cfg.Token,
+	}, nil
+}
+
+func (e *GRPCExporter) authCtx(ctx context.Context) context.Context {
+	if e.token != "" {
+		return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+e.token)
+	}
+	return ctx
 }
 
 // ExportMetrics sends an OTLP metrics request, attaching the bearer token.
 func (e *GRPCExporter) ExportMetrics(ctx context.Context, req *colmetricspb.ExportMetricsServiceRequest) error {
-	if e.token != "" {
-		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+e.token)
-	}
-	_, err := e.client.Export(ctx, req)
+	_, err := e.client.Export(e.authCtx(ctx), req)
+	return err
+}
+
+// ExportTraces sends an OTLP traces request (ARCH-003).
+func (e *GRPCExporter) ExportTraces(ctx context.Context, req *coltracepb.ExportTraceServiceRequest) error {
+	_, err := e.traces.Export(e.authCtx(ctx), req)
+	return err
+}
+
+// ExportLogs sends an OTLP logs request (ARCH-003).
+func (e *GRPCExporter) ExportLogs(ctx context.Context, req *collogspb.ExportLogsServiceRequest) error {
+	_, err := e.logs.Export(e.authCtx(ctx), req)
 	return err
 }
 
@@ -86,11 +114,42 @@ func NewHTTPExporter(cfg ExporterConfig) (*HTTPExporter, error) {
 
 // ExportMetrics POSTs an OTLP metrics request as protobuf.
 func (e *HTTPExporter) ExportMetrics(ctx context.Context, req *colmetricspb.ExportMetricsServiceRequest) error {
+	return e.post(ctx, e.signalURL("metrics"), req)
+}
+
+// ExportTraces POSTs an OTLP traces request as protobuf (ARCH-003).
+func (e *HTTPExporter) ExportTraces(ctx context.Context, req *coltracepb.ExportTraceServiceRequest) error {
+	return e.post(ctx, e.signalURL("traces"), req)
+}
+
+// ExportLogs POSTs an OTLP logs request as protobuf (ARCH-003).
+func (e *HTTPExporter) ExportLogs(ctx context.Context, req *collogspb.ExportLogsServiceRequest) error {
+	return e.post(ctx, e.signalURL("logs"), req)
+}
+
+// signalURL derives the per-signal OTLP/HTTP path. The configured URL is the
+// metrics endpoint (.../v1/metrics by convention); traces/logs are its
+// /v1/{traces,logs} siblings. If the URL ends in a known signal segment we swap
+// it; otherwise we append /v1/<signal> to the base.
+func (e *HTTPExporter) signalURL(signal string) string {
+	u := strings.TrimRight(e.url, "/")
+	for _, s := range []string{"metrics", "traces", "logs"} {
+		if strings.HasSuffix(u, "/v1/"+s) {
+			return strings.TrimSuffix(u, "/v1/"+s) + "/v1/" + signal
+		}
+	}
+	if strings.HasSuffix(u, "/"+signal) {
+		return u
+	}
+	return u + "/v1/" + signal
+}
+
+func (e *HTTPExporter) post(ctx context.Context, url string, req proto.Message) error {
 	body, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("otlp: marshal: %w", err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, e.url, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

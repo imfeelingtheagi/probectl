@@ -7,8 +7,12 @@ import (
 	"errors"
 	"testing"
 
+	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/imfeelingtheagi/probectl/internal/bus"
@@ -58,5 +62,56 @@ func TestOTLPExportConsumer(t *testing.T) {
 	// Malformed payload is dropped, not errored.
 	if err := c.handle(context.Background(), bus.Message{Value: []byte("garbage")}); err != nil {
 		t.Fatalf("malformed payload must not error the stream: %v", err)
+	}
+}
+
+type fakeSignalExporter struct {
+	traces int
+	logs   int
+}
+
+func (f *fakeSignalExporter) ExportTraces(_ context.Context, _ *coltracepb.ExportTraceServiceRequest) error {
+	f.traces++
+	return nil
+}
+
+func (f *fakeSignalExporter) ExportLogs(_ context.Context, _ *collogspb.ExportLogsServiceRequest) error {
+	f.logs++
+	return nil
+}
+
+// TestOTLPTraceExportConsumer / Logs: ARCH-003 — ingested traces/logs published
+// to their bus topics are drained by the export consumers and forwarded to the
+// external collector (the wired re-export path). A failed forward redelivers.
+func TestOTLPTraceLogExportConsumers(t *testing.T) {
+	tracePayload, _ := proto.Marshal(&coltracepb.ExportTraceServiceRequest{
+		ResourceSpans: []*tracepb.ResourceSpans{{}},
+	})
+	logPayload, _ := proto.Marshal(&collogspb.ExportLogsServiceRequest{
+		ResourceLogs: []*logspb.ResourceLogs{{}},
+	})
+
+	exp := &fakeSignalExporter{}
+	tc := NewOTLPTraceExportConsumer(bus.NewMemory(), exp, testLogger())
+	if err := tc.handle(context.Background(), bus.Message{Value: tracePayload}); err != nil {
+		t.Fatalf("trace export: %v", err)
+	}
+	lc := NewOTLPLogExportConsumer(bus.NewMemory(), exp, testLogger())
+	if err := lc.handle(context.Background(), bus.Message{Value: logPayload}); err != nil {
+		t.Fatalf("log export: %v", err)
+	}
+	if exp.traces != 1 || exp.logs != 1 {
+		t.Fatalf("forwards: traces=%d logs=%d, want 1/1", exp.traces, exp.logs)
+	}
+	if tc.Exported() != 1 || lc.Exported() != 1 {
+		t.Fatalf("exported counters: traces=%d logs=%d", tc.Exported(), lc.Exported())
+	}
+
+	// Malformed payloads are dropped, not errored.
+	if err := tc.handle(context.Background(), bus.Message{Value: []byte("x")}); err != nil {
+		t.Fatalf("malformed trace payload must not error: %v", err)
+	}
+	if err := lc.handle(context.Background(), bus.Message{Value: []byte("x")}); err != nil {
+		t.Fatalf("malformed log payload must not error: %v", err)
 	}
 }

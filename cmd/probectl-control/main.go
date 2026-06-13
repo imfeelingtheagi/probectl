@@ -1021,7 +1021,20 @@ func run(cmd string) error {
 					return pipeline.NewOTLPExportConsumer(resultBus, exp, log).Run(ctx)
 				})
 			})
-			log.Info("otlp export enabled", "endpoint", cfg.OTLPExportEndpoint, "protocol", cfg.OTLPExportProtocol)
+			// ARCH-003: traces + logs are first-class export too — drain their
+			// ingest topics and re-export to the external collector, so a
+			// customer's own trace/log backend receives them (not ingest-only).
+			g.Go(func() error {
+				return superviseRestart(gctx, "otlp-trace-export", log, func(ctx context.Context) error {
+					return pipeline.NewOTLPTraceExportConsumer(resultBus, exp, log).Run(ctx)
+				})
+			})
+			g.Go(func() error {
+				return superviseRestart(gctx, "otlp-log-export", log, func(ctx context.Context) error {
+					return pipeline.NewOTLPLogExportConsumer(resultBus, exp, log).Run(ctx)
+				})
+			})
+			log.Info("otlp export enabled (metrics+traces+logs)", "endpoint", cfg.OTLPExportEndpoint, "protocol", cfg.OTLPExportProtocol)
 		}
 		g.Go(func() error {
 			return pipeline.NewOTLPTraceConsumer(resultBus, otelStore, log).WithMetrics(srv.Metrics()).Run(gctx)

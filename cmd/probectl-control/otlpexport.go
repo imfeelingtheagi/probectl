@@ -12,10 +12,19 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/pipeline"
 )
 
-// buildOTLPExporter constructs the configured OTLP export client (ARCH-007).
-// A remote (non-loopback) endpoint MUST be TLS — Insecure is refused for it
-// (guardrail 12); loopback may be plaintext for a co-located collector.
-func buildOTLPExporter(cfg *config.Config) (pipeline.MetricsExporter, error) {
+// signalExporter is an OTLP export client for all three signals (ARCH-003).
+// The concrete otlp.{GRPC,HTTP}Exporter implement it.
+type signalExporter interface {
+	pipeline.MetricsExporter
+	pipeline.TracesExporter
+	pipeline.LogsExporter
+}
+
+// buildOTLPExporter constructs the configured OTLP export client (ARCH-007,
+// ARCH-003: metrics + traces + logs). A remote (non-loopback) endpoint MUST be
+// TLS — Insecure is refused for it (guardrail 12); loopback may be plaintext for
+// a co-located collector.
+func buildOTLPExporter(cfg *config.Config) (signalExporter, error) {
 	insecure := cfg.OTLPExportInsecure
 	if insecure && !isLoopbackEndpoint(cfg.OTLPExportEndpoint) {
 		return nil, fmt.Errorf("PROBECTL_OTLP_EXPORT_INSECURE is only allowed for a loopback endpoint, not %q (guardrail 12)", cfg.OTLPExportEndpoint)

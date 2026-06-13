@@ -1021,7 +1021,11 @@ tenant-tagged and published to the `probectl.otlp.metrics` bus topic.
 
 ### OTLP export
 
-probectl can *export* its own metrics to an upstream OTLP collector. This egresses
+probectl can *export* OTLP to an upstream collector. All three signals are
+forwarded — **metrics, traces, and logs** (ARCH-003): ingested traces/logs are
+re-exported to a customer's own trace/log backend, not just queryable inside
+probectl. For OTLP/HTTP the per-signal paths are derived from the configured
+endpoint (`…/v1/metrics` → `…/v1/traces`, `…/v1/logs`). This egresses
 confidential customer telemetry (plus the bearer token), so a **remote** collector
 must be encrypted — guardrail 12. Config validation **fails closed** otherwise:
 for `http` a remote endpoint must be `https://`; for `grpc` the `INSECURE` flag is
