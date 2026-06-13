@@ -25,6 +25,7 @@ import (
 	flowv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/flow/v1"
 	resultv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/result/v1"
 	"github.com/imfeelingtheagi/probectl/internal/incident"
+	"github.com/imfeelingtheagi/probectl/internal/pipeline"
 	"github.com/imfeelingtheagi/probectl/internal/siem"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
 )
@@ -61,6 +62,37 @@ type NDRConsumer struct {
 	detections *threat.DetectionStore
 	siem       *siem.Forwarder
 	log        *slog.Logger
+
+	// binding is the registry-backed tenant verification (TENANT-101, ARCH-012).
+	// The NDR consumer was the ONE bus consumer that trusted the payload tenant
+	// on the shared flow/eBPF lanes: a bus actor could inject a record claiming
+	// any tenant_id and have a detection raised against that victim tenant. With
+	// a binding, a batch whose claimed identities don't verify is dropped
+	// fail-closed. nil = unit tests only (production always sets it).
+	binding pipeline.TenantBinding
+}
+
+// WithTenantBinding installs registry-backed tenant verification (TENANT-101,
+// ARCH-012) so the NDR consumer cannot raise a detection against a tenant the
+// sending agent doesn't belong to.
+func (cs *NDRConsumer) WithTenantBinding(b pipeline.TenantBinding) *NDRConsumer {
+	cs.binding = b
+	return cs
+}
+
+// rejectFlows verifies the claimed identities against the registry, dropping
+// the whole batch fail-closed on mismatch (TENANT-101, ARCH-012).
+func (cs *NDRConsumer) rejectFlows(ctx context.Context, plane string, ids []pipeline.Identity) bool {
+	if cs.binding == nil || len(ids) == 0 {
+		return false
+	}
+	if _, _, err := pipeline.VerifyBatchTenant(ctx, cs.binding, "", ids); err != nil {
+		cs.log.Error("REJECTED batch: tenant verification failed (TENANT-101/ARCH-012, fail closed)",
+			"view", "ndr", "plane", plane, "claimed_tenant", ids[0].Tenant,
+			"agent_id", ids[0].Agent, "error", err.Error())
+		return true
+	}
+	return false
 }
 
 // NewNDRConsumer builds the consumer over a non-nil engine.
@@ -148,6 +180,13 @@ func (cs *NDRConsumer) handleFlowBatch(ctx context.Context, msg bus.Message) err
 		cs.log.Warn("ndr: skipping malformed flow batch", "error", err)
 		return nil
 	}
+	ids := make([]pipeline.Identity, len(batch.GetFlows()))
+	for i, f := range batch.GetFlows() {
+		ids[i] = pipeline.Identity{Tenant: f.GetTenantId(), Agent: f.GetAgentId()}
+	}
+	if cs.rejectFlows(ctx, "flow", ids) {
+		return nil
+	}
 	for _, f := range batch.GetFlows() {
 		tenant := f.GetTenantId()
 		if tenant == "" {
@@ -176,6 +215,19 @@ func (cs *NDRConsumer) handleEBPFBatch(ctx context.Context, msg bus.Message) err
 	var batch ebpfv1.FlowBatch
 	if err := proto.Unmarshal(msg.Value, &batch); err != nil {
 		cs.log.Warn("ndr: skipping malformed ebpf batch", "error", err)
+		return nil
+	}
+	// ARCH-012: verify both the flow identities and the L7-call identities
+	// against the registry before any detection is raised; a mismatch drops the
+	// whole batch fail-closed.
+	ids := make([]pipeline.Identity, 0, len(batch.GetFlows())+len(batch.GetL7Calls()))
+	for _, f := range batch.GetFlows() {
+		ids = append(ids, pipeline.Identity{Tenant: f.GetTenantId(), Agent: f.GetAgentId()})
+	}
+	for _, c := range batch.GetL7Calls() {
+		ids = append(ids, pipeline.Identity{Tenant: c.GetTenantId(), Agent: c.GetAgentId()})
+	}
+	if cs.rejectFlows(ctx, "ebpf", ids) {
 		return nil
 	}
 	for _, f := range batch.GetFlows() {
