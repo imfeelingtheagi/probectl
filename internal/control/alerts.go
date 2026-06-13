@@ -89,8 +89,20 @@ func (s *Server) handleListAlerts(w http.ResponseWriter, r *http.Request) error 
 	for i := range rules {
 		items[i] = redactRule(&rules[i])
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	resp := map[string]any{"items": items, "alerting_active": s.alertingActive}
+	if !s.alertingActive {
+		// ARCH-002/CORRECT-006: don't let the UI imply these rules fire. Say so.
+		resp["warning"] = "alerting is INACTIVE in this deployment profile — these rules are stored but NOT evaluated (no query backend wired); see docs/alerting.md"
+	}
+	writeJSON(w, http.StatusOK, resp)
 	return nil
+}
+
+// WithAlertingActive records whether the alert evaluator is running in this
+// profile so the rules API can tell the operator the truth (ARCH-002).
+func (s *Server) WithAlertingActive(active bool) *Server {
+	s.alertingActive = active
+	return s
 }
 
 func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) error {
@@ -115,6 +127,17 @@ func (s *Server) handleCreateAlert(w http.ResponseWriter, r *http.Request) error
 	}
 	w.Header().Set("Location", "/v1/alerts/"+created.ID)
 	out := redactRule(created)
+	if !s.alertingActive {
+		// ARCH-002/CORRECT-006: accept+persist the rule (so config survives a
+		// profile change) but warn that it will NOT fire until a query backend
+		// is wired — never silently store a dead rule.
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"rule":            &out,
+			"alerting_active": false,
+			"warning":         "rule stored but NOT evaluated: alerting is inactive in this deployment profile (no query backend); see docs/alerting.md",
+		})
+		return nil
+	}
 	writeJSON(w, http.StatusCreated, &out)
 	return nil
 }

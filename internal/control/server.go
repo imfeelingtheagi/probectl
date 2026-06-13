@@ -145,6 +145,12 @@ type Server struct {
 	// SLO engine (S45). Set via WithSLO; nil reports slo_running=false.
 	sloEngine *slo.Engine
 
+	// alertingActive reports whether the alert evaluator is actually running in
+	// this deployment profile (ARCH-002/CORRECT-006). When false, stored rules
+	// are NEVER evaluated; the alerts API surfaces that loudly instead of
+	// silently accepting dead rules. Set via WithAlertingActive.
+	alertingActive bool
+
 	// Compliance validator (S46). Set via WithCompliance; nil reports
 	// compliance_running=false.
 	complianceEngine *compliance.Engine

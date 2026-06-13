@@ -194,6 +194,60 @@ func (p *Prometheus) Count(ctx context.Context, promql string) (float64, error) 
 	return v, nil
 }
 
+// LabeledSample is one series of an instant-vector query result: its label set
+// and current value.
+type LabeledSample struct {
+	Labels map[string]string
+	Value  float64
+}
+
+// InstantVector runs an instant PromQL query and returns one LabeledSample per
+// matching series. It is the read path the alert evaluator needs in the
+// production (remote-write) profile, where the in-memory TSDB is absent and
+// rules would otherwise never evaluate (ARCH-002/CORRECT-006). The caller is
+// responsible for pinning the query to a tenant (the alert metricSource does).
+func (p *Prometheus) InstantVector(ctx context.Context, promql string) ([]LabeledSample, error) {
+	base := strings.TrimSuffix(p.url, "/api/v1/write")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		base+"/api/v1/query?query="+url.QueryEscape(promql), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.promDo(req)
+	if err != nil {
+		return nil, fmt.Errorf("tsdb: instant query: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tsdb: instant query status %d: %s", resp.StatusCode, body)
+	}
+	var out struct {
+		Data struct {
+			Result []struct {
+				Metric map[string]string `json:"metric"`
+				Value  []any             `json:"value"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("tsdb: instant query decode: %w", err)
+	}
+	samples := make([]LabeledSample, 0, len(out.Data.Result))
+	for _, r := range out.Data.Result {
+		if len(r.Value) < 2 {
+			continue
+		}
+		str, _ := r.Value[1].(string)
+		v, perr := strconv.ParseFloat(str, 64)
+		if perr != nil {
+			continue
+		}
+		samples = append(samples, LabeledSample{Labels: r.Metric, Value: v})
+	}
+	return samples, nil
+}
+
 // Write remote-writes the series.
 func (p *Prometheus) Write(ctx context.Context, series []Series) error {
 	if len(series) == 0 {

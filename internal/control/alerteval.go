@@ -54,6 +54,50 @@ func (m metricSource) Current(_ context.Context, metric string, match map[string
 	return out, nil
 }
 
+// promInstantQuerier is the read side of a remote-write TSDB (Prometheus /
+// VictoriaMetrics) the evaluator needs when there is no in-process store.
+type promInstantQuerier interface {
+	InstantVector(ctx context.Context, promql string) ([]tsdb.LabeledSample, error)
+}
+
+// promMetricSource adapts a Prometheus/VictoriaMetrics instant query to
+// alert.MetricSource for one tenant (ARCH-002/CORRECT-006). It pins every query
+// to the tenant's tenant_id label so the evaluator can never read another
+// tenant's series, exactly like the in-memory metricSource.
+type promMetricSource struct {
+	q      promInstantQuerier
+	tenant string
+}
+
+func (m promMetricSource) Current(ctx context.Context, metric string, match map[string]string) ([]alert.Sample, error) {
+	var b strings.Builder
+	b.WriteString(metric)
+	b.WriteByte('{')
+	b.WriteString(`tenant_id=`)
+	b.WriteString(promQuote(m.tenant))
+	for k, v := range match {
+		b.WriteByte(',')
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(promQuote(v))
+	}
+	b.WriteByte('}')
+	rows, err := m.q.InstantVector(ctx, b.String())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]alert.Sample, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, alert.Sample{Labels: r.Labels, Value: r.Value})
+	}
+	return out, nil
+}
+
+// promQuote renders a PromQL label-matcher value (double-quoted, escaped).
+func promQuote(v string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v) + `"`
+}
+
 func labelFingerprint(labels map[string]string) string {
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
@@ -99,15 +143,28 @@ func (p tenantRuleProvider) Rules(ctx context.Context) ([]alert.Rule, error) {
 func BuildAlertEvaluator(pool *pgxpool.Pool, writer any, deps alert.ChannelDeps,
 	interval time.Duration, tenant tenancy.ID, sink func(context.Context, alert.Alert),
 	log *slog.Logger) (*alert.Evaluator, bool) {
-	q, ok := writer.(tsdbQuerier)
-	if !ok || pool == nil {
+	if pool == nil {
+		return nil, false
+	}
+	// ARCH-002/CORRECT-006: pick a metric source for the deployment profile.
+	// In-process TSDB (lightweight mode) → query it directly. Remote-write mode
+	// (the production Kafka+CH+Prom profile) → query the upstream over its
+	// instant API, so rules ACTUALLY evaluate instead of silently never firing.
+	var source alert.MetricSource
+	switch w := writer.(type) {
+	case tsdbQuerier:
+		source = metricSource{q: w, tenant: tenant.String()}
+	case promInstantQuerier:
+		source = promMetricSource{q: w, tenant: tenant.String()}
+		log.Info("alerting: evaluating against the remote-write upstream (instant queries)", "tenant", tenant.String())
+	default:
 		return nil, false
 	}
 	var opts []alert.EngineOption
 	if sink != nil {
 		opts = append(opts, alert.WithAlertSink(sink))
 	}
-	engine := alert.NewEngine(metricSource{q: q, tenant: tenant.String()}, alert.NewNotifier(deps, log), log, opts...)
+	engine := alert.NewEngine(source, alert.NewNotifier(deps, log), log, opts...)
 	// ARCH-005 (scoped per the volatile-stores ADR): silences/acks are the
 	// ADR's documented exception — reload them so a restart does not drop
 	// operator state, and delete the row when the episode resolves.
