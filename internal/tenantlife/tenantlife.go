@@ -3,8 +3,8 @@
 // Package tenantlife is the per-tenant lifecycle engine (S-T5, F55):
 // tenant-scoped data EXPORT (portability), VERIFIABLE full deletion across
 // every store (Postgres / ClickHouse flows / TSDB / object store / path graph
-// / topology / OTLP trace+log store) with an audit-grade attestation, and
-// per-tenant retention/erasure controls.
+// / topology / OTLP trace+log store / eBPF L7 edge store) with an audit-grade
+// attestation, and per-tenant retention/erasure controls.
 //
 // This is CORE deliberately (the ratified editions decision): export and
 // verifiable deletion are a compliance right, not a commercial feature. Only
@@ -74,6 +74,15 @@ type OtelDeleter interface {
 	EraseTenant(ctx context.Context, tenantID string) (deleted, remaining int, err error)
 }
 
+// EBPFDeleter is the eBPF L7 edge store erasure seam (ebpfstore memory +
+// ClickHouse implement it). The probectl_ebpf_edges plane (workload-to-workload
+// topology, dest ports, L7 protocols, byte/packet/connection counts) is tenant
+// telemetry and MUST be erased on offboarding too (TENANT-002) — its
+// DeleteTenant returns the count-verified REMAINING rows (0 = clean).
+type EBPFDeleter interface {
+	DeleteTenant(ctx context.Context, tenantID string) (remaining int64, err error)
+}
+
 // Engine runs exports, erasures, and retention sweeps.
 type Engine struct {
 	pool    *pgxpool.Pool
@@ -83,6 +92,7 @@ type Engine struct {
 	paths   PathDeleter     // optional (WithPaths)
 	topo    TopologyDeleter // optional (WithTopology)
 	otel    OtelDeleter     // optional (WithOtel) — OTLP trace/log store
+	ebpf    EBPFDeleter     // optional (WithEBPF) — eBPF L7 edge store
 	audit   AuditSink
 	log     *slog.Logger
 	now     func() time.Time
@@ -134,6 +144,9 @@ func (e *Engine) WithTopology(t TopologyDeleter) *Engine { e.topo = t; return e 
 
 // WithOtel attaches the OTLP trace/log store for erasure coverage (TENANT-008).
 func (e *Engine) WithOtel(o OtelDeleter) *Engine { e.otel = o; return e }
+
+// WithEBPF attaches the eBPF L7 edge store for erasure coverage (TENANT-002).
+func (e *Engine) WithEBPF(d EBPFDeleter) *Engine { e.ebpf = d; return e }
 
 // WithClock overrides time (tests).
 func (e *Engine) WithClock(now func() time.Time) *Engine {
@@ -318,6 +331,26 @@ func (e *Engine) Erase(ctx context.Context, tenantID, slug, actor string) (Attes
 		}
 	} else {
 		att.Stores = append(att.Stores, StoreResult{Store: "otel", VerifiedZero: true, Notes: "store not deployed"})
+	}
+
+	// 3e) eBPF L7 edge store (TENANT-002): workload-to-workload topology +
+	// dest ports + L7 protocols are tenant telemetry — erase them too,
+	// count-verified like the other planes. The whole-plane omission here meant
+	// the attestation could report Complete:true while probectl_ebpf_edges
+	// survived offboarding indefinitely.
+	if e.ebpf != nil {
+		remaining, err := e.ebpf.DeleteTenant(ctx, tenantID)
+		if err != nil {
+			fail("ebpf", "delete failed: "+err.Error())
+		} else {
+			att.Stores = append(att.Stores, StoreResult{Store: "ebpf", VerifiedZero: remaining == 0,
+				Notes: "remaining=" + fmt.Sprint(remaining)})
+			if remaining != 0 {
+				att.Complete = false
+			}
+		}
+	} else {
+		att.Stores = append(att.Stores, StoreResult{Store: "ebpf", VerifiedZero: true, Notes: "store not deployed"})
 	}
 
 	// 4) Postgres tenant-owned tables — RLS-scoped, silo-routed, multi-pass

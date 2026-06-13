@@ -737,6 +737,14 @@ func run(cmd string) error {
 	if od, ok := otelStore.(tenantlife.OtelDeleter); ok {
 		lifeEngine.WithOtel(od)
 	}
+	// TENANT-002: erasure coverage for the eBPF L7 edge store — workload edges,
+	// dest ports and L7 protocols are tenant telemetry; the attestation
+	// enumerates the "ebpf" store (count-verified) or records "store not
+	// deployed". Previously this whole plane survived offboarding while the
+	// attestation could still report Complete:true.
+	if ed, ok := ebpfStore.(tenantlife.EBPFDeleter); ok {
+		lifeEngine.WithEBPF(ed)
+	}
 	srv.WithTenantLife(lifeEngine)
 	g.Go(func() error { lifeEngine.RunRetention(gctx, 24*time.Hour); return nil })
 	// U-041: WORM export of the provider audit chain — signed segments into

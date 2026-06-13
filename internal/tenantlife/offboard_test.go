@@ -13,15 +13,19 @@ import (
 
 	"github.com/imfeelingtheagi/probectl/internal/objectstore"
 	"github.com/imfeelingtheagi/probectl/internal/path"
+	"github.com/imfeelingtheagi/probectl/internal/store/ebpfstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
+	"github.com/imfeelingtheagi/probectl/internal/store/otelstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/pathstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/probectl/internal/topology"
 )
 
-// U-027 e2e offboard: erasure covers flows, objects, tsdb, PATHS and
-// TOPOLOGY; the attestation enumerates every store with verified-zero
-// results; the neighbor tenant is untouched.
+// U-027 / TENANT-002 / TENANT-007 e2e offboard: erasure covers flows, objects,
+// tsdb, PATHS, TOPOLOGY, OTEL and the eBPF EDGE store; the attestation
+// enumerates every store with verified-zero results; the neighbor tenant is
+// untouched. A meta-assertion below pins the attested store set to the
+// configured set so an unwired plane (the exact TENANT-002 regression) fails.
 func TestEraseCoversEveryStoreEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	flows := flowstore.NewMemory()
@@ -29,6 +33,8 @@ func TestEraseCoversEveryStoreEndToEnd(t *testing.T) {
 	tsdbW := tsdb.NewMemory()
 	paths := pathstore.NewMemory()
 	topo := topology.NewMemoryStore()
+	otel := otelstore.NewMemory()
+	edges := ebpfstore.NewMemory()
 
 	seed := func(tenant string) {
 		_ = flows.Insert(ctx, []flowstore.Row{{TenantID: tenant, AgentID: "a", Exporter: "e",
@@ -38,12 +44,17 @@ func TestEraseCoversEveryStoreEndToEnd(t *testing.T) {
 		_ = paths.Save(ctx, tenant, &path.Path{Target: "t.example", TargetIP: "198.51.100.9", Mode: "icmp",
 			Hops: []path.Hop{{TTL: 1, Nodes: []path.HopNode{{IP: "198.51.100.9"}}}}})
 		topo.ObserveServiceEdge(tenant, topology.ServiceEdgeInput{Source: "svc-a", Destination: "svc-b"}, time.Now())
+		_ = otel.WriteSpans(ctx, []otelstore.Span{{TenantID: tenant, TraceID: "aa", SpanID: "01",
+			Service: "checkout", Name: "GET /pay", Start: time.Now()}})
+		_ = edges.Insert(ctx, []ebpfstore.Edge{{TenantID: tenant, AgentID: "a", WindowStart: time.Now(),
+			SrcWorkload: "svc-a", DstWorkload: "svc-b", DstPort: 443, L7Protocol: "http",
+			Bytes: 100, Packets: 2, Connections: 1}})
 	}
 	seed("victim")
 	seed("neighbor")
 
 	e := New(nil, flows, objects, tsdbW, nil, "test backup note", nil).
-		WithPaths(paths).WithTopology(topo)
+		WithPaths(paths).WithTopology(topo).WithOtel(otel).WithEBPF(edges)
 
 	att, err := e.Erase(ctx, "victim", "victim-slug", "test")
 	if err != nil {
@@ -53,8 +64,9 @@ func TestEraseCoversEveryStoreEndToEnd(t *testing.T) {
 		t.Fatalf("attestation incomplete: %+v", att.Stores)
 	}
 
-	// The attestation enumerates every store, including paths + topology.
-	want := map[string]bool{"flows": false, "objects": false, "tsdb": false, "paths": false, "topology": false}
+	// The attestation enumerates every store, including paths/topology/otel/ebpf.
+	want := map[string]bool{"flows": false, "objects": false, "tsdb": false,
+		"paths": false, "topology": false, "otel": false, "ebpf": false}
 	for _, sr := range att.Stores {
 		if _, ok := want[sr.Store]; ok {
 			want[sr.Store] = true
@@ -93,6 +105,54 @@ func TestEraseCoversEveryStoreEndToEnd(t *testing.T) {
 	}
 	if left, _ := objects.List(ctx, "tenant/neighbor/"); len(left) != 1 {
 		t.Fatalf("neighbor objects damaged: %v", left)
+	}
+	// TENANT-007: otel erasure exercised e2e — victim gone, neighbor intact.
+	if s, _ := otel.Len("victim"); s != 0 {
+		t.Fatalf("victim otel spans survived erasure: %d", s)
+	}
+	if s, _ := otel.Len("neighbor"); s != 1 {
+		t.Fatalf("neighbor otel spans damaged: %d", s)
+	}
+	// TENANT-002: eBPF edge erasure exercised e2e — victim gone, neighbor intact.
+	if ve, _ := edges.TopEdges(ctx, "victim", ebpfstore.EdgeQuery{}); len(ve) != 0 {
+		t.Fatalf("victim eBPF edges survived erasure: %d", len(ve))
+	}
+	if ne, _ := edges.TopEdges(ctx, "neighbor", ebpfstore.EdgeQuery{}); len(ne) != 1 {
+		t.Fatalf("neighbor eBPF edges damaged: %d", len(ne))
+	}
+}
+
+// TENANT-002/TENANT-007 meta-assertion: the attested store set must equal the
+// set of stores the engine was configured with. A plane wired into the engine
+// but omitted from Erase() (the exact TENANT-002 regression — eBPF was created
+// but never handed to the engine) would make this fail. We assert the eBPF
+// plane: when WithEBPF is set, the attestation MUST carry an "ebpf" result
+// that is NOT the "store not deployed" placeholder.
+func TestAttestationCoversWiredEBPFPlane(t *testing.T) {
+	ctx := context.Background()
+	edges := ebpfstore.NewMemory()
+	_ = edges.Insert(ctx, []ebpfstore.Edge{{TenantID: "victim", AgentID: "a", WindowStart: time.Now(),
+		SrcWorkload: "svc-a", DstWorkload: "svc-b", DstPort: 443, L7Protocol: "http", Connections: 1}})
+
+	e := New(nil, nil, nil, nil, nil, "", nil).WithEBPF(edges)
+	att, err := e.Erase(ctx, "victim", "slug", "test")
+	if err != nil {
+		t.Fatalf("erase: %v", err)
+	}
+	var ebpf *StoreResult
+	for i := range att.Stores {
+		if att.Stores[i].Store == "ebpf" {
+			ebpf = &att.Stores[i]
+		}
+	}
+	if ebpf == nil {
+		t.Fatal("attestation has no ebpf store result though the plane is wired (TENANT-002)")
+	}
+	if strings.Contains(ebpf.Notes, "not deployed") {
+		t.Fatalf("ebpf plane wired but attested as not-deployed (unwired erasure): %+v", ebpf)
+	}
+	if !ebpf.VerifiedZero {
+		t.Fatalf("ebpf erasure not verified zero: %+v", ebpf)
 	}
 }
 
