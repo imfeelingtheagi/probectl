@@ -5,6 +5,7 @@ package pipeline
 import (
 	"context"
 	"log/slog"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,14 +50,36 @@ type FlowConsumer struct {
 
 	rejected    atomic.Uint64 // batches dropped fail-closed (TENANT-101)
 	overwritten atomic.Uint64 // payload tenant corrected to the lane tenant
+
+	// Store-write resilience (CORRECT-010 / SCALE-005): the flow plane now
+	// rides the SAME retry+DLQ contract as the result + device pipelines —
+	// transient store failures retry with jittered backoff, exhaustion
+	// dead-letters the ORIGINAL bytes, and loss is never silent. Previously the
+	// handler merely logged the insert error and dropped the batch while the
+	// comment claimed parity with the result pipeline; it lied.
+	maxRetries   int
+	retryBase    time.Duration
+	sleep        func(context.Context, time.Duration)
+	retried      atomic.Uint64
+	deadLettered atomic.Uint64
+	dropped      atomic.Uint64
 }
+
+// DeadLettered reports flow batches routed to the DLQ after store exhaustion.
+func (c *FlowConsumer) DeadLettered() uint64 { return c.deadLettered.Load() }
+
+// Dropped reports flow batches lost entirely (the DLQ publish ALSO failed).
+func (c *FlowConsumer) Dropped() uint64 { return c.dropped.Load() }
 
 // NewFlowConsumer builds the consumer; enrich may be nil.
 func NewFlowConsumer(b bus.Bus, st flowstore.Store, enrich FlowEnricher, log *slog.Logger) *FlowConsumer {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &FlowConsumer{bus: b, store: st, enrich: enrich, group: FlowGroup, log: log}
+	return &FlowConsumer{
+		bus: b, store: st, enrich: enrich, group: FlowGroup, log: log,
+		maxRetries: 3, retryBase: 50 * time.Millisecond, sleep: sleepCtx,
+	}
 }
 
 // lanes returns every subscription: the shared topic plus one namespaced
@@ -146,8 +169,9 @@ func (c *FlowConsumer) handle(ctx context.Context, msg bus.Message) error {
 // handleLane decodes one FlowBatch, VERIFIES its tenant (TENANT-101: the
 // payload is never authoritative — the lane tenant or the agents registry
 // is), re-stamps, enriches, and inserts. Malformed/unverifiable messages are
-// dropped fail-closed and counted; transient store failures are logged and
-// dropped (best-effort, matching the result pipeline).
+// dropped fail-closed and counted; transient store failures retry with
+// jittered backoff and, on exhaustion, dead-letter the ORIGINAL bytes — real
+// parity with the result + device pipelines (CORRECT-010).
 func (c *FlowConsumer) handleLane(ctx context.Context, msg bus.Message, laneTenant string) error {
 	var batch flowv1.FlowBatch
 	if err := proto.Unmarshal(msg.Value, &batch); err != nil {
@@ -189,13 +213,53 @@ func (c *FlowConsumer) handleLane(ctx context.Context, msg bus.Message, laneTena
 		c.enrichRecord(ctx, f)
 		rows = append(rows, rowFromProto(f))
 	}
+	// CORRECT-010: retry with jittered backoff; exhaustion routes the ORIGINAL
+	// bytes to the flow DLQ — never a silent drop. Meter only what actually
+	// lands, so a dead-lettered batch is not counted as stored.
+	if err := c.insertWithRetry(ctx, rows); err != nil {
+		c.deadLetter(ctx, msg, tenant, err)
+		return nil
+	}
 	// Metering (S-T3): stored flow events, tagged by the VERIFIED tenant.
 	usage.Record(tenant, usage.MeterFlowEvents, int64(len(rows)))
-	if err := c.store.Insert(ctx, rows); err != nil {
-		c.log.Error("flow store insert failed", "rows", len(rows),
-			"tenant_id", batch.Flows[0].GetTenantId(), "error", err.Error())
-	}
 	return nil
+}
+
+// insertWithRetry mirrors the result + device pipelines' policy (U-019).
+func (c *FlowConsumer) insertWithRetry(ctx context.Context, rows []flowstore.Row) error {
+	var err error
+	for attempt := 0; ; attempt++ {
+		if err = c.store.Insert(ctx, rows); err == nil {
+			return nil
+		}
+		if attempt >= c.maxRetries || ctx.Err() != nil {
+			return err
+		}
+		c.retried.Add(1)
+		backoff := c.retryBase << attempt
+		c.sleep(ctx, backoff+time.Duration(rand.Int64N(int64(backoff)/2+1)))
+	}
+}
+
+// deadLetter publishes the ORIGINAL message bytes to the flow DLQ (tenant-keyed,
+// replayable). A DLQ publish failure is the only true loss.
+func (c *FlowConsumer) deadLetter(ctx context.Context, msg bus.Message, tenant string, insertErr error) {
+	if c.bus == nil {
+		c.dropped.Add(1)
+		c.log.Error("FLOW BATCH LOST: insert exhausted retries and no bus for the DLQ",
+			"tenant_id", tenant, "insert_error", insertErr.Error(), "dropped_total", c.dropped.Load())
+		return
+	}
+	if err := c.bus.Publish(ctx, bus.DeadLetterFlowTopic, msg.Key, msg.Value); err != nil {
+		c.dropped.Add(1)
+		c.log.Error("FLOW BATCH LOST: insert exhausted retries and dead-letter publish failed",
+			"tenant_id", tenant, "insert_error", insertErr.Error(), "dlq_error", err.Error(),
+			"dropped_total", c.dropped.Load())
+		return
+	}
+	c.deadLettered.Add(1)
+	c.log.Warn("flow batch dead-lettered after insert retries",
+		"tenant_id", tenant, "topic", bus.DeadLetterFlowTopic, "insert_error", insertErr.Error())
 }
 
 // enrichRecord fills missing ASN/geo via opendata (S15). Device-asserted AS
@@ -233,6 +297,14 @@ func rowFromProto(f *flowv1.FlowRecord) flowstore.Row {
 	if f.GetEndUnixNano() == 0 {
 		ts = time.Unix(0, f.GetObservedAtUnixNano()).UTC()
 	}
+	// CORRECT-015: sFlow v5 carries no flow-start time, so StartUnixNano is 0 —
+	// time.Unix(0,0) would store 1970-01-01, poisoning duration math and any
+	// time-window query. Fall back to the flow's own timestamp so a start-less
+	// record is stamped "started when we observed it", not at the epoch.
+	startTS := ts
+	if f.GetStartUnixNano() != 0 {
+		startTS = time.Unix(0, f.GetStartUnixNano()).UTC()
+	}
 	return flowstore.Row{
 		TenantID:      f.GetTenantId(),
 		AgentID:       f.GetAgentId(),
@@ -240,7 +312,7 @@ func rowFromProto(f *flowv1.FlowRecord) flowstore.Row {
 		ObsDomain:     f.GetObservationDomain(),
 		Protocol:      f.GetFlowProtocol(),
 		TS:            ts,
-		StartTS:       time.Unix(0, f.GetStartUnixNano()).UTC(),
+		StartTS:       startTS,
 		SrcAddr:       f.GetSourceAddress(),
 		DstAddr:       f.GetDestinationAddress(),
 		SrcPort:       uint16(f.GetSourcePort()),
