@@ -79,10 +79,23 @@ func (p *Prometheus) promDo(req *http.Request) (*http.Response, error) {
 			return e
 		}
 		resp = r
+		// RESIL-005: an up-but-erroring upstream (5xx/429) is a breaker fault
+		// too, not just a transport error. Count it (sentinel) but still
+		// surface the response; the sentinel is stripped below.
+		if r.StatusCode >= 500 || r.StatusCode == http.StatusTooManyRequests {
+			return errServerError
+		}
 		return nil
 	})
+	if errors.Is(err, errServerError) {
+		err = nil
+	}
 	return resp, err
 }
+
+// errServerError marks a completed-but-faulting (5xx/429) response as a breaker
+// failure while letting the response escape to the caller (RESIL-005).
+var errServerError = errors.New("tsdb: upstream server error (5xx/429)")
 
 // BreakerStats exposes the TSDB breaker state (U-078 fallback metrics).
 func (p *Prometheus) BreakerStats() breaker.Stats { return p.breaker.Stats() }

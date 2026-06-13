@@ -20,6 +20,7 @@
 package chclient
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -28,6 +29,19 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/breaker"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 )
+
+// errServerError is the sentinel the breaker callback returns for an
+// upstream-fault HTTP response (5xx / 429). It counts the response as a breaker
+// failure (RESIL-005: an up-but-erroring store must short-circuit too) while the
+// response still escapes to the caller, which keeps the body/status. Do strips
+// this sentinel so callers see a successful transport with the real response.
+var errServerError = errors.New("chclient: upstream server error (5xx/429)")
+
+// serverFault reports whether an HTTP status is an upstream fault that should
+// count against the circuit breaker: 5xx (server error) or 429 (overload).
+func serverFault(status int) bool {
+	return status >= 500 || status == http.StatusTooManyRequests
+}
 
 // Conn is a breaker-guarded ClickHouse HTTP connection. The zero value is not
 // usable; call New.
@@ -73,8 +87,18 @@ func (c *Conn) Do(base string, req *http.Request) (*http.Response, error) {
 			return e
 		}
 		resp = r
+		// RESIL-005: a completed-but-5xx/429 response is an upstream fault.
+		// Count it against the breaker (return the sentinel) but still surface
+		// the response — Do strips the sentinel below so the caller can read
+		// the body/status.
+		if serverFault(r.StatusCode) {
+			return errServerError
+		}
 		return nil
 	})
+	if errors.Is(err, errServerError) {
+		err = nil
+	}
 	return resp, err
 }
 
