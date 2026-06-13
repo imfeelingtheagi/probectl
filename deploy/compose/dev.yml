@@ -108,6 +108,11 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - promdata:/prometheus
+    # The probectl-control scrape target in prometheus.yml resolves to the host
+    # via host.docker.internal; on Linux that name needs the host-gateway alias
+    # (Docker Desktop maps it automatically, but this keeps Linux working too).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/-/healthy >/dev/null 2>&1 || exit 1"]
       interval: 5s

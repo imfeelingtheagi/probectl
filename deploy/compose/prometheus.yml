@@ -1,7 +1,13 @@
 # Minimal Prometheus config for the local dev stack (deploy/compose/dev.yml).
 # Remote-write is enabled on the server via --web.enable-remote-write-receiver so
-# the result pipeline (S6) can write metrics here. Add a scrape job for
-# probectl-control once it exposes a /metrics endpoint (a later sprint).
+# the result pipeline (S6) can write metrics here.
+#
+# The control plane serves its self-observability metrics (process + aggregate
+# only — no per-tenant series; see internal/control/metrics_test.go) at
+# /metrics, reachable pre-auth like /healthz. This stack brings up only the
+# backing services; the control plane runs on the host (`probectl-control
+# serve`), so the scrape job below reaches it via host.docker.internal at the
+# default PROBECTL_HTTP_ADDR (:8080).
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -10,3 +16,14 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  # probectl control plane self-metrics. The dev quickstart runs the control
+  # plane over HTTPS with a gen-cert self-signed cert, hence scheme: https +
+  # insecure_skip_verify. If you instead run it with
+  # PROBECTL_ALLOW_PLAINTEXT_HTTP=true, change scheme to http and drop tls_config.
+  - job_name: probectl-control
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true # dev-only: self-signed gen-cert cert
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
