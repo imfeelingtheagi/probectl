@@ -1,5 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { apiFetch } from '../api/client'
+import { apiFetch, publicFetch, redirectToLogin } from '../api/client'
 
 /**
  * AuthProvider resolves the REAL signed-in identity from the session (SEC-001):
@@ -40,12 +40,11 @@ interface Me {
   display_name: string
 }
 
-const LOGIN_PATH = '/auth/login'
 const LOGOUT_PATH = '/auth/logout'
 
-function toLogin() {
-  if (typeof window !== 'undefined') window.location.assign(LOGIN_PATH)
-}
+// UX-005/UX-006: the SSO redirect is the shared client.redirectToLogin so the
+// global query onError and this bootstrap take the SAME path.
+const toLogin = redirectToLogin
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null)
@@ -72,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // POST the real logout (revokes the session + clears the cookie), then send
     // the browser to the SSO login regardless of the result. /auth/logout is
     // outside the /v1 API base, so it's a direct same-origin fetch.
-    void fetch(LOGOUT_PATH, { method: 'POST', credentials: 'same-origin' }).finally(toLogin)
+    void publicFetch(LOGOUT_PATH, { method: 'POST' }).finally(toLogin)
   }, [])
 
   const value = useMemo<AuthContextValue | null>(() => {

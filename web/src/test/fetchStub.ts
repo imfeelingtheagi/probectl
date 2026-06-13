@@ -45,15 +45,39 @@ const sampleAgents = [
   },
 ]
 
+/**
+ * pathOf parses a fetched URL to its PATHNAME (no query, no origin) so stub
+ * routes match by exact path, not substring. RED-006/UX-006: matching with
+ * url.endsWith()/url.includes() let a double-prefixed '/v1/v1/topology' satisfy
+ * a '/v1/topology' route and render green despite the bug. Exact-pathname
+ * matching plus the assertNoDoublePrefix guard below close that.
+ */
+export function pathOf(input: RequestInfo | URL): string {
+  const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : String(input)
+  // Resolve against a dummy origin so relative paths ('/v1/me') parse too.
+  return new URL(raw, 'http://t.invalid').pathname
+}
+
+/** RED-006: a fetched URL must NEVER carry a doubled '/v1/v1' segment — that is
+ *  the exact double-prefix bug (UX-001). Any stub call that sees it throws, so a
+ *  regression fails the suite loudly instead of passing on a lenient match. */
+export function assertNoDoublePrefix(input: RequestInfo | URL): void {
+  const p = pathOf(input)
+  if (p.includes('/v1/v1')) {
+    throw new Error(`double /v1 prefix in fetched URL: ${p} (UX-001/RED-006)`)
+  }
+}
+
 /** A read-only default fetch covering the list endpoints, so any screen renders
  *  with data in tests. CRUD tests install their own stateful stub. */
 export function defaultFetch(): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input)
+    assertNoDoublePrefix(input)
+    const path = pathOf(input)
     // SEC-001: the app resolves identity from /v1/me; serve a default
     // authenticated session so any screen renders as a signed-in operator.
     // Exclude the provider console's /provider/v1/me (different shape).
-    if (url.endsWith('/v1/me') && !url.includes('/provider/'))
+    if (path === '/v1/me')
       return jsonResponse({
         tenant_id: '00000000-0000-0000-0000-000000000001',
         user_id: 'u_test',
@@ -62,21 +86,21 @@ export function defaultFetch(): typeof fetch {
         mfa_satisfied: true,
         permissions: [],
       })
-    if (url.endsWith('/v1/tests')) return jsonResponse({ items: sampleTests })
-    // UX-004: useAgents now pages with ?after=&limit=; match the path regardless
-    // of query string and return a single (final) page.
-    if (/\/v1\/agents(\?|$)/.test(url)) return jsonResponse({ items: sampleAgents })
-    if (url.endsWith('/v1/ai/discover')) return jsonResponse({ proposals: [] })
-    if (url.endsWith('/v1/alerts')) return jsonResponse({ items: [] })
-    if (url.endsWith('/v1/alerts/active'))
+    if (path === '/v1/tests') return jsonResponse({ items: sampleTests })
+    // UX-004: useAgents pages with ?after=&limit=; the query is dropped by
+    // pathOf, so the exact path matches regardless. Return one (final) page.
+    if (path === '/v1/agents') return jsonResponse({ items: sampleAgents })
+    if (path === '/v1/ai/discover') return jsonResponse({ proposals: [] })
+    if (path === '/v1/alerts') return jsonResponse({ items: [] })
+    if (path === '/v1/alerts/active')
       return jsonResponse({ items: [], evaluator_running: true })
-    if (url.endsWith('/v1/tls/posture')) return jsonResponse({ items: [], collector_running: true })
-    if (url.endsWith('/v1/threat/detections'))
+    if (path === '/v1/tls/posture') return jsonResponse({ items: [], collector_running: true })
+    if (path === '/v1/threat/detections')
       return jsonResponse({ items: [], detections_running: true })
-    if (url.endsWith('/v1/endpoints')) return jsonResponse({ items: [], collector_running: true })
-    if (url.endsWith('/v1/results/latest'))
+    if (path === '/v1/endpoints') return jsonResponse({ items: [], collector_running: true })
+    if (path === '/v1/results/latest')
       return jsonResponse({ items: [], collector_running: true })
-    if (url.includes('/v1/topology') && !url.includes('whatif'))
+    if (path === '/v1/topology')
       return jsonResponse({
         topology_running: true,
         at: '2026-06-04T12:00:00Z',
@@ -84,7 +108,7 @@ export function defaultFetch(): typeof fetch {
         edges: [],
         coverage: { path_edges: 0, flow_edges: 0, routing_edges: 0, device_edges: 0 },
       })
-    if (url.endsWith('/v1/cost/summary'))
+    if (path === '/v1/cost/summary')
       return jsonResponse({
         cost_running: true,
         summary: {
@@ -102,8 +126,8 @@ export function defaultFetch(): typeof fetch {
           budgets: [],
         },
       })
-    if (url.endsWith('/v1/slos')) return jsonResponse({ slo_running: true, items: [] })
-    if (url.endsWith('/v1/compliance'))
+    if (path === '/v1/slos') return jsonResponse({ slo_running: true, items: [] })
+    if (path === '/v1/compliance')
       return jsonResponse({
         compliance_running: true,
         items: [],
@@ -116,7 +140,7 @@ export function defaultFetch(): typeof fetch {
           notes: [],
         },
       })
-    if (url.endsWith('/v1/outages'))
+    if (path === '/v1/outages')
       return jsonResponse({
         outage_running: true,
         feeds_enabled: false,
@@ -127,14 +151,14 @@ export function defaultFetch(): typeof fetch {
           'coverage = your vantage points + public open-data feeds — probectl does not operate a global probe fleet',
         ],
       })
-    if (url.endsWith('/v1/rum')) return jsonResponse({ rum_running: false })
-    if (url.endsWith('/v1/carbon')) return jsonResponse({ carbon_running: false })
-    if (url.endsWith('/v1/secrets/health'))
+    if (path === '/v1/rum') return jsonResponse({ rum_running: false })
+    if (path === '/v1/carbon') return jsonResponse({ carbon_running: false })
+    if (path === '/v1/secrets/health')
       return jsonResponse({
         resolver_running: true,
         backends: [{ scheme: 'env', configured: true, resolves: 0, failures: 0, cached_leases: 0 }],
       })
-    if (url.endsWith('/v1/diagnostics'))
+    if (path === '/v1/diagnostics')
       return jsonResponse({
         status: 'degraded',
         checked_at: '2026-06-06T00:00:00Z',
@@ -147,12 +171,12 @@ export function defaultFetch(): typeof fetch {
           },
         ],
       })
-    if (url.endsWith('/branding')) return jsonResponse({ product_name: 'probectl' })
-    if (url.endsWith('/v1/security/keys'))
+    if (path === '/branding') return jsonResponse({ product_name: 'probectl' })
+    if (path === '/v1/security/keys')
       return jsonResponse({ error: { message: 'not found' } }, 404)
-    if (url.endsWith('/v1/lifecycle/retention'))
+    if (path === '/v1/lifecycle/retention')
       return jsonResponse({ flow_retention_days: null, isolation_model: 'pooled' })
-    if (url.endsWith('/v1/editions'))
+    if (path === '/v1/editions')
       return jsonResponse({
         tier: 'community',
         state: 'community',

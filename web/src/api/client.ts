@@ -17,7 +17,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * apiFetch targets the versioned API. The `path` is RELATIVE to API_BASE and
+ * must NOT itself carry the `/v1` prefix — passing `/v1/...` here produces a
+ * `/v1/v1/...` double-prefix (UX-001/UX-006). The check below fails loudly in
+ * dev/test; the ban-/v1-literal lint rule (eslint no-restricted-syntax) and the
+ * client unit test enforce it at build time too.
+ */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if (path.startsWith('/v1/') || path === '/v1') {
+    throw new Error(
+      `apiFetch path must be relative to API_BASE (got ${path}); drop the /v1 prefix — apiFetch already prepends it (UX-006)`,
+    )
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'same-origin',
     headers: { Accept: 'application/json', ...(init?.headers ?? {}) },
@@ -35,4 +47,33 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
+}
+
+/**
+ * publicFetch targets a same-origin endpoint that is deliberately OUTSIDE the
+ * versioned `/v1` API base — the pre-auth surfaces (`/branding`, `/auth/...`).
+ * Centralising them here keeps "off-/v1" a single, documented convention
+ * instead of scattered raw `fetch()` calls (UX-006). It does NOT auto-prepend
+ * a base, so callers pass an absolute same-origin path (e.g. `/branding`).
+ */
+export async function publicFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, { credentials: 'same-origin', ...init })
+}
+
+/** The pre-auth SSO login entry point (outside the /v1 base). */
+export const LOGIN_PATH = '/auth/login'
+
+/**
+ * redirectToLogin sends the browser to the SSO login. Used both by the initial
+ * auth bootstrap and by the global TanStack Query onError handler so that a
+ * session that expires MID-SESSION (a later 401, not just the first /me call)
+ * also re-authenticates instead of surfacing a dead per-query error (UX-005).
+ */
+export function redirectToLogin() {
+  if (typeof window !== 'undefined') window.location.assign(LOGIN_PATH)
+}
+
+/** True when an error is an ApiError carrying the given HTTP status. */
+export function isApiStatus(err: unknown, status: number): boolean {
+  return err instanceof ApiError && err.status === status
 }

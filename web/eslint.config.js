@@ -42,6 +42,24 @@ export default tseslint.config(
       '@typescript-eslint/no-redundant-type-constituents': 'warn',
       '@typescript-eslint/no-misused-promises': 'warn',
       '@typescript-eslint/no-floating-promises': 'warn',
+      // UX-006: apiFetch already prepends the /v1 API base, so a literal
+      // apiFetch('/v1/...') produces a /v1/v1/... double-prefix (UX-001). Ban
+      // the literal at lint time; off-/v1 surfaces use publicFetch instead.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.name='apiFetch'] > Literal.arguments:first-child[value=/^\\/v1(\\/|$)/]",
+          message:
+            "apiFetch path must be relative to API_BASE — drop the /v1 prefix (it is prepended). Use publicFetch for off-/v1 surfaces. (UX-006)",
+        },
+        {
+          selector:
+            "CallExpression[callee.name='apiFetch'] > TemplateLiteral.arguments:first-child > TemplateElement:first-child[value.raw=/^\\/v1(\\/|$)/]",
+          message:
+            "apiFetch path must be relative to API_BASE — drop the /v1 prefix (it is prepended). Use publicFetch for off-/v1 surfaces. (UX-006)",
+        },
+      ],
     },
   },
   {

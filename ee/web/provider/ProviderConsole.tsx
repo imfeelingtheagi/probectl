@@ -78,6 +78,13 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
     body: body ? JSON.stringify(body) : undefined,
   })
   if (res.status === 404) throw new NotEnabledError()
+  if (res.status === 429) {
+    // UX-005: rate-limited — surface a clear retry hint rather than a bare
+    // "HTTP 429". Honour Retry-After when the server sends it.
+    const after = res.headers.get('Retry-After')
+    const hint = after ? ` Retry after ${after}s.` : ' Please wait a moment and try again.'
+    throw new APIError('rate_limited', `Too many requests.${hint}`)
+  }
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as { error?: { message?: string; code?: string } } | null
     throw new APIError(payload?.error?.code ?? 'error', payload?.error?.message ?? `HTTP ${res.status}`)
@@ -245,6 +252,10 @@ function TenantsCard({ readOnly }: { readOnly: boolean }) {
   const [name, setName] = useState('')
   const [isolation, setIsolation] = useState('pooled')
   const [residency, setResidency] = useState('')
+  // UX-005: offboard is destructive (removes a siloed tenant's isolated stores),
+  // so it is gated behind a typed-slug confirm rather than a one-click button.
+  const [confirmTenant, setConfirmTenant] = useState<Tenant | null>(null)
+  const [confirmText, setConfirmText] = useState('')
 
   const load = useCallback(() => {
     api<{ items: Tenant[] }>('GET', '/provider/v1/tenants')
@@ -280,6 +291,15 @@ function TenantsCard({ readOnly }: { readOnly: boolean }) {
     } catch (err) {
       setError((err as Error).message)
     }
+  }
+
+  // UX-005: run the offboard only once the operator has typed the tenant slug.
+  const confirmOffboard = async () => {
+    const t = confirmTenant
+    if (!t || confirmText !== t.slug) return
+    setConfirmTenant(null)
+    setConfirmText('')
+    await act(t.id, 'offboard')
   }
 
   const columns: Column<Tenant>[] = [
@@ -325,8 +345,16 @@ function TenantsCard({ readOnly }: { readOnly: boolean }) {
             </Button>
           ) : null}
           {t.status === 'active' || t.status === 'suspended' ? (
-            <Button size="sm" variant="danger" disabled={readOnly} onClick={() => act(t.id, 'offboard')}>
-              Offboard
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={readOnly}
+              onClick={() => {
+                setConfirmText('')
+                setConfirmTenant(t)
+              }}
+            >
+              Offboard…
             </Button>
           ) : null}
         </span>
@@ -380,6 +408,42 @@ function TenantsCard({ readOnly }: { readOnly: boolean }) {
               rowKey={(t) => t.id}
               empty={<EmptyState icon="admin" title="No tenants" description="Provision the first tenant above." />}
             />
+            {confirmTenant ? (
+              <div role="alertdialog" aria-label="Confirm offboard" className={styles.note}>
+                <p>
+                  Offboarding <strong>{confirmTenant.name}</strong> is destructive: it removes a
+                  siloed/hybrid tenant&apos;s isolated stores and cannot be undone. Type the slug{' '}
+                  <code>{confirmTenant.slug}</code> to confirm.
+                </p>
+                <span className={styles.row}>
+                  <span className={styles.grow}>
+                    <Field
+                      label="Tenant slug"
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      placeholder={confirmTenant.slug}
+                      disabled={readOnly}
+                    />
+                  </span>
+                  <Button
+                    variant="danger"
+                    disabled={readOnly || confirmText !== confirmTenant.slug}
+                    onClick={confirmOffboard}
+                  >
+                    Offboard {confirmTenant.slug}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setConfirmTenant(null)
+                      setConfirmText('')
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </span>
+              </div>
+            ) : null}
           </>
         )}
       </CardBody>

@@ -3,7 +3,11 @@
  * endpoint (Host-resolved: a custom domain answers its tenant's brand;
  * community/unlicensed deployments answer the probectl default). Branding is
  * a runtime override of the S8a design tokens — no screen knows about it.
+ *
+ * /branding lives OUTSIDE the /v1 API base, so it goes through publicFetch
+ * (the single off-/v1 convention, UX-006) rather than a bare fetch().
  */
+import { publicFetch } from './client'
 
 export interface Brand {
   product_name: string
@@ -24,7 +28,7 @@ const TOKEN_VALUE =
 
 export async function fetchBrand(): Promise<Brand> {
   try {
-    const res = await fetch('/branding', { credentials: 'same-origin' })
+    const res = await publicFetch('/branding')
     if (!res.ok) return DEFAULT_BRAND
     const b = (await res.json()) as Brand
     if (!b || typeof b.product_name !== 'string' || b.product_name === '') return DEFAULT_BRAND

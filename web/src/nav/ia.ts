@@ -15,8 +15,8 @@ export interface NavItem {
  */
 export const NAV: NavItem[] = [
   { to: '/targets', label: 'Targets & Tests', icon: 'targets' },
-  { to: '/path', label: 'Path & Topology', icon: 'path' },
-  { to: '/topology', label: 'Topology', icon: 'path' },
+  { to: '/path', label: 'Path Analysis', icon: 'path' },
+  { to: '/topology', label: 'Topology & What-if', icon: 'path' },
   { to: '/incidents', label: 'Incidents', icon: 'incidents' },
   { to: '/outages', label: 'Internet outages', icon: 'outage' },
   { to: '/alerts', label: 'Alerts', icon: 'alert' },
