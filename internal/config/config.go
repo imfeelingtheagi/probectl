@@ -253,6 +253,15 @@ type Config struct {
 	OTLPTLSKeyFile  string
 	OTLPTokens      map[string]string // bearer token -> tenant id
 
+	// OTLP EXPORT (ARCH-007): forward ingested OTLP metrics on to an external
+	// collector/backend. Dormant until an endpoint is set. Protocol grpc|http;
+	// a remote endpoint must be https (Insecure is dev/loopback only — refused
+	// for a non-loopback host, guardrail 12).
+	OTLPExportEndpoint string
+	OTLPExportToken    string
+	OTLPExportProtocol string // "grpc" (default) | "http"
+	OTLPExportInsecure bool
+
 	// AI assistant (S24): the RCA model backend. Provider "builtin" (default) is
 	// the in-process, fully air-gapped synthesizer — no network, no phone-home.
 	// "ollama"/"openai"/"anthropic" call a model endpoint; a remote endpoint must
@@ -610,6 +619,10 @@ func Load(getenv func(string) string) (*Config, error) {
 		OIDCClientSecret:    l.str("PROBECTL_OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:     l.str("PROBECTL_OIDC_REDIRECT_URL", ""),
 		SecurityContact:     l.str("PROBECTL_SECURITY_CONTACT", ""),
+		OTLPExportEndpoint:  l.str("PROBECTL_OTLP_EXPORT_ENDPOINT", ""),
+		OTLPExportToken:     l.str("PROBECTL_OTLP_EXPORT_TOKEN", ""),
+		OTLPExportProtocol:  l.enum("PROBECTL_OTLP_EXPORT_PROTOCOL", "grpc", "grpc", "http"),
+		OTLPExportInsecure:  l.boolean("PROBECTL_OTLP_EXPORT_INSECURE", false),
 		OTLPGRPCAddr:        l.str("PROBECTL_OTLP_GRPC_ADDR", ""),
 		OTLPHTTPAddr:        l.str("PROBECTL_OTLP_HTTP_ADDR", ""),
 		OTLPTLSCertFile:     l.str("PROBECTL_OTLP_TLS_CERT_FILE", ""),
@@ -850,6 +863,10 @@ func (c *Config) OTLPEnabled() bool {
 	return (c.OTLPGRPCAddr != "" || c.OTLPHTTPAddr != "") &&
 		c.OTLPTLSCertFile != "" && c.OTLPTLSKeyFile != "" && len(c.OTLPTokens) > 0
 }
+
+// OTLPExportEnabled reports whether the config-driven OTLP export pipeline
+// should run (ARCH-007) — an external collector endpoint is configured.
+func (c *Config) OTLPExportEnabled() bool { return c.OTLPExportEndpoint != "" }
 
 // AIModelEnabled reports whether the AI assistant should call an external model
 // endpoint. False means the default in-process built-in synthesizer — fully
