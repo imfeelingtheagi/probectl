@@ -15,7 +15,14 @@ test/
 
 # Other components / docs / deploy assets.
 analyzer/
-web/
+# web/: the UI SOURCE is needed — the image builds the SPA in a node stage and
+# embeds it (UX-002, deploy/docker/Dockerfile `web` stage runs `COPY web/`).
+# Exclude only the heavy/generated subdirs so `npm ci` + `npm run build` run on a
+# clean, small context (the host's node_modules/dist must NOT clobber the
+# in-image build), but keep the source the COPY needs.
+web/node_modules/
+web/dist/
+web/coverage/
 docs/
 deploy/
 proto/
