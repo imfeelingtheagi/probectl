@@ -144,7 +144,7 @@ func (cc *CostConsumer) handle(ctx context.Context, msg bus.Message) error {
 		sigs := cc.engine.Observe(tenant, cost.FlowSample{
 			Src:   f.GetSourceAddress(),
 			Dst:   f.GetDestinationAddress(),
-			Bytes: f.GetBytes(),
+			Bytes: scaledFlowBytes(f),
 			At:    at,
 		})
 		for _, sig := range sigs {

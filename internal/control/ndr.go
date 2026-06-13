@@ -162,7 +162,7 @@ func (cs *NDRConsumer) handleFlowBatch(ctx context.Context, msg bus.Message) err
 			Dst:     f.GetDestinationAddress(),
 			DstPort: uint16(f.GetDestinationPort()),
 			DstASN:  f.GetDestinationAsn(),
-			Bytes:   f.GetBytes(),
+			Bytes:   scaledFlowBytes(f),
 			At:      at,
 		})
 		cs.export(ctx, sigs)
@@ -187,7 +187,7 @@ func (cs *NDRConsumer) handleEBPFBatch(ctx context.Context, msg bus.Message) err
 			Src:     f.GetSourceAddress(),
 			Dst:     f.GetDestinationAddress(),
 			DstPort: uint16(f.GetDestinationPort()),
-			Bytes:   f.GetBytes(),
+			Bytes:   f.GetBytes(), // eBPF observes every packet (unsampled): raw bytes are already true volume
 			At:      time.Unix(0, f.GetObservedAtUnixNano()),
 		})
 		cs.export(ctx, sigs)

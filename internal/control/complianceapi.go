@@ -170,7 +170,7 @@ func (cc *ComplianceConsumer) handleFlow(ctx context.Context, msg bus.Message) e
 		}
 		cc.export(ctx, cc.engine.Observe(f.GetTenantId(), compliance.FlowObs{
 			Src: f.GetSourceAddress(), Dst: f.GetDestinationAddress(),
-			DstPort: uint16(f.GetDestinationPort()), Bytes: f.GetBytes(),
+			DstPort: uint16(f.GetDestinationPort()), Bytes: scaledFlowBytes(f),
 			Source: "flow", At: at,
 		}))
 	}
@@ -196,7 +196,7 @@ func (cc *ComplianceConsumer) handleEBPF(ctx context.Context, msg bus.Message) e
 		}
 		cc.export(ctx, cc.engine.Observe(f.GetTenantId(), compliance.FlowObs{
 			Src: f.GetSourceAddress(), Dst: f.GetDestinationAddress(),
-			DstPort: uint16(f.GetDestinationPort()), Bytes: f.GetBytes(),
+			DstPort: uint16(f.GetDestinationPort()), Bytes: f.GetBytes(), // eBPF: unsampled, raw bytes are true volume
 			Source: "ebpf", At: time.Unix(0, f.GetObservedAtUnixNano()),
 		}))
 	}

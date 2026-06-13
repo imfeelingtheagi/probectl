@@ -110,7 +110,7 @@ func (cc *CarbonConsumer) handle(_ context.Context, msg bus.Message) error {
 		cc.engine.Observe(tenant, cost.FlowSample{
 			Src:   f.GetSourceAddress(),
 			Dst:   f.GetDestinationAddress(),
-			Bytes: f.GetBytes(),
+			Bytes: scaledFlowBytes(f),
 			At:    at,
 		})
 	}
