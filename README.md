@@ -29,11 +29,6 @@ and an AI assistant that explains root cause <em>across</em> them. Telemetry nev
 <a href="#license">License</a>
 </p>
 
-<!-- HERO MEDIA SLOT — add before public launch. Best candidates: a 10–15s GIF of
-     the topology what-if view simulating a node failure, or the AI assistant
-     answering "why is checkout slow?" with cited cross-plane evidence.
-     <p align="center"><img src="docs/assets/hero-topology.gif" width="820"></p> -->
-
 probectl unifies five observability planes — **active/synthetic testing**
 (scheduled probes that send traffic and time the answer), **BGP/routing
 intelligence** (BGP being the protocol networks use to tell each other which
@@ -59,8 +54,9 @@ record, agent, query, metric, event, and object.
 > license is intentionally **`TBD`** — **source-available, not open source
 > (yet)** ([details](#license)).
 
-**Try it in ~60 seconds** (Docker only, no Go toolchain — full walkthrough in
-the [Quickstart](#quickstart-run-it)):
+**Try it in a few minutes** (Docker only, no Go toolchain on your host — the
+image builds from source on first run, then it's ~60 seconds to first data;
+full walkthrough in the [Quickstart](#quickstart-run-it)):
 
 ```sh
 docker compose -f deploy/compose/eval.yml up --build -d

@@ -92,3 +92,46 @@ func TestDR_TelemetryRPOIsExplicit(t *testing.T) {
 		}
 	}
 }
+
+// TestNoStaleScaffoldPlaceholders asserts that no package doc.go still carries
+// the S0 "intentionally empty placeholder / carries no logic yet" boilerplate
+// (DOCS-002). Those packages now ship real implementations, so the placeholder
+// claim is an over-claim-in-reverse and must not return. Walks internal/ and
+// ee/ for any doc.go containing the stale phrasing.
+func TestNoStaleScaffoldPlaceholders(t *testing.T) {
+	root := repoRoot(t)
+	banned := []string{
+		"intentionally empty placeholder",
+		"carries no logic yet",
+		"S0 scaffold",
+	}
+	for _, tree := range []string{"internal", "ee"} {
+		base := filepath.Join(root, tree)
+		if _, err := os.Stat(base); err != nil {
+			continue
+		}
+		err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() || filepath.Base(path) != "doc.go" {
+				return nil
+			}
+			b, rerr := os.ReadFile(path)
+			if rerr != nil {
+				return rerr
+			}
+			body := string(b)
+			for _, phrase := range banned {
+				if strings.Contains(body, phrase) {
+					rel, _ := filepath.Rel(root, path)
+					t.Errorf("%s still carries stale scaffold phrasing %q — the package ships real logic now (DOCS-002)", rel, phrase)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("docslint: walk %s: %v", tree, err)
+		}
+	}
+}
