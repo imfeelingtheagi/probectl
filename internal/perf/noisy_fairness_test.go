@@ -25,9 +25,13 @@ func TestNoisyHarnessInstallsFairnessGate(t *testing.T) {
 		SettleTimeout: 10 * time.Second,
 	}
 
-	// (1) WITH the fairness gate: the flood is SHED (admit fraction well below 1)
-	// and the quiet tenant stays correct. This is the gate doing its job — and
-	// it's a timing-INDEPENDENT signal (we never look at latency).
+	// (1) The harness INSTALLS + EXERCISES the gate. Only timing-INDEPENDENT
+	// signals are asserted from the harness: that a gate was installed, the quiet
+	// tenant stayed correct, and the noisy tenant actually flooded. The harness's
+	// wall-clock admit FRACTION is deliberately NOT asserted here — it is
+	// execution-speed sensitive (a rate-limited bucket refills more over a slower
+	// run), which made this test flake under `-race`. The deterministic shed
+	// proof is step (3).
 	gate := fairness.NewGate(fairness.Policy{ResultsPerSec: 1000, BurstSeconds: 1}, nil)
 	cfgOn := cfg
 	cfgOn.Fairness = gate
@@ -44,23 +48,8 @@ func TestNoisyHarnessInstallsFairnessGate(t *testing.T) {
 	if on.NoisyPublished == 0 {
 		t.Fatal("the noisy tenant must have flooded (the harness must exercise the gate)")
 	}
-	if on.NoisyAdmitFrac >= maxNoisyAdmitFrac {
-		t.Fatalf("fairness gate did NOT shed the flood: admitted %.0f%% of %d (want < %.0f%%)",
-			on.NoisyAdmitFrac*100, on.NoisyPublished, maxNoisyAdmitFrac*100)
-	}
-	// The scale gate's isolation assertion runs and PASSES with the gate on.
-	p, _ := ProfileFor(TierM, 1)
-	repOn := ScaleReport{Profile: p, AtCIScale: true, Noisy: on}
-	repOn.evaluate()
-	for _, v := range repOn.Violations {
-		if contains(v, "fairness gate did NOT shed") {
-			t.Fatalf("isolation assertion wrongly fired with the gate on: %q", v)
-		}
-	}
 
-	// (2) NEGATIVE CONTROL — fairness DISABLED: the flood is admitted nearly in
-	// full. A report that nonetheless CLAIMS FairnessOn (the audited "gate not
-	// installed" gap) MUST be flagged by evaluate().
+	// (2) NEGATIVE CONTROL — fairness DISABLED: the report must not claim a gate.
 	off, err := DriveNoisyNeighbor(ctx, cfg) // no Fairness
 	if err != nil {
 		t.Fatal(err)
@@ -68,16 +57,53 @@ func TestNoisyHarnessInstallsFairnessGate(t *testing.T) {
 	if off.FairnessOn {
 		t.Fatal("no gate was installed; FairnessOn must be false")
 	}
-	// The gate must shed MATERIALLY more than the no-gate baseline — i.e. the
-	// fairness path actually bounds the flood (not a no-op).
-	if !(on.NoisyAdmitFrac < off.NoisyAdmitFrac) {
-		t.Fatalf("the gate did not shed more than the ungated baseline (gate %.3f vs none %.3f) — the harness is not exercising fairness",
-			on.NoisyAdmitFrac, off.NoisyAdmitFrac)
+
+	// (3) DETERMINISTIC, timing-INDEPENDENT proof that the gate sheds a flood and
+	// isolates the quiet tenant. A FROZEN clock means the token bucket never
+	// refills, so a `flood`-message burst against a `burst`-capacity bucket admits
+	// EXACTLY the capacity and sheds the remainder — identical under `-race` or
+	// not. The quiet tenant has its own per-tenant bucket and is fully admitted.
+	const flood, burst = 2000, 1000 // capacity = ResultsPerSec(1000) × BurstSeconds(1)
+	fixed := time.Unix(1_700_000_000, 0)
+	dg := fairness.NewGate(fairness.Policy{ResultsPerSec: 1000, BurstSeconds: 1}, nil).
+		WithNow(func() time.Time { return fixed })
+	admittedNoisy := 0
+	for i := 0; i < flood; i++ {
+		if dg.AdmitN(ctx, "noisy", fairness.MeterResults, 1) {
+			admittedNoisy++
+		}
+	}
+	if admittedNoisy != burst {
+		t.Fatalf("frozen-clock gate must admit exactly the burst capacity %d of a %d flood and shed the rest; admitted %d", burst, flood, admittedNoisy)
+	}
+	admittedQuiet := 0
+	for i := 0; i < 200; i++ {
+		if dg.AdmitN(ctx, "quiet", fairness.MeterResults, 1) {
+			admittedQuiet++
+		}
+	}
+	if admittedQuiet != 200 {
+		t.Fatalf("quiet tenant has its own bucket and must be fully admitted (isolation); got %d/200", admittedQuiet)
 	}
 
-	// Simulate the exact bug the gate is meant to catch: a report that CLAIMS
-	// FairnessOn but where the flood was admitted in full (an uninstalled /
-	// ineffective gate, the audited SCALE-004 gap). evaluate() must flag it.
+	// (4) The SCALE-004 isolation assertion in evaluate() must NOT fire on a
+	// well-shed report, and MUST fire on a report that CLAIMS FairnessOn yet
+	// admitted the flood in full (the audited "gate not installed/ineffective"
+	// gap). Both are checked with CONSTRUCTED reports so the assertion is
+	// deterministic, independent of harness wall-clock timing.
+	p, _ := ProfileFor(TierM, 1)
+	good := NoisyReport{
+		Ran: true, QuietCorrect: true, FairnessOn: true,
+		NoisyPublished: 2000, NoisySeries: 1000, NoisyAdmitFrac: 0.5,
+		Inflation: 1, NoisyP95: 200 * time.Microsecond, Pairs: 1,
+	}
+	repGood := ScaleReport{Profile: p, AtCIScale: true, Noisy: good}
+	repGood.evaluate()
+	for _, v := range repGood.Violations {
+		if contains(v, "fairness gate did NOT shed") {
+			t.Fatalf("isolation assertion wrongly fired on a well-shed report: %q", v)
+		}
+	}
 	bug := NoisyReport{
 		Ran: true, QuietCorrect: true, FairnessOn: true,
 		NoisyPublished: 2000, NoisySeries: 2000, NoisyAdmitFrac: 1.0,
