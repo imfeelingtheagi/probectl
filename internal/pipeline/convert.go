@@ -35,9 +35,12 @@ func ResultToSeries(r *resultv1.Result) []tsdb.Series {
 		}
 	}
 
+	now := time.Now().UnixMilli()
 	tms := r.GetStartTimeUnixNano() / int64(time.Millisecond)
 	if tms == 0 {
-		tms = time.Now().UnixMilli()
+		tms = now
+	} else {
+		tms = clampFutureSample(tms, now) // CORRECT-012: clamp far-future agent clocks
 	}
 
 	out := []tsdb.Series{

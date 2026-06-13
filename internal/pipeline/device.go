@@ -259,9 +259,12 @@ func DeviceMetricToSeries(m *devicev1.DeviceMetric) tsdb.Series {
 			labels[promName] = v
 		}
 	}
+	now := time.Now().UnixMilli()
 	tms := m.GetTimeUnixNano() / int64(time.Millisecond)
 	if tms == 0 {
-		tms = time.Now().UnixMilli()
+		tms = now
+	} else {
+		tms = clampFutureSample(tms, now) // CORRECT-012: clamp far-future device/agent clocks
 	}
 	return tsdb.Series{
 		Metric:     deviceMetricPrefix + sanitize(trimDevicePrefix(m.GetName())),
