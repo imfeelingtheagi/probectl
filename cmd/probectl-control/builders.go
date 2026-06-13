@@ -109,6 +109,17 @@ func registerLossGauges(m *metrics.Registry, resultBus bus.Bus, tsdbWriter tsdb.
 		m.Gauge("probectl_bus_buffered", "Records currently buffered in the async producer (in flight).",
 			func() float64 { return float64(kb.Stats().Buffered) })
 	}
+	// SCALE-006: the lightweight in-memory bus defaults to drop-with-loss-
+	// accounting so a stuck consumer cannot stall ingest. Surface the drop and
+	// handler-loss counters so the loss is observable (never a silent drop).
+	if mb, ok := resultBus.(*bus.Memory); ok {
+		m.Gauge("probectl_bus_memory_dropped", "Messages dropped by the in-memory bus overflow policy when a subscriber buffer was full (SCALE-006). Nonzero = a lagging/stuck consumer.",
+			func() float64 { return float64(mb.Dropped()) })
+		m.Gauge("probectl_bus_memory_handler_lost", "Records dropped after the in-memory bus exhausted its redelivery budget (a permanently-failing handler, CORRECT-007).",
+			func() float64 { return float64(mb.HandlerLost()) })
+		m.Gauge("probectl_bus_memory_handler_errors", "Consumed records whose handler returned an error on the in-memory bus (CORRECT-007).",
+			func() float64 { return float64(mb.HandlerErrors()) })
+	}
 	if p, ok := tsdbWriter.(*tsdb.Prometheus); ok {
 		m.Gauge("probectl_tsdb_remote_write_rejected", "Samples permanently rejected by the remote-write upstream with a 4xx (out-of-order/too-old, CORRECT-003).",
 			func() float64 { return float64(p.RejectedPermanent()) })

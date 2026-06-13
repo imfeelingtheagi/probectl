@@ -4,6 +4,7 @@ package bus
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -94,5 +95,72 @@ func TestMemoryBlockPolicyLosesNothing(t *testing.T) {
 	}
 	if m.Dropped() != 0 {
 		t.Fatalf("block policy dropped %d", m.Dropped())
+	}
+}
+
+// TestMemoryDefaultPolicyOneStuckSubDoesNotStarveOthers is the SCALE-006
+// behavioral acceptance: with the now-default drop policy, one stuck subscriber
+// cannot block the producer or starve a second, draining subscriber on the same
+// topic.
+func TestMemoryDefaultPolicyOneStuckSubDoesNotStarveOthers(t *testing.T) {
+	// The shipped default is drop (config default flipped to "drop" in SCALE-006,
+	// wired via WithOverflowDrop in main.go). Model that here.
+	m := NewMemory(WithBuffer(2), WithOverflowDrop())
+	defer m.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Subscriber A: stuck forever (never drains).
+	go func() {
+		_ = m.Subscribe(ctx, "t", "stuck", func(context.Context, Message) error {
+			<-ctx.Done()
+			return nil
+		})
+	}()
+	// Subscriber B: drains normally and counts what it receives.
+	const n = 500
+	var received atomic.Uint64
+	go func() {
+		_ = m.Subscribe(ctx, "t", "drainer", func(context.Context, Message) error {
+			received.Add(1)
+			return nil
+		})
+	}()
+	for i := 0; i < 200 && m.subscriberCount("t") < 2; i++ {
+		time.Sleep(time.Millisecond)
+	}
+	if m.subscriberCount("t") < 2 {
+		t.Fatal("both subscribers did not register")
+	}
+
+	// The producer must never block on the stuck subscriber — the whole point of
+	// SCALE-006's default. With block-on-full this Publish loop would wedge on
+	// the stuck subscriber's full channel.
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < n; i++ {
+			// Small spacing so the drainer's bounded channel makes progress
+			// rather than the burst out-racing its single consumer goroutine.
+			if err := m.Publish(context.Background(), "t", nil, []byte("x")); err != nil {
+				return
+			}
+			time.Sleep(100 * time.Microsecond)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("producer blocked by a stuck subscriber under the default policy (SCALE-006)")
+	}
+	// The draining subscriber must make real progress (it is NOT blocked behind
+	// the stuck one). Under the drop policy it may shed a few on a burst, so we
+	// assert substantial progress rather than an exact count.
+	deadline := time.Now().Add(2 * time.Second)
+	for received.Load() < n/2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := received.Load(); got < n/2 {
+		t.Fatalf("draining subscriber starved by the stuck subscriber: received %d of %d", got, n)
 	}
 }

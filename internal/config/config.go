@@ -124,6 +124,10 @@ type Config struct {
 	BusBrokers []string
 	// In-memory bus tuning (lightweight mode, U-079): per-subscriber channel
 	// depth and the overflow policy (block | drop) when a subscriber lags.
+	// SCALE-006: the default is "drop" (bounded drop-with-loss-accounting,
+	// surfaced via Memory.Dropped() at /metrics) so one stuck consumer cannot
+	// stall ingest for every other lane. "block" remains available for
+	// deployments that prefer backpressure over loss.
 	BusMemoryBuffer   int
 	BusMemoryOverflow string
 	// Kafka transport policy (U-010): TLS by default in kafka mode; plaintext
@@ -616,7 +620,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		BusMode:                  l.enum("PROBECTL_BUS_MODE", "memory", "memory", "kafka"),
 		BusBrokers:               l.list("PROBECTL_BUS_BROKERS"),
 		BusMemoryBuffer:          l.intRange("PROBECTL_BUS_MEMORY_BUFFER", 1024, 1, 1<<20),
-		BusMemoryOverflow:        l.enum("PROBECTL_BUS_MEMORY_OVERFLOW", "block", "block", "drop"),
+		BusMemoryOverflow:        l.enum("PROBECTL_BUS_MEMORY_OVERFLOW", "drop", "block", "drop"),
 		BusTLSEnabled:            l.boolean("PROBECTL_BUS_TLS_ENABLED", false),
 		BusTLSCAFile:             l.str("PROBECTL_BUS_TLS_CA_FILE", ""),
 		BusTLSCertFile:           l.str("PROBECTL_BUS_TLS_CERT_FILE", ""),
