@@ -267,13 +267,23 @@ jobs:
         env:
           AGENT: ${{ matrix.agent }}
           ARCH: ${{ matrix.arch }}
-          VERSION: ${{ github.ref_name }}
+          FILE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          VERSION="${VERSION#v}"
-          export VERSION
+          # OPS-002: FILE_TAG (v-prefixed) matches the binary on disk
+          # (probectl-<agent>_v0.2.0_linux_<arch>); PKG_VERSION (numeric) is the
+          # deb/rpm package version. Conflating the two broke every package build.
+          PKG_VERSION="${FILE_TAG#v}"
+          export AGENT ARCH FILE_TAG PKG_VERSION
+          # OPS-002: nfpm does NOT expand ${VAR} in contents.src, so render the
+          # config with envsubst first (scoped to our 4 vars so no stray $ is
+          # touched). Without this, nfpm globbed a literal '${AGENT}' path and
+          # built nothing.
+          rendered="$(mktemp)"
+          envsubst '${AGENT} ${ARCH} ${FILE_TAG} ${PKG_VERSION}' \
+            < deploy/packaging/nfpm.yaml > "$rendered"
           for pkg in deb rpm; do
-            nfpm package -f deploy/packaging/nfpm.yaml -p "$pkg" -t dist/
+            nfpm package -f "$rendered" -p "$pkg" -t dist/
           done
       - name: Sign packages (cosign keyless)
         run: |

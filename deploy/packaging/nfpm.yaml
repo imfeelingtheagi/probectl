@@ -5,12 +5,18 @@
 # pushes to the signed apt/yum repos. This is the baseline every other
 # automation tool (Ansible/Puppet/Chef) shells out to.
 #
-#   AGENT=ebpf-agent VERSION=0.2.0 ARCH=amd64 \
+# OPS-002: two distinct version vars — the release build names binaries with the
+# v-PREFIXED tag (dist/probectl-control_v0.2.0_linux_amd64), so `src` below must
+# use FILE_TAG (the v-prefixed tag). The deb/rpm package `version`, by contrast,
+# must be NUMERIC (no leading v), so it uses PKG_VERSION. Conflating the two made
+# nfpm look for a v-stripped filename that never existed → no package built.
+#
+#   AGENT=ebpf-agent FILE_TAG=v0.2.0 PKG_VERSION=0.2.0 ARCH=amd64 \
 #     nfpm package -f deploy/packaging/nfpm.yaml -p deb -t dist/
 #
 name: "probectl-${AGENT}"
 arch: "${ARCH}"
-version: "v${VERSION}"
+version: "${PKG_VERSION}"
 section: "net"
 priority: "optional"
 maintainer: "probectl <security@probectl.example>"
@@ -23,7 +29,7 @@ homepage: "https://docs.probectl.example"
 license: "LicenseRef-probectl-TBD"
 
 contents:
-  - src: ./dist/probectl-${AGENT}_${VERSION}_linux_${ARCH}
+  - src: ./dist/probectl-${AGENT}_${FILE_TAG}_linux_${ARCH}
     dst: /usr/bin/probectl-${AGENT}
     file_info:
       mode: 0755
