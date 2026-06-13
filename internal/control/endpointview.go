@@ -40,7 +40,8 @@ func NewEndpointViewConsumer(b bus.Bus, store *endpoint.SnapshotStore, log *slog
 // Run consumes until ctx is done. Malformed messages are dropped (untrusted
 // input never wedges the consumer).
 func (cs *EndpointViewConsumer) Run(ctx context.Context) error {
-	return cs.bus.Subscribe(ctx, bus.EndpointResultsTopic, "endpoint-view",
+	// Pure in-RAM view → per-replica fan-in for coherence (ARCH-003).
+	return cs.bus.Subscribe(ctx, bus.EndpointResultsTopic, viewGroup("endpoint-view"),
 		func(_ context.Context, msg bus.Message) error {
 			var r resultv1.Result
 			if err := proto.Unmarshal(msg.Value, &r); err != nil {

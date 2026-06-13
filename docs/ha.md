@@ -41,7 +41,19 @@ but the *view* is not coherent across replicas.
 | Deployment goal | Safe replica count |
 |---|---|
 | Ingest throughput / API for TSDB+ClickHouse-backed queries | any (scale freely) |
-| Consistent topology / latest-result / threat / TLS / endpoint views | **1** (until the durable view layer lands) |
+| Consistent **topology** and **endpoint** views | any (ARCH-003: per-replica fan-in — see below) |
+| Consistent latest-result / threat / TLS views | **1** (until they adopt the same pattern) |
+
+**Update (ARCH-003):** the topology graph and the endpoint view are now coherent
+at any replica count. They are pure in-RAM read models with no external side
+effects, so each replica subscribes to the bus under a UNIQUE (per-replica,
+hostname-keyed) consumer group and fans in the COMPLETE stream — every replica
+builds the same graph and answers identically. The eBPF service-edge plane also
+has a durable ClickHouse store now (ARCH-008), so its aggregates survive
+restarts. The remaining in-RAM views (latest-result, threat detections, TLS
+posture) still ride shared consumer groups and so still want `replicaCount: 1`
+for cross-replica consistency until they adopt the same per-replica fan-in (they
+have side-effecting neighbors on the same group, so the split is staged).
 
 If you need both high ingest throughput and consistent in-RAM views right now,
 the pragmatic split is: keep `replicaCount: 1` for the control plane and scale
