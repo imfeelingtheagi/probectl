@@ -20,6 +20,75 @@
     "fullnameOverride": { "type": "string" },
     "replicaCount": { "type": "integer", "minimum": 1 },
     "migrateOnBoot": { "type": "boolean" },
+    "publicTLS": { "type": "boolean" },
+    "allowPlaintextHTTP": { "type": "boolean" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scheme": { "type": "string", "enum": ["http", "https"] },
+            "labels": { "type": "object" },
+            "tlsConfig": { "type": "object" }
+          }
+        }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "credentialsSecret": { "type": "string" },
+        "encryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "keySecret": { "type": "string" },
+            "keySecretKey": { "type": "string" }
+          }
+        },
+        "resources": { "type": "object" },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": { "type": "boolean" },
+            "claimName": { "type": "string" },
+            "size": { "type": "string" },
+            "storageClass": { "type": "string" }
+          }
+        },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "type": "string" },
+            "host": { "type": "string" },
+            "database": { "type": "string" },
+            "image": { "type": "string" }
+          }
+        },
+        "clickhouse": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "type": "string" },
+            "host": { "type": "string" },
+            "database": { "type": "string" },
+            "image": { "type": "string" }
+          }
+        }
+      }
+    },
     "control": {
       "type": "object",
       "additionalProperties": true,
