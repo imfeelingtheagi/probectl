@@ -50,6 +50,7 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/threat"
 	"github.com/imfeelingtheagi/probectl/internal/topology"
 	"github.com/imfeelingtheagi/probectl/internal/version"
+	"github.com/imfeelingtheagi/probectl/internal/webui"
 )
 
 // Discoverer runs a path discovery. The default is path.Run; tests inject a fake.
@@ -394,6 +395,15 @@ func (s *Server) routes() http.Handler {
 	// by Host (custom domains) or the caller's session tenant; community/
 	// unlicensed deployments answer the default probectl brand.
 	mux.Handle("GET /branding", apiHandler(s.handleBranding))
+
+	// ARCH-004: serve the embedded web UI behind the same CSP + security headers
+	// as the rest of the surface (this mux is wrapped by securityHeaders). "/"
+	// redirects to the app; "/ui/" serves the SPA (with history-API fallback).
+	// When no bundle is embedded, the placeholder explains how to build it.
+	mux.Handle("GET /ui/", webui.Handler("/ui/"))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ui/", http.StatusFound)
+	})
 
 	// SSO login endpoints (S18) — public: they establish the session that the
 	// rest of the API requires.

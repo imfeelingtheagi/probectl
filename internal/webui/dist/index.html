@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>probectl</title>
+  </head>
+  <body>
+    <!--
+      ARCH-004 placeholder. The real single-page app is built from web/ with
+      `npm --prefix web run build` (Vite), which emits the hashed bundle into
+      this directory; the release build does that before compiling the control
+      plane, so shipped binaries serve the real UI here behind the CSP. This
+      placeholder keeps the go:embed (and the build) green when the UI has not
+      been bundled — and tells you so instead of 404ing.
+    -->
+    <main style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem;">
+      <h1>probectl</h1>
+      <p>The web UI is not bundled in this build.</p>
+      <p>
+        Build it with <code>npm --prefix web ci &amp;&amp; npm --prefix web run build</code>
+        and rebuild the control plane (release builds do this automatically), or
+        use the API at <code>/v1</code> and the CLI in the meantime.
+      </p>
+    </main>
+  </body>
+</html>

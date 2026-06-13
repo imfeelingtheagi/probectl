@@ -402,6 +402,12 @@ same data is on the **Targets / synthetic results** screen.
 > a different port. For this first-data check, `curl` (with `--cacert ca.crt` when
 > you are on HTTPS) and the UI are the smooth path.
 
+> **Where is the UI?** The control plane serves the web UI itself, embedded in
+> the binary (ARCH-004): open the control plane's base URL — `/` redirects to
+> `/ui/` — behind the same TLS + CSP as the API. Release binaries bundle the
+> built SPA; a from-source build that hasn't run `npm --prefix web run build`
+> serves a placeholder page that says so (the API at `/v1` works regardless).
+
 For the full enrollment lifecycle (rotation, revocation, the bootstrap threat
 model), see [`agent/enrollment.md`](agent/enrollment.md).
 

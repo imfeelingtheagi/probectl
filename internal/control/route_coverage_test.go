@@ -61,6 +61,8 @@ func TestNonV1SurfacesDocumentedOrExcluded(t *testing.T) {
 		"/branding":                 true, // white-label asset endpoint
 		"/.well-known/security.txt": true, // RFC 9116
 		"/openapi.json":             true, // the spec itself
+		"/ui/":                      true, // ARCH-004 embedded SPA (not a REST surface)
+		"/{$}":                      true, // root redirect to /ui/
 	}
 	excludedPrefix := []string{
 		"/scim/v2/",        // SCIM is RFC 7644, documented separately
