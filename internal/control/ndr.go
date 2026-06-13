@@ -19,8 +19,11 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"sync/atomic"
+
 	"github.com/imfeelingtheagi/probectl/internal/bus"
 	"github.com/imfeelingtheagi/probectl/internal/config"
+	"github.com/imfeelingtheagi/probectl/internal/fairness"
 	ebpfv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/ebpf/v1"
 	flowv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/flow/v1"
 	resultv1 "github.com/imfeelingtheagi/probectl/internal/gen/probectl/result/v1"
@@ -70,7 +73,52 @@ type NDRConsumer struct {
 	// a binding, a batch whose claimed identities don't verify is dropped
 	// fail-closed. nil = unit tests only (production always sets it).
 	binding pipeline.TenantBinding
+
+	// SCALE-005: the NDR consumer is a SECOND consumer group on the flow/eBPF
+	// lanes (in addition to the storage FlowConsumer), and it ran with no
+	// fairness gate — a tenant flooding its flow lane could saturate the threat
+	// engine and starve every other tenant's detection latency. gate bounds
+	// per-tenant flow/eBPF admission before ObserveFlow, identical to the
+	// storage flow pipeline's contract. nil = unbounded (tests / opt-out).
+	gate *fairness.Gate
+	shed atomic.Uint64 // flow/eBPF records shed by the per-tenant fairness gate
 }
+
+// WithFairness bounds per-tenant flow/eBPF admission into the threat engine
+// (SCALE-005). Over-rate tenants' records are shed BEFORE ObserveFlow, so a
+// flow-flooding tenant cannot starve another tenant's detection latency.
+func (cs *NDRConsumer) WithFairness(g *fairness.Gate) *NDRConsumer {
+	cs.gate = g
+	return cs
+}
+
+// admitFlows decides, per tenant, whether n flow/eBPF records are within the
+// tenant's fairness bound (SCALE-005). Returns the set of tenants whose records
+// must be SHED this batch; admitted tenants are absent from the map. A nil gate
+// admits everything (tests / opt-out).
+func (cs *NDRConsumer) admitFlows(ctx context.Context, counts map[string]int) map[string]bool {
+	if cs.gate == nil || len(counts) == 0 {
+		return nil
+	}
+	var shed map[string]bool
+	for tenant, n := range counts {
+		if tenant == "" {
+			continue
+		}
+		if !cs.gate.AdmitN(ctx, tenant, fairness.MeterFlowEvents, int64(n)) {
+			if shed == nil {
+				shed = make(map[string]bool, 1)
+			}
+			shed[tenant] = true
+			cs.shed.Add(uint64(n))
+			cs.log.Debug("ndr flow records shed by fairness bounds", "tenant_id", tenant, "records", n)
+		}
+	}
+	return shed
+}
+
+// Shed reports flow/eBPF records the NDR consumer shed for fairness (SCALE-005).
+func (cs *NDRConsumer) Shed() uint64 { return cs.shed.Load() }
 
 // WithTenantBinding installs registry-backed tenant verification (TENANT-101,
 // ARCH-012) so the NDR consumer cannot raise a detection against a tenant the
@@ -187,9 +235,15 @@ func (cs *NDRConsumer) handleFlowBatch(ctx context.Context, msg bus.Message) err
 	if cs.rejectFlows(ctx, "flow", ids) {
 		return nil
 	}
+	// SCALE-005: per-tenant fairness shed before feeding the engine.
+	counts := map[string]int{}
+	for _, f := range batch.GetFlows() {
+		counts[f.GetTenantId()]++
+	}
+	shed := cs.admitFlows(ctx, counts)
 	for _, f := range batch.GetFlows() {
 		tenant := f.GetTenantId()
-		if tenant == "" {
+		if tenant == "" || shed[tenant] {
 			continue
 		}
 		at := time.Unix(0, f.GetEndUnixNano())
@@ -230,9 +284,19 @@ func (cs *NDRConsumer) handleEBPFBatch(ctx context.Context, msg bus.Message) err
 	if cs.rejectFlows(ctx, "ebpf", ids) {
 		return nil
 	}
+	// SCALE-005: per-tenant fairness shed (flows + L7 calls counted together)
+	// before feeding the engine.
+	counts := map[string]int{}
+	for _, f := range batch.GetFlows() {
+		counts[f.GetTenantId()]++
+	}
+	for _, c := range batch.GetL7Calls() {
+		counts[c.GetTenantId()]++
+	}
+	shed := cs.admitFlows(ctx, counts)
 	for _, f := range batch.GetFlows() {
 		tenant := f.GetTenantId()
-		if tenant == "" {
+		if tenant == "" || shed[tenant] {
 			continue
 		}
 		sigs := cs.engine.ObserveFlow(tenant, threat.FlowObservation{
@@ -245,7 +309,7 @@ func (cs *NDRConsumer) handleEBPFBatch(ctx context.Context, msg bus.Message) err
 		cs.export(ctx, sigs)
 	}
 	for _, c := range batch.GetL7Calls() {
-		if c.GetProtocol() != "dns" || c.GetTenantId() == "" || c.GetResource() == "" {
+		if c.GetProtocol() != "dns" || c.GetTenantId() == "" || c.GetResource() == "" || shed[c.GetTenantId()] {
 			continue
 		}
 		sigs := cs.engine.ObserveDNS(c.GetTenantId(), threat.DNSObservation{

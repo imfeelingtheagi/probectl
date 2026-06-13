@@ -930,6 +930,7 @@ func run(cmd string) error {
 	if ndrOn {
 		ndrc := control.NewNDRConsumer(resultBus, ndrEngine, correlator, log).
 			WithTenantBinding(tenantBinding). // ARCH-012: verify flow/eBPF tenants before raising detections
+			WithFairness(fairGate).           // SCALE-005: bound this 2nd flow/eBPF consumer group per tenant
 			WithSIEM(siemFwd).
 			WithDetections(detections)
 		resultSinks = append(resultSinks, control.ResultSink{Name: "ndr-dns", Fn: ndrc.SinkResult})
