@@ -523,6 +523,10 @@ jobs:
       - name: Start TLS Postgres (verify-full, test CA — OPS-010)
         run: ./scripts/ci_pg_tls.sh
       - name: Cross-tenant isolation tests
+        # TEST-003: fail (not skip) if a backing service is unavailable — a
+        # cross-tenant isolation suite that quietly skips is vacuous green.
+        env:
+          PROBECTL_TEST_REQUIRE_SERVICES: "1"
         run: make test-isolation
 
   integration:
@@ -897,6 +901,12 @@ jobs:
       - web
       - dependency-scan
       - build-images
+      # TEST-006/009: the image vulnerability scan and SBOM generation are
+      # verification gates too — fold them into the umbrella so a vulnerable
+      # image or a missing SBOM turns verify-all RED instead of passing
+      # alongside it unnoticed.
+      - image-scan
+      - sbom
     steps:
       - name: Assert every verification gate is green
         env:
