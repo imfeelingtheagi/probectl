@@ -15,6 +15,15 @@ import (
 // DefaultWindow is the correlation time window when none is configured.
 const DefaultWindow = 10 * time.Minute
 
+// MaxFutureSkew is how far ahead of ingest time a signal's OccurredAt may be
+// before it is treated as clock skew and clamped (CORRECT-009). A signal's event
+// time is sourced from independent planes (NDR, BGP, TLS, IOC) whose clocks may
+// drift; a far-future OccurredAt would extend an incident's LastSeenAt — and so
+// its correlation window — unboundedly, keeping the incident "live" forever and
+// swallowing unrelated later signals. Small benign skew passes through; gross
+// future-dating is clamped to ingest time.
+const MaxFutureSkew = 5 * time.Minute
+
 // Store persists incidents and their signals. Methods are tenant-parameterized so
 // a backing store can scope each operation (RLS); correlation never crosses
 // tenants. AppendSignal must atomically insert the signal and update the
@@ -48,6 +57,7 @@ type Correlator struct {
 	window   time.Duration
 	log      *slog.Logger
 	observer Observer
+	now      func() time.Time // injectable clock (CORRECT-009 skew clamp; tests)
 
 	// tenantLocks serializes the read-then-create sequence PER TENANT
 	// (CORRECT-013). Two signals for the same tenant arriving concurrently (the
@@ -75,9 +85,17 @@ func NewCorrelator(store Store, window time.Duration, log *slog.Logger, opts ...
 	if log == nil {
 		log = slog.Default()
 	}
-	c := &Correlator{store: store, window: window, log: log}
+	c := &Correlator{store: store, window: window, log: log, now: time.Now}
 	for _, opt := range opts {
 		opt(c)
+	}
+	return c
+}
+
+// withClock overrides the clock (test-only; CORRECT-009 skew clamp).
+func (c *Correlator) withClock(now func() time.Time) *Correlator {
+	if now != nil {
+		c.now = now
 	}
 	return c
 }
@@ -95,8 +113,18 @@ func (c *Correlator) Ingest(ctx context.Context, sig Signal) (*Incident, error) 
 	if sig.TenantID == "" {
 		return nil, errors.New("incident: signal has no tenant_id")
 	}
+	now := c.now()
 	if sig.OccurredAt.IsZero() {
-		sig.OccurredAt = time.Now()
+		sig.OccurredAt = now
+	} else if sig.OccurredAt.After(now.Add(MaxFutureSkew)) {
+		// CORRECT-009: a far-future event time is clock skew. Clamp it to ingest
+		// time so it cannot extend the incident window unboundedly. The original
+		// time is preserved on the signal's evidence via the structured log; the
+		// correlation/aggregation math uses the clamped value.
+		c.log.Warn("clamping future-dated signal OccurredAt (clock skew)",
+			"tenant_id", sig.TenantID, "plane", sig.Plane, "kind", sig.Kind,
+			"claimed", sig.OccurredAt, "clamped_to", now)
+		sig.OccurredAt = now
 	}
 	if sig.Severity == "" {
 		sig.Severity = SeverityInfo
