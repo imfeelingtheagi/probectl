@@ -13,11 +13,11 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/imfeelingtheagi/probectl/internal/breaker"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
+	"github.com/imfeelingtheagi/probectl/internal/store/chclient"
 	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
@@ -111,17 +111,12 @@ func tableFor(t Target) (string, error) {
 // ClickHouse persists flows over the ClickHouse HTTP interface (pathstore
 // pattern: zero driver dependencies; https URL = TLS in transit).
 type ClickHouse struct {
-	// breaker is the circuit breaker for the DEFAULT (pooled) endpoint.
-	breaker *breaker.Breaker
-	// breakers holds one breaker PER routed silo BaseURL (SCALE-021). A single
-	// shared breaker meant one down tenant silo tripped writes for EVERY tenant
-	// — a per-tenant ClickHouse outage became a platform-wide one. Keying the
-	// breaker by data-plane endpoint isolates the blast radius: a dead silo
-	// short-circuits only its own target while every other silo keeps serving.
-	breakers sync.Map // baseURL -> *breaker.Breaker
-	base     string
-	client   *http.Client
-	router   TargetRouter // nil = everything pooled
+	// conn is the shared ClickHouse transport (CODE-006): TLS-hardened client,
+	// JSONEachRow decode, and a circuit breaker PER routed silo BaseURL
+	// (SCALE-021 — one down silo never trips another), now owned by chclient.
+	conn   *chclient.Conn
+	base   string
+	router TargetRouter // nil = everything pooled
 	// tenantScoping (TENANT-102) attaches the per-request custom setting
 	// SQL_probectl_tenant to every tenant-scoped read, so a row policy can
 	// constrain the query path at the DB even if app-layer WHERE scoping is
@@ -178,7 +173,7 @@ func (e chExec) Query(ctx context.Context, sql string, p chmigrate.Params) ([]ma
 }
 
 func NewClickHouse(rawURL string, retentionDays int) (*ClickHouse, error) {
-	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: &http.Client{Timeout: 30 * time.Second}, breaker: breaker.New(0, 0)}
+	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), conn: chclient.New(30 * time.Second)}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	// Versioned, ledger-recorded schema (U-046). The retention TTL below
@@ -573,7 +568,7 @@ func (c *ClickHouse) ExportTenant(ctx context.Context, tenantID string, w io.Wri
 	if err != nil {
 		return 0, err
 	}
-	resp, err := chDo(c.breakerFor(t.BaseURL), c.client, req)
+	resp, err := c.conn.Do(t.BaseURL, req)
 	if err != nil {
 		return 0, fmt.Errorf("flowstore: export: %w", err)
 	}
@@ -630,18 +625,8 @@ func (c *ClickHouse) baseFor(base string) string {
 
 // breakerFor returns the circuit breaker for a routed endpoint (SCALE-021).
 // The pooled default ("") uses the long-lived c.breaker; each siloed BaseURL
-// gets its own breaker so one silo's outage can't trip another's writes.
-func (c *ClickHouse) breakerFor(base string) *breaker.Breaker {
-	if base == "" {
-		return c.breaker
-	}
-	key := strings.TrimRight(base, "/")
-	if b, ok := c.breakers.Load(key); ok {
-		return b.(*breaker.Breaker)
-	}
-	b, _ := c.breakers.LoadOrStore(key, breaker.New(0, 0))
-	return b.(*breaker.Breaker)
-}
+// gets its own breaker so one silo's outage can't trip another's writes
+// (now owned by chclient — CODE-006).
 
 // chParams carries SERVER-BOUND query parameters (SEC-005/TENANT-108): each
 // key k is sent as the HTTP parameter param_k and bound by ClickHouse to the
@@ -687,7 +672,7 @@ func (c *ClickHouse) doQuery(ctx context.Context, base, u string) ([]map[string]
 	if err != nil {
 		return nil, err
 	}
-	resp, err := chDo(c.breakerFor(base), c.client, req)
+	resp, err := c.conn.Do(base, req)
 	if err != nil {
 		return nil, fmt.Errorf("flowstore: clickhouse query: %w", err)
 	}
@@ -696,18 +681,7 @@ func (c *ClickHouse) doQuery(ctx context.Context, base, u string) ([]map[string]
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("flowstore: clickhouse query status %d: %s", resp.StatusCode, body)
 	}
-	var rows []map[string]any
-	for _, line := range bytes.Split(body, []byte("\n")) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var row map[string]any
-		if err := json.Unmarshal(line, &row); err != nil {
-			return nil, fmt.Errorf("flowstore: decode row: %w", err)
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
+	return chclient.Decode(body)
 }
 
 func (c *ClickHouse) exec(ctx context.Context, base, query string, p chParams, body io.Reader) error {
@@ -716,7 +690,7 @@ func (c *ClickHouse) exec(ctx context.Context, base, query string, p chParams, b
 	if err != nil {
 		return err
 	}
-	resp, err := chDo(c.breakerFor(base), c.client, req)
+	resp, err := c.conn.Do(base, req)
 	if err != nil {
 		return fmt.Errorf("flowstore: clickhouse request: %w", err)
 	}
@@ -728,24 +702,8 @@ func (c *ClickHouse) exec(ctx context.Context, base, query string, p chParams, b
 	return nil
 }
 
-// chDo issues the request through the circuit breaker (U-078): a transport
-// failure (upstream down) counts toward tripping; the breaker short-circuits
-// while open instead of stacking connect timeouts.
-func chDo(b *breaker.Breaker, client *http.Client, req *http.Request) (*http.Response, error) {
-	var resp *http.Response
-	err := b.Do(func() error {
-		r, e := client.Do(req) //nolint:bodyclose // the response escapes to chDo's caller, which closes it
-		if e != nil {
-			return e
-		}
-		resp = r
-		return nil
-	})
-	return resp, err
-}
-
 // BreakerStats exposes the storage breaker state (U-078 fallback metrics).
-func (c *ClickHouse) BreakerStats() breaker.Stats { return c.breaker.Stats() }
+func (c *ClickHouse) BreakerStats() breaker.Stats { return c.conn.Stats() }
 
 // chParseTime parses ClickHouse DateTime / DateTime64 strings.
 func chParseTime(s string) time.Time {
@@ -757,21 +715,6 @@ func chParseTime(s string) time.Time {
 	return time.Time{}
 }
 
-func chToString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-func chToFloat(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case string:
-		var f float64
-		_, _ = fmt.Sscanf(n, "%g", &f)
-		return f
-	}
-	return 0
-}
+// chToString / chToFloat coerce JSONEachRow cells (shared via chclient, CODE-006).
+func chToString(v any) string { return chclient.String(v) }
+func chToFloat(v any) float64 { return chclient.Float(v) }

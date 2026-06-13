@@ -14,8 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imfeelingtheagi/probectl/internal/breaker"
-	"github.com/imfeelingtheagi/probectl/internal/crypto"
+	"github.com/imfeelingtheagi/probectl/internal/store/chclient"
 	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
@@ -71,9 +70,8 @@ func chMigrations() []chmigrate.Migration {
 
 // ClickHouse is the production Store.
 type ClickHouse struct {
-	base    string
-	client  *http.Client
-	breaker *breaker.Breaker
+	base string
+	conn *chclient.Conn // shared transport (TLS client + breaker), CODE-006
 	// tenantScoping (TENANT-102 parity): attach the per-request custom
 	// setting so the reader row policy can constrain reads at the DB.
 	tenantScoping bool
@@ -100,7 +98,7 @@ func NewClickHouse(rawURL string, retentionDays int) (*ClickHouse, error) {
 	// Hardened egress (U-036): TLS 1.2+/AEAD/verify-on for an https ClickHouse
 	// URL; unused for an in-cluster http URL. (flowstore/pathstore predate the
 	// ratchet and are allowlisted; this store post-dates it, so it migrates.)
-	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: crypto.HardenedHTTPClient(30 * time.Second), breaker: breaker.New(0, 0)}
+	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), conn: chclient.New(30 * time.Second)}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if _, err := chmigrate.Apply(ctx, chExec{c}, "otelstore", chMigrations(), nil); err != nil {
@@ -385,13 +383,7 @@ func (c *ClickHouse) exec(ctx context.Context, query string, p chParams, body io
 }
 
 func (c *ClickHouse) do(req *http.Request) (*http.Response, error) {
-	var resp *http.Response
-	err := c.breaker.Do(func() error {
-		var derr error
-		resp, derr = c.client.Do(req) //nolint:bodyclose // the response escapes to do's caller (query/exec), which closes it
-		return derr
-	})
-	return resp, err
+	return c.conn.Do("", req) // shared transport + breaker (CODE-006)
 }
 
 // --- result coercion helpers (ClickHouse JSON renders numbers as strings) ---

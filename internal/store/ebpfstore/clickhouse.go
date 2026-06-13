@@ -13,20 +13,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imfeelingtheagi/probectl/internal/breaker"
-	"github.com/imfeelingtheagi/probectl/internal/crypto"
+	"github.com/imfeelingtheagi/probectl/internal/store/chclient"
 	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
 const edgesTable = "probectl_ebpf_edges"
 
-// ClickHouse persists eBPF aggregates over the ClickHouse HTTP interface
-// (flowstore/otelstore pattern: no driver dependency; https URL = TLS in
-// transit; a circuit breaker short-circuits a down upstream).
+// ClickHouse persists eBPF aggregates over the ClickHouse HTTP interface. The
+// transport (TLS-hardened client, circuit breaker, JSONEachRow decode) is the
+// shared chclient (CODE-006); this type owns only the eBPF schema + queries.
 type ClickHouse struct {
-	base    string
-	client  *http.Client
-	breaker *breaker.Breaker
+	base string
+	conn *chclient.Conn
 }
 
 // edgesDDL is tenant-led (partition + ORDER BY) and a ReplacingMergeTree so a
@@ -62,9 +60,8 @@ func (e chExec) Query(ctx context.Context, sql string, _ chmigrate.Params) ([]ma
 // sets the delete-TTL.
 func NewClickHouse(rawURL string, retentionDays int) (*ClickHouse, error) {
 	c := &ClickHouse{
-		base:    strings.TrimRight(rawURL, "/"),
-		client:  crypto.HardenedHTTPClient(30 * time.Second),
-		breaker: breaker.New(0, 0),
+		base: strings.TrimRight(rawURL, "/"),
+		conn: chclient.New(30 * time.Second),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -160,7 +157,7 @@ func (c *ClickHouse) DeleteTenant(ctx context.Context, tenantID string) (int64, 
 
 func (c *ClickHouse) Close() error { return nil }
 
-// --- HTTP helpers (breaker-guarded; flowstore idiom) ---
+// --- HTTP helpers over the shared chclient (CODE-006) ---
 
 func (c *ClickHouse) exec(ctx context.Context, query string, body io.Reader) error {
 	return c.execParams(ctx, query, nil, body)
@@ -179,7 +176,7 @@ func (c *ClickHouse) execParams(ctx context.Context, query string, params url.Va
 	if err != nil {
 		return err
 	}
-	resp, err := c.do(req)
+	resp, err := c.conn.Do(c.base, req)
 	if err != nil {
 		return fmt.Errorf("ebpfstore: request: %w", err)
 	}
@@ -204,7 +201,7 @@ func (c *ClickHouse) queryParams(ctx context.Context, sql string, params url.Val
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.do(req)
+	resp, err := c.conn.Do(c.base, req)
 	if err != nil {
 		return nil, fmt.Errorf("ebpfstore: query: %w", err)
 	}
@@ -213,46 +210,8 @@ func (c *ClickHouse) queryParams(ctx context.Context, sql string, params url.Val
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("ebpfstore: query status %d: %s", resp.StatusCode, raw)
 	}
-	var rows []map[string]any
-	for _, line := range bytes.Split(raw, []byte("\n")) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal(line, &m); err != nil {
-			return nil, fmt.Errorf("ebpfstore: decode row: %w", err)
-		}
-		rows = append(rows, m)
-	}
-	return rows, nil
+	return chclient.Decode(raw)
 }
 
-func (c *ClickHouse) do(req *http.Request) (*http.Response, error) {
-	var resp *http.Response
-	err := c.breaker.Do(func() error {
-		r, e := c.client.Do(req) //nolint:bodyclose // escapes to caller
-		if e != nil {
-			return e
-		}
-		resp = r
-		return nil
-	})
-	return resp, err
-}
-
-func str(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-func num(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case string:
-		var f float64
-		_, _ = fmt.Sscanf(n, "%g", &f)
-		return f
-	}
-	return 0
-}
+func str(v any) string  { return chclient.String(v) }
+func num(v any) float64 { return chclient.Float(v) }

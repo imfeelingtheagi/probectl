@@ -14,13 +14,13 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/imfeelingtheagi/probectl/internal/breaker"
 	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/path"
+	"github.com/imfeelingtheagi/probectl/internal/store/chclient"
 	"github.com/imfeelingtheagi/probectl/internal/store/chmigrate"
 )
 
@@ -49,9 +49,8 @@ const createLinks = `CREATE TABLE IF NOT EXISTS ` + linksTable + ` (
 // ClickHouse persists paths to a ClickHouse HTTP endpoint. TLS in transit is
 // supported by using an https URL (CLAUDE.md §7 guardrail 12).
 type ClickHouse struct {
-	breaker *breaker.Breaker
-	base    string
-	client  *http.Client
+	base string
+	conn *chclient.Conn // shared transport (TLS client + breaker), CODE-006
 }
 
 // chMigrations is the pathstore's versioned ClickHouse schema (U-046),
@@ -107,7 +106,7 @@ func NewClickHouse(rawURL string) (*ClickHouse, error) { return NewClickHouseRet
 // (Sprint 16, SCALE-006 — the flowstore pattern: runtime config, not schema).
 // retentionDays > 0 ALTERs a delete-TTL onto both path tables, idempotently.
 func NewClickHouseRetained(rawURL string, retentionDays int) (*ClickHouse, error) {
-	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), client: &http.Client{Timeout: 30 * time.Second}, breaker: breaker.New(0, 0)}
+	c := &ClickHouse{base: strings.TrimRight(rawURL, "/"), conn: chclient.New(30 * time.Second)}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if _, err := chmigrate.Apply(ctx, chExec{c}, "pathstore", chMigrations(), nil); err != nil {
@@ -362,7 +361,7 @@ func (c *ClickHouse) query(ctx context.Context, sql string, p chParams) ([]map[s
 	if err != nil {
 		return nil, err
 	}
-	resp, err := chDo(c.breaker, c.client, req)
+	resp, err := c.conn.Do("", req)
 	if err != nil {
 		return nil, fmt.Errorf("pathstore: clickhouse query: %w", err)
 	}
@@ -371,93 +370,22 @@ func (c *ClickHouse) query(ctx context.Context, sql string, p chParams) ([]map[s
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("pathstore: clickhouse query status %d: %s", resp.StatusCode, body)
 	}
-	var rows []map[string]any
-	for _, line := range bytes.Split(body, []byte("\n")) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		var row map[string]any
-		if err := json.Unmarshal(line, &row); err != nil {
-			return nil, fmt.Errorf("pathstore: decode row: %w", err)
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-// chDo issues the request through the circuit breaker (U-078).
-func chDo(b *breaker.Breaker, client *http.Client, req *http.Request) (*http.Response, error) {
-	var resp *http.Response
-	err := b.Do(func() error {
-		r, e := client.Do(req) //nolint:bodyclose // the response escapes to chDo's caller, which closes it
-		if e != nil {
-			return e
-		}
-		resp = r
-		return nil
-	})
-	return resp, err
+	return chclient.Decode(body)
 }
 
 // BreakerStats exposes the storage breaker state (U-078 fallback metrics).
-func (c *ClickHouse) BreakerStats() breaker.Stats { return c.breaker.Stats() }
+func (c *ClickHouse) BreakerStats() breaker.Stats { return c.conn.Stats() }
 
 // chUserRe is the shape a ClickHouse USER identifier may take in our DDL
 // (identifiers cannot be bound parameters; validated, fail closed).
 var chUserRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,62}$`)
 
-// chCount extracts the single count() value from a query result.
-func chCount(rows []map[string]any) int {
-	if len(rows) == 0 {
-		return 0
-	}
-	switch v := rows[0]["n"].(type) {
-	case float64:
-		return int(v)
-	case string:
-		n := 0
-		for _, r := range v {
-			if r < '0' || r > '9' {
-				return 0
-			}
-			n = n*10 + int(r-'0')
-		}
-		return n
-	}
-	return 0
-}
-
-func chToString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-func chToFloat(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case string:
-		f, _ := strconv.ParseFloat(n, 64)
-		return f
-	}
-	return 0
-}
-
-func chToInt(v any) int { return int(chToFloat(v)) }
-
-func chToUintSlice(v any) []uint32 {
-	arr, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]uint32, 0, len(arr))
-	for _, e := range arr {
-		out = append(out, uint32(chToFloat(e)))
-	}
-	return out
-}
+// ClickHouse result coercions — shared via chclient (CODE-006).
+func chCount(rows []map[string]any) int { return chclient.Count(rows) }
+func chToString(v any) string           { return chclient.String(v) }
+func chToFloat(v any) float64           { return chclient.Float(v) }
+func chToInt(v any) int                 { return chclient.Int(v) }
+func chToUintSlice(v any) []uint32      { return chclient.UintSlice(v) }
 
 func (c *ClickHouse) exec(ctx context.Context, query string, p chParams, body io.Reader) error {
 	u := c.base + "/?query=" + url.QueryEscape(query) + p.qs()
@@ -465,7 +393,7 @@ func (c *ClickHouse) exec(ctx context.Context, query string, p chParams, body io
 	if err != nil {
 		return err
 	}
-	resp, err := c.client.Do(req)
+	resp, err := c.conn.Do("", req)
 	if err != nil {
 		return fmt.Errorf("pathstore: clickhouse request: %w", err)
 	}
