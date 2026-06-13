@@ -57,7 +57,6 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/opendata"
 	"github.com/imfeelingtheagi/probectl/internal/otel/otlp"
 	"github.com/imfeelingtheagi/probectl/internal/pipeline"
-	"github.com/imfeelingtheagi/probectl/internal/secrets"
 	"github.com/imfeelingtheagi/probectl/internal/store"
 	"github.com/imfeelingtheagi/probectl/internal/store/ebpfstore"
 	"github.com/imfeelingtheagi/probectl/internal/store/flowstore"
@@ -67,7 +66,6 @@ import (
 	"github.com/imfeelingtheagi/probectl/internal/store/tsdb"
 	"github.com/imfeelingtheagi/probectl/internal/support"
 	"github.com/imfeelingtheagi/probectl/internal/tenancy"
-	"github.com/imfeelingtheagi/probectl/internal/tenantcrypto"
 	"github.com/imfeelingtheagi/probectl/internal/tenantlife"
 	"github.com/imfeelingtheagi/probectl/internal/threat"
 	"github.com/imfeelingtheagi/probectl/internal/topology"
@@ -119,49 +117,11 @@ func run(cmd string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	// S41: integration credentials (OIDC client secret, CMDB, AI model, SIEM,
-	// webhook/connector secrets) may be SECRET REFERENCES — resolve them through
-	// the backends configured in the environment before anything consumes them.
-	// Plain values pass through; any resolution failure aborts startup (fail
-	// closed — never run with a partially-resolved credential set).
-	secretsResolver, err := secrets.FromEnv(0)
+	// S41/SEC-002/S-T6: resolve secret-reference config and install the at-rest
+	// envelope sealer (extracted to setupSecretsAndEnvelope — CODE-005).
+	secretsResolver, envelopeGenerated, err := setupSecretsAndEnvelope(cfg)
 	if err != nil {
-		return fmt.Errorf("secret backends: %w", err)
-	}
-	if err := cfg.ResolveSecretRefs(context.Background(), secretsResolver.Resolve); err != nil {
 		return err
-	}
-	// S-T6: install the deployment envelope as the at-rest sealer for
-	// sensitive tenant-owned values (alert channel secrets, ...). Keyless dev
-	// deployments run passthrough; the licensed byok build replaces the
-	// PRIMARY with the per-tenant keyring at the attach seam — this dv1
-	// sealer stays registered as an opener, so existing rows keep decrypting.
-	envelopeGenerated := false
-	if cfg.EnvelopeKey == "" && cfg.EnvelopeKeyFile != "" {
-		// SEC-002: encryption-by-default — load the deployment KEK from the
-		// file, generating + persisting one on first boot (no silent keyless
-		// passthrough in the shipped recipes). Explicit env key wins above.
-		kek, generated, err := tenantcrypto.LoadOrGenerateKeyFile(cfg.EnvelopeKeyFile)
-		if err != nil {
-			return fmt.Errorf("envelope key file: %w", err)
-		}
-		cfg.EnvelopeKey = kek
-		if cfg.EnvelopeKeyID == "dev" {
-			cfg.EnvelopeKeyID = "file"
-		}
-		envelopeGenerated = generated
-	}
-	if cfg.EnvelopeKey != "" {
-		sealer, err := tenantcrypto.NewEnvelopeSealer(cfg.EnvelopeKeyID, cfg.EnvelopeKey)
-		if err != nil {
-			return fmt.Errorf("envelope sealer: %w", err)
-		}
-		tenantcrypto.SetPrimary(sealer)
-	} else if cfg.RequireAtRestEncryption {
-		// TENANT-106: fail closed — refuse to start rather than silently write
-		// tenant secrets in plaintext when encryption is required.
-		return fmt.Errorf("PROBECTL_REQUIRE_AT_REST_ENCRYPTION is set but no envelope key is resolvable " +
-			"(set PROBECTL_ENVELOPE_KEY, or the licensed per-tenant keyring) — refusing to start with plaintext at-rest storage")
 	}
 	// mcp-stdio uses stdout for its JSON-RPC channel, so its logs go to stderr.
 	logOut := os.Stdout
@@ -663,25 +623,8 @@ func run(cmd string) error {
 		control.SetInstanceGroupSuffix(hn)
 	}
 
-	// CORRECT-009: the pipeline/bus/clock-skew loss counters that already exist
-	// finally get a production reader. Expose them as sampled gauges on /metrics
-	// (probectl observes probectl, §8) so operators can alert on data loss
-	// instead of it being invisible until a customer notices missing data.
-	{
-		m := srv.Metrics()
-		m.Gauge("probectl_pipeline_future_clamped", "Samples clamped because their timestamp was implausibly far in the future (agent clock skew, CORRECT-012).", func() float64 { return float64(pipeline.FutureClamped()) })
-		m.Gauge("probectl_pipeline_max_future_skew_ms", "Largest future clock skew observed across all samples, in milliseconds.", func() float64 { return float64(pipeline.MaxObservedFutureSkewMillis()) })
-		if kb, ok := resultBus.(*bus.Kafka); ok {
-			m.Gauge("probectl_bus_produced", "Broker-acked records published to the bus.", func() float64 { return float64(kb.Stats().Produced) })
-			m.Gauge("probectl_bus_failed", "Records accepted into the producer buffer that failed asynchronously after retries.", func() float64 { return float64(kb.Stats().Failed) })
-			m.Gauge("probectl_bus_shed", "Records shed at the full in-flight buffer (broker degraded backpressure drop).", func() float64 { return float64(kb.Stats().Shed) })
-			m.Gauge("probectl_bus_handler_errors", "Consumed records whose handler errored, leaving the offset uncommitted for redelivery (SCALE-007/CODE-007).", func() float64 { return float64(kb.Stats().HandlerErrors) })
-			m.Gauge("probectl_bus_buffered", "Records currently buffered in the async producer (in flight).", func() float64 { return float64(kb.Stats().Buffered) })
-		}
-		if p, ok := tsdbWriter.(*tsdb.Prometheus); ok {
-			m.Gauge("probectl_tsdb_remote_write_rejected", "Samples permanently rejected by the remote-write upstream with a 4xx (out-of-order/too-old, CORRECT-003).", func() float64 { return float64(p.RejectedPermanent()) })
-		}
-	}
+	// CORRECT-009: expose the pipeline/bus/clock-skew loss counters as gauges.
+	registerLossGauges(srv.Metrics(), resultBus, tsdbWriter)
 	// Fairness accounting as per-tenant TSDB series (Grafana-federable).
 	g.Go(func() error { fairness.RunMetrics(gctx, tsdbWriter, fairGate, 30*time.Second, log); return nil })
 	// Self-monitoring (S-EE4): probectl observes probectl — goroutines, mem,
