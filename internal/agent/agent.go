@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -99,12 +100,25 @@ func (a *Agent) forward(ctx context.Context) error {
 			}
 			a.log.Warn("control-plane session ended; will reconnect", "error", err.Error())
 		}
-		if !sleep(ctx, backoff) {
+		// SCALE-008: jitter the backoff so a fleet does not reconnect in
+		// lockstep after a control-plane restart (thundering herd). Sleep a
+		// random 70–100% of the current backoff; the ceiling still grows
+		// exponentially, but no two agents wake at the same instant.
+		if !sleep(ctx, jittered(backoff)) {
 			return nil
 		}
 		backoff = min(backoff*2, maxBackoff)
 	}
 	return nil
+}
+
+// jittered returns d reduced by a random 0–30% (full-jitter-style decorrelation
+// of fleet timers, SCALE-008).
+func jittered(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	return d - time.Duration(rand.Int64N(int64(d)*30/100+1))
 }
 
 // session registers, then heartbeats and drains until an RPC error or ctx done.
