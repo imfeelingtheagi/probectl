@@ -269,6 +269,11 @@ func (c *ClickHouse) Latest(ctx context.Context, tenantID, target string) (*path
 	if tenantID == "" {
 		return nil, false, ErrNoTenant
 	}
+	// CORRECT-010: select the SINGLE newest snapshot (ORDER BY ts DESC LIMIT 1),
+	// then read exactly that path_id's hops/links below. This newest-only read is
+	// what makes a redelivered duplicate save harmless — it is never aggregated
+	// across snapshots, so no dedup engine is needed (see doc.go). Do not widen
+	// this to a cross-snapshot scan.
 	meta, err := c.query(ctx,
 		"SELECT path_id, target_ip, mode FROM "+hopsTable+" WHERE tenant_id={tenant:String} AND target={target:String} ORDER BY ts DESC LIMIT 1",
 		chParams{"tenant": tenantID, "target": target})
