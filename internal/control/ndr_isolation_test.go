@@ -17,7 +17,7 @@ import (
 type ndrFakeBinding map[string]string // agent -> its real tenant
 
 func (b ndrFakeBinding) Verify(_ context.Context, tenantID, agentID string) error {
-	if real, ok := b[agentID]; ok && real == tenantID {
+	if boundTenant, ok := b[agentID]; ok && boundTenant == tenantID {
 		return nil
 	}
 	return errors.New("agent not bound to tenant")

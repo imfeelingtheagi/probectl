@@ -3,11 +3,11 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"strings"
 
 	"github.com/imfeelingtheagi/probectl/internal/config"
+	"github.com/imfeelingtheagi/probectl/internal/crypto"
 	"github.com/imfeelingtheagi/probectl/internal/otel/otlp"
 	"github.com/imfeelingtheagi/probectl/internal/pipeline"
 )
@@ -35,7 +35,11 @@ func buildOTLPExporter(cfg *config.Config) (signalExporter, error) {
 		Insecure: insecure,
 	}
 	if !insecure {
-		ec.TLS = &tls.Config{MinVersion: tls.VersionTLS12} // system roots; verified
+		// Outbound export to a (possibly third-party) OTLP collector: the hardened
+		// client policy from internal/crypto — TLS 1.2 floor (collectors may not be
+		// 1.3-only), AEAD-only ciphers, modern curves, cert validation always on
+		// (system roots). TLS policy lives only in internal/crypto (WIRE-005).
+		ec.TLS = crypto.HardenedClientTLSConfig()
 	}
 	if cfg.OTLPExportProtocol == "http" {
 		return otlp.NewHTTPExporter(ec)

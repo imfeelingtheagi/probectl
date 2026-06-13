@@ -642,7 +642,7 @@ func run(cmd string) error {
 	// ARCH-002: the CORE ingest consumers (result/flow/device/endpoint) and the
 	// result-fan are SUPERVISED — a transient broker/registry fault while
 	// (re)establishing a subscription restarts just that consumer instead of
-	// cancelling the shared errgroup and taking the API + every plane down. Only
+	// canceling the shared errgroup and taking the API + every plane down. Only
 	// srv.Run and migrations stay fatal by design (if they can't run, the process
 	// SHOULD exit). Steady-state handler/store errors are already absorbed by the
 	// per-consumer retry/DLQ, so the supervised trigger is the subscribe path.

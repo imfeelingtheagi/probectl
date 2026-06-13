@@ -15,7 +15,7 @@ import (
 // cancel the whole errgroup and take the control plane down (ARCH-020, ARCH-002).
 //
 // Before this, every consumer rode a single errgroup: a transient failure in,
-// say, the carbon or topology consumer returned an error that cancelled the
+// say, the carbon or topology consumer returned an error that canceled the
 // group and killed the API server, the result pipeline, and every other plane
 // with it. ARCH-002 extends supervision to the CORE ingest consumers (result /
 // flow / device / endpoint / topology / OTLP receiver+consumers) and the
@@ -25,7 +25,7 @@ import (
 // A panic in a supervised subsystem is recovered (runRecovered) and treated as
 // a restartable failure, never a process crash.
 //
-// It returns nil only when ctx is cancelled (clean shutdown); it never returns
+// It returns nil only when ctx is canceled (clean shutdown); it never returns
 // the subsystem's error, by design — the whole point is that a sidecar failure
 // is not fatal to the group.
 func superviseRestart(ctx context.Context, name string, log *slog.Logger, run func(context.Context) error) error {
@@ -35,7 +35,7 @@ func superviseRestart(ctx context.Context, name string, log *slog.Logger, run fu
 	)
 	backoff := baseBackoff
 	for {
-		err := runRecovered(name, log, run, ctx)
+		err := runRecovered(ctx, name, log, run)
 		if ctx.Err() != nil {
 			return nil // shutting down — not a crash
 		}
@@ -67,7 +67,7 @@ func superviseRestart(ctx context.Context, name string, log *slog.Logger, run fu
 // (ARCH-002), so a panicking consumer is restarted by the supervisor instead of
 // unwinding the goroutine and crashing the process. A clean error/return is
 // passed through unchanged.
-func runRecovered(name string, log *slog.Logger, run func(context.Context) error, ctx context.Context) (err error) {
+func runRecovered(ctx context.Context, name string, log *slog.Logger, run func(context.Context) error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("supervised subsystem PANICKED; recovering and restarting",

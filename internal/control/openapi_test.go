@@ -138,7 +138,7 @@ func TestOpenAPIResponseSchemaFidelity(t *testing.T) {
 		}
 		if rt := jsonType(v); rt != docType {
 			// "number" and "integer" are both float64 at runtime; treat as compatible.
-			if !(docType == "number" && rt == "integer") {
+			if docType != "number" || rt != "integer" {
 				t.Errorf("field %q: handler emits JSON %s, openapi.json documents %s (SCHEMA-005 schema drift)", field, rt, docType)
 			}
 		}

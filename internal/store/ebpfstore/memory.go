@@ -12,7 +12,7 @@ import (
 // Memory is the in-process eBPF-aggregate store (lightweight mode + tests). It
 // is tenant-partitioned and dedups on the edge's identity (CORRECT-002
 // discipline) by summing a re-observed identical window in place rather than
-// appending — the in-RAM analogue of the ClickHouse ReplacingMergeTree.
+// appending — the in-RAM analog of the ClickHouse ReplacingMergeTree.
 type Memory struct {
 	mu      sync.RWMutex
 	tenants map[string]map[string]*Edge // tenant -> edge key -> aggregate

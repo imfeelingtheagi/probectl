@@ -73,7 +73,7 @@ func TestMultiRegion_NoTelemetryReplicationOverclaim(t *testing.T) {
 	}
 
 	// The RPO table must distinguish the two stores.
-	if !(strings.Contains(doc, "Postgres (metadata)") && strings.Contains(doc, "ClickHouse (telemetry)")) {
+	if !strings.Contains(doc, "Postgres (metadata)") || !strings.Contains(doc, "ClickHouse (telemetry)") {
 		t.Errorf("multi-region.md RPO table must distinguish metadata (Postgres) from telemetry (ClickHouse)")
 	}
 }

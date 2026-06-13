@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+
 	// ARCH-006: register the gRPC gzip decompressor so the OTLP/gRPC receiver
 	// can decode gzip-compressed messages (the OTel Collector's otlp exporter
 	// gzips by default). Without this blank import the server returns

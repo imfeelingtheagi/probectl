@@ -43,7 +43,7 @@ func FuzzL7Manager(f *testing.F) {
 		f.Add(uint32(53), byte(0), s)   // dns port
 	}
 
-	f.Fuzz(func(t *testing.T, dstPort uint32, kindByte byte, payload []byte) {
+	f.Fuzz(func(_ *testing.T, dstPort uint32, kindByte byte, payload []byte) {
 		m := NewManager()
 		kind := Request
 		if kindByte&1 == 1 {
@@ -67,7 +67,7 @@ func FuzzL7Detect(f *testing.F) {
 	f.Add(uint32(9092), []byte{0, 0, 0, 16})
 	f.Add(uint32(53), []byte{0x12, 0x34, 0x01, 0x00})
 	f.Add(uint32(0), []byte{})
-	f.Fuzz(func(t *testing.T, dstPort uint32, head []byte) {
+	f.Fuzz(func(_ *testing.T, dstPort uint32, head []byte) {
 		_ = Detect(head, dstPort)
 	})
 }

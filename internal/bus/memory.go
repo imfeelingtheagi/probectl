@@ -35,7 +35,7 @@ type Memory struct {
 // small bound matches the lightweight-mode contract: a transient handler error
 // gets a few retries, but a permanently-failing handler cannot wedge the
 // subscriber loop forever. Kafka redelivers via the uncommitted offset; this is
-// the in-process analogue. After the bound the record is counted as lost
+// the in-process analog. After the bound the record is counted as lost
 // (HandlerLost) — never silently swallowed.
 const memoryMaxRedeliver = 3
 
@@ -162,7 +162,7 @@ func (m *Memory) Subscribe(ctx context.Context, topic, _ string, handler Handler
 		case msg := <-ch:
 			// CORRECT-007: a handler error is no longer silently discarded — it is
 			// counted and the record is REDELIVERED up to memoryMaxRedeliver times
-			// (the in-process analogue of Kafka's uncommitted-offset redelivery),
+			// (the in-process analog of Kafka's uncommitted-offset redelivery),
 			// then counted as lost if the handler keeps failing. The handler that
 			// has already accounted for a message (its own DLQ etc.) returns nil.
 			m.deliver(ctx, handler, msg)

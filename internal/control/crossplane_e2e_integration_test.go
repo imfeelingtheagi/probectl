@@ -112,17 +112,17 @@ func TestCrossPlaneCorrelationE2E(t *testing.T) {
 		Collector:          "rrc00",
 		DetectedAtUnixNano: now.UnixNano(),
 	}
-	publishProto(t, ctx, b, bus.BGPEventsTopic, tenantA, bgpEvt)
+	publishProto(ctx, t, b, bus.BGPEventsTopic, tenantA, bgpEvt)
 
 	// Plane 2 — threat: tenant A probes the known-bad IP inside that prefix.
-	publishProto(t, ctx, b, bus.NetworkResultsTopic, tenantA, &resultv1.Result{
+	publishProto(ctx, t, b, bus.NetworkResultsTopic, tenantA, &resultv1.Result{
 		TenantId: tenantA, AgentId: "agent-a", CanaryType: "icmp",
 		ServerAddress: badIP, StartTimeUnixNano: now.Add(time.Minute).UnixNano(),
 	})
 
 	// Decoy — tenant B hits the SAME bad IP. It must open B's own incident, never
 	// join A's (cross-tenant correlation is the catastrophic failure, guardrail 1).
-	publishProto(t, ctx, b, bus.NetworkResultsTopic, tenantB, &resultv1.Result{
+	publishProto(ctx, t, b, bus.NetworkResultsTopic, tenantB, &resultv1.Result{
 		TenantId: tenantB, AgentId: "agent-b", CanaryType: "icmp",
 		ServerAddress: badIP, StartTimeUnixNano: now.UnixNano(),
 	})
@@ -176,7 +176,7 @@ func TestCrossPlaneCorrelationE2E(t *testing.T) {
 	}
 }
 
-func publishProto(t *testing.T, ctx context.Context, b bus.Bus, topic, tenant string, m proto.Message) {
+func publishProto(ctx context.Context, t *testing.T, b bus.Bus, topic, tenant string, m proto.Message) {
 	t.Helper()
 	payload, err := proto.Marshal(m)
 	if err != nil {

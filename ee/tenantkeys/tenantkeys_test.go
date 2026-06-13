@@ -208,7 +208,7 @@ func TestBYOKFailSafe(t *testing.T) {
 func TestBYOKRevocationInstantTTLZero(t *testing.T) {
 	material := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
 	live := true
-	resolve := func(_ context.Context, ref string) (string, error) {
+	resolve := func(_ context.Context, _ string) (string, error) {
 		if !live {
 			return "", errors.New("revoked")
 		}

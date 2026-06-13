@@ -67,7 +67,7 @@ func Handler(prefix string) http.Handler {
 	})
 }
 
-func serveIndex(w http.ResponseWriter, r *http.Request, sub fs.FS) {
+func serveIndex(w http.ResponseWriter, _ *http.Request, sub fs.FS) {
 	b, err := fs.ReadFile(sub, "index.html")
 	if err != nil {
 		http.Error(w, "ui not available", http.StatusNotFound)

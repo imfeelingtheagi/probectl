@@ -156,9 +156,9 @@ func TestFutureClampAcrossIngestPaths(t *testing.T) {
 
 func assertClampedMillis(t *testing.T, gotMillis int64, slack time.Duration) {
 	t.Helper()
-	max := time.Now().Add(slack).UnixMilli()
-	if gotMillis > max {
-		t.Fatalf("timestamp not clamped: got %d, want <= ~now (%d)", gotMillis, max)
+	maxTS := time.Now().Add(slack).UnixMilli()
+	if gotMillis > maxTS {
+		t.Fatalf("timestamp not clamped: got %d, want <= ~now (%d)", gotMillis, maxTS)
 	}
 }
 

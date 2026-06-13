@@ -122,15 +122,15 @@ func finishMsg(t *testing.T, path, name string, nums, reserved map[int]bool) {
 		return
 	}
 	keys := make([]int, 0, len(nums))
-	max := 0
+	maxNum := 0
 	for n := range nums {
 		keys = append(keys, n)
-		if n > max {
-			max = n
+		if n > maxNum {
+			maxNum = n
 		}
 	}
 	sort.Ints(keys)
-	for n := 1; n <= max; n++ {
+	for n := 1; n <= maxNum; n++ {
 		if !nums[n] && !reserved[n] {
 			t.Errorf("%s message %s: field number %d is missing (a gap) and not covered by a `reserved` clause — a retired tag MUST be reserved so it is never reused (SCHEMA-006)", filepath.Base(path), name, n)
 		}

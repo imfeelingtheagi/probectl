@@ -197,7 +197,7 @@ func FuzzBackupOpen(f *testing.F) {
 	f.Add([]byte("not a container"))
 	f.Add([]byte{})
 
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		// Must never panic and must never hang on a huge allocation; an
 		// error return is the expected outcome for hostile input.
 		_ = Open(ctx, &bytes.Buffer{}, bytes.NewReader(data), keys)

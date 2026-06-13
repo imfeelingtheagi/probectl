@@ -41,7 +41,7 @@ func TestBuildIngestWriterDefaultsBatchedForPrometheus(t *testing.T) {
 
 	ingest, closer := buildIngestWriter(cfg, raw)
 	if closer != nil {
-		defer closer()
+		defer func() { _ = closer() }()
 	}
 	// The INGEST writer must be the batching wrapper, not the raw writer.
 	if _, ok := ingest.(*tsdb.BatchingWriter); !ok {

@@ -43,7 +43,7 @@ func (w *blockingWriter) count() int {
 // startDecoupledStage stands up the decoupled write stage exactly as Run does
 // (one worker pool draining writeCh), so a unit test can exercise the
 // handler→writeCh→worker durability barrier without a full subscription loop.
-func startDecoupledStage(t *testing.T, c *Consumer, ctx context.Context, workers int) func() {
+func startDecoupledStage(ctx context.Context, t *testing.T, c *Consumer, workers int) func() {
 	t.Helper()
 	c.writeCh = make(chan writeItem, workers*16)
 	var wg sync.WaitGroup
@@ -74,7 +74,7 @@ func TestDecoupledHandlerWaitsForDurableWrite(t *testing.T) {
 	c := NewConsumer(bus.NewMemory(), w, "test", logging.New(io.Discard, "error", "json"))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := startDecoupledStage(t, c, ctx, 2)
+	stop := startDecoupledStage(ctx, t, c, 2)
 	defer stop()
 
 	msg := resultMsg(t, "t1", "a1")
@@ -118,7 +118,7 @@ func TestDecoupledTrueLossDoesNotCommit(t *testing.T) {
 	c.sleep = func(context.Context, time.Duration) {}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := startDecoupledStage(t, c, ctx, 1)
+	stop := startDecoupledStage(ctx, t, c, 1)
 	defer stop()
 
 	err := c.handle(ctx, resultMsg(t, "t1", "a1"))

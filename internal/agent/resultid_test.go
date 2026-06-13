@@ -37,7 +37,8 @@ func TestResultIDSurvivesBufferRoundTrip(t *testing.T) {
 	}
 
 	// Distinct results get distinct minted ids.
-	if newResultID() == newResultID() {
+	a, b := newResultID(), newResultID()
+	if a == b {
 		t.Fatal("newResultID must be unique per call")
 	}
 }

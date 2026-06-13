@@ -19,7 +19,7 @@ func quietLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard
 // TestSuperviseRestartsErroringConsumer is the ARCH-002 acceptance test: a core
 // consumer whose Run returns an error must be RESTARTED by the supervisor —
 // while a sibling on the SAME errgroup (the "API server") keeps serving and the
-// group does NOT exit. Before this, an unsupervised consumer's error cancelled
+// group does NOT exit. Before this, an unsupervised consumer's error canceled
 // the shared errgroup and took the API + every plane down.
 func TestSuperviseRestartsErroringConsumer(t *testing.T) {
 	log := quietLogger()
@@ -67,7 +67,7 @@ func TestSuperviseRestartsErroringConsumer(t *testing.T) {
 		t.Fatal("API sibling never started")
 	}
 	if gctx.Err() != nil {
-		t.Fatal("errgroup was cancelled by the consumer error (API would be down)")
+		t.Fatal("errgroup was canceled by the consumer error (API would be down)")
 	}
 
 	// Clean shutdown returns nil from both.

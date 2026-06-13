@@ -19,7 +19,8 @@ func TestFlowRowIDDedupKey(t *testing.T) {
 		Protocol: "tcp", Bytes: 1500, Packets: 3, InIf: 2, OutIf: 5,
 	}
 
-	if flowRowID(base) != flowRowID(base) {
+	a, b := flowRowID(base), flowRowID(base)
+	if a != b {
 		t.Fatal("identical rows must produce the same dedup id")
 	}
 

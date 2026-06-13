@@ -41,8 +41,8 @@ func TestMediumReferenceShipsCoherentTopology(t *testing.T) {
 
 	// A PodDisruptionBudget minAvailable must not exceed the replica count
 	// (an impossible PDB would block all voluntary disruption / upgrades).
-	if min, ok := nestedInt(values, "podDisruptionBudget", "minAvailable"); ok && min > replicas {
-		t.Errorf("podDisruptionBudget.minAvailable=%d exceeds replicaCount=%d — voluntary disruptions/upgrades would be blocked (OPS-010)", min, replicas)
+	if minAvail, ok := nestedInt(values, "podDisruptionBudget", "minAvailable"); ok && minAvail > replicas {
+		t.Errorf("podDisruptionBudget.minAvailable=%d exceeds replicaCount=%d — voluntary disruptions/upgrades would be blocked (OPS-010)", minAvail, replicas)
 	}
 }
 
